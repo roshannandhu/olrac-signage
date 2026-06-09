@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Olrac Signage — Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --accent:#1E293B;--accent-h:#334155;
+  --bg:#F9FAFB;--white:#fff;
+  --border:#E5E7EB;--border2:#D1D5DB;
+  --text:#111827;--text2:#6B7280;--text3:#9CA3AF;
+  --sl-bg:#F1F5F9;--sl:#64748B;--sl-text:#334155;
+  --green:#10B981;--green-bg:#ECFDF5;--green-t:#065F46;
+  --amber:#F59E0B;--amber-bg:#FFFBEB;--amber-t:#92400E;
+  --red:#EF4444;--red-bg:#FEF2F2;--red-t:#991B1B;
+  --blue:#3B82F6;--blue-bg:#EFF6FF;--blue-t:#1D4ED8;
+  --r:14px;--r-sm:9px;
+  --sh:0 1px 6px rgba(0,0,0,0.06);--sh-lg:0 4px 22px rgba(0,0,0,0.10);
+}
+html,body{height:100%;font-family:'Outfit',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
+.app{display:flex;height:100vh}
+
+/* ── SIDEBAR ── */
+.sb{width:232px;min-width:232px;background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.sb-logo{padding:20px 16px 16px;border-bottom:1px solid var(--border)}
+.sb-badge{display:inline-flex;align-items:center;gap:9px;background:var(--accent);border-radius:9px;padding:7px 12px;margin-bottom:8px}
+.sb-icon{width:24px;height:24px;background:rgba(255,255,255,0.14);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px}
+.sb-name{color:#fff;font-weight:700;font-size:14px}
+.sb-sub{font-size:10px;color:var(--text3);font-weight:500;letter-spacing:.5px;text-transform:uppercase}
+.nav{flex:1;padding:8px 7px;overflow-y:auto}
+.nav-lbl{font-size:10px;font-weight:600;color:var(--text3);letter-spacing:.7px;text-transform:uppercase;padding:8px 9px 3px}
+.ni{display:flex;align-items:center;gap:8px;padding:8px 9px;border-radius:var(--r-sm);cursor:pointer;color:var(--text2);font-weight:500;font-size:13px;transition:all .12s;user-select:none}
+.ni:hover{background:var(--sl-bg);color:var(--text)}
+.ni.active{background:var(--accent);color:#fff;font-weight:600}
+.ni-ico{width:16px;height:16px;opacity:.55;flex-shrink:0}
+.ni.active .ni-ico{opacity:.85;filter:brightness(10)}
+.nbadge{margin-left:auto;background:var(--red);color:#fff;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:20px}
+.ni.active .nbadge{background:rgba(255,255,255,.22)}
+.sb-foot{padding:10px 9px;border-top:1px solid var(--border)}
+.u-chip{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--r-sm);cursor:pointer;transition:background .12s}
+.u-chip:hover{background:var(--sl-bg)}
+.av{width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:11px;flex-shrink:0}
+
+/* ── MAIN ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{height:56px;background:var(--white);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:12px;flex-shrink:0}
+.tb-title{font-size:16px;font-weight:700;color:var(--text);flex:1}
+.sbox{display:flex;align-items:center;gap:6px;background:var(--sl-bg);border:1px solid var(--border);border-radius:8px;padding:6px 12px;width:200px}
+.sbox input{border:none;background:transparent;outline:none;font-family:'Outfit',sans-serif;font-size:13px;color:var(--text);width:100%}
+.sbox input::placeholder{color:var(--text3)}
+.ico-btn{width:32px;height:32px;border-radius:8px;background:var(--sl-bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:14px;transition:all .12s}
+.ico-btn:hover{background:var(--border);color:var(--text)}
+
+/* ── CONTENT AREA ── */
+.cnt{flex:1;overflow-y:auto;padding:20px}
+.cnt::-webkit-scrollbar{width:3px}
+.cnt::-webkit-scrollbar-thumb{background:var(--border2);border-radius:10px}
+.page{display:none}
+.page.active{display:block;animation:fi .2s ease}
+@keyframes fi{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:8px;font-family:'Outfit',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;border:none;transition:all .12s}
+.btn-p{background:var(--accent);color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.14)}
+.btn-p:hover{background:var(--accent-h);transform:translateY(-1px)}
+.btn-g{background:transparent;color:var(--text2);border:1px solid var(--border2)}
+.btn-g:hover{background:var(--sl-bg);color:var(--text)}
+.btn-d{background:var(--red-bg);color:var(--red-t);border:1px solid #FECACA}
+.btn-d:hover{background:#FEE2E2}
+.btn-sm{padding:5px 10px;font-size:11.5px}
+
+/* ── STATS ── */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.sc{background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:16px;position:relative;overflow:hidden}
+.sc-lbl{font-size:11px;color:var(--text3);font-weight:500;margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px}
+.sc-val{font-size:24px;font-weight:700;color:var(--text);line-height:1}
+.sc-ch{font-size:11px;margin-top:4px}
+.sc-ch.up{color:var(--green)}
+.sc-ch.nl{color:var(--text3)}
+.sc-ico{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
+.sc-ico.g{background:var(--sl-bg)}
+.sc-ico.gr{background:var(--green-bg)}
+.sc-ico.am{background:var(--amber-bg)}
+.sc-ico.bl{background:var(--blue-bg)}
+
+/* ── SECTION HDR ── */
+.sh{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+.sh-t{font-size:14.5px;font-weight:700;color:var(--text);flex:1}
+.tb{display:flex;align-items:center;gap:6px}
+
+/* ── MEDIA GRID ── */
+.mg{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.mc{background:var(--white);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;cursor:pointer;transition:all .18s;position:relative}
+.mc:hover{transform:translateY(-2px);box-shadow:var(--sh-lg);border-color:var(--border2)}
+.mth{height:120px;position:relative;overflow:hidden}
+.mtp{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:28px}
+.mbadge{position:absolute;bottom:6px;right:6px;background:rgba(0,0,0,.65);color:#fff;font-size:10px;font-weight:600;padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace}
+.mtype{position:absolute;bottom:6px;left:6px;width:22px;height:22px;background:rgba(0,0,0,.55);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px}
+.mi{padding:10px}
+.mn{font-size:12.5px;font-weight:600;color:var(--text);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mm{font-size:10.5px;color:var(--text3)}
+.mmenu{position:absolute;top:6px;right:6px;width:24px;height:24px;background:rgba(0,0,0,.45);border-radius:4px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;opacity:0;transition:opacity .12s;cursor:pointer}
+.mc:hover .mmenu{opacity:1}
+
+/* ── SCREEN CARDS ── */
+.sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.scc{background:var(--white);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;cursor:pointer;transition:all .18s}
+.scc:hover{transform:translateY(-2px);box-shadow:var(--sh-lg);border-color:var(--border2)}
+.sth{height:145px;background:linear-gradient(135deg,#1E293B,#334155);display:flex;align-items:center;justify-content:center;position:relative}
+.sprev{width:76%;height:72%;background:rgba(255,255,255,.05);border-radius:4px;border:1px solid rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3);font-size:11.5px}
+.sstat{position:absolute;top:8px;right:8px;padding:3px 8px;border-radius:20px;font-size:10px;font-weight:700}
+.on{background:rgba(16,185,129,.85);color:#fff}
+.off{background:rgba(239,68,68,.75);color:#fff}
+.sinf{padding:12px}
+.snm{font-size:13.5px;font-weight:700;color:var(--text);margin-bottom:2px}
+.smt{font-size:11px;color:var(--text3)}
+.sac{display:flex;gap:5px;margin-top:8px}
+
+/* ── PLAYLIST ── */
+.pl-layout{display:grid;grid-template-columns:1fr 330px;gap:14px;height:calc(100vh - 148px)}
+.pl-panel,.lib-panel{background:var(--white);border:1px solid var(--border);border-radius:var(--r);display:flex;flex-direction:column;overflow:hidden}
+.ph{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0}
+.ph-t{font-size:13.5px;font-weight:700;color:var(--text);flex:1}
+.pb{flex:1;overflow-y:auto;padding:9px}
+.pb::-webkit-scrollbar{width:3px}
+.pb::-webkit-scrollbar-thumb{background:var(--border2);border-radius:10px}
+.pl-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text3);gap:8px;text-align:center;padding:20px}
+.pl-ei{font-size:32px;opacity:.3}
+.pl-item{display:flex;align-items:center;gap:9px;padding:8px 10px;background:var(--white);border:1px solid var(--border);border-radius:var(--r-sm);margin-bottom:6px;cursor:grab;transition:all .12s}
+.pl-item:hover{border-color:var(--border2);box-shadow:var(--sh)}
+.dh{color:var(--text3);font-size:13px}
+.pit{width:40px;height:30px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.pii{flex:1}
+.pin{font-size:12px;font-weight:600;color:var(--text)}
+.pim{font-size:10.5px;color:var(--text3)}
+.pid{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sl)}
+.prm{color:var(--text3);cursor:pointer;font-size:14px;padding:3px;border-radius:3px;transition:color .12s}
+.prm:hover{color:var(--red)}
+.li{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:var(--r-sm);cursor:pointer;transition:all .12s;border:1px solid transparent}
+.li:hover{background:var(--sl-bg);border-color:var(--border)}
+.lt{width:38px;height:30px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0}
+.lii{flex:1}
+.ln{font-size:12px;font-weight:500;color:var(--text)}
+.lm{font-size:10.5px;color:var(--text3)}
+.ladd{color:var(--green);font-size:16px;opacity:0;transition:opacity .12s;font-weight:700}
+.li:hover .ladd{opacity:1}
+
+/* ── TABLE ── */
+.tw{background:var(--white);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.gt{width:100%;border-collapse:collapse}
+.gt th{padding:8px 12px;text-align:left;font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border)}
+.gt td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:12.5px;color:var(--text)}
+.gt tr:last-child td{border-bottom:none}
+.gt tr:hover td{background:var(--sl-bg)}
+
+/* ── PILLS ── */
+.pill{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10.5px;font-weight:600}
+.pg{background:var(--green-bg);color:var(--green-t)}
+.pa{background:var(--amber-bg);color:var(--amber-t)}
+.pr{background:var(--red-bg);color:var(--red-t)}
+.pb2{background:var(--blue-bg);color:var(--blue-t)}
+.ps{background:var(--sl-bg);color:var(--sl-text)}
+
+/* ── MODAL ── */
+.mo{position:fixed;inset:0;background:rgba(17,24,39,.32);backdrop-filter:blur(4px);z-index:100;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .16s}
+.mo.open{opacity:1;pointer-events:all}
+.md{background:#fff;border-radius:16px;padding:24px;width:490px;max-width:92vw;box-shadow:0 14px 45px rgba(0,0,0,.13);transform:translateY(7px);transition:transform .16s;border:1px solid var(--border)}
+.mo.open .md{transform:translateY(0)}
+.md-sm{width:410px}
+.mh{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.mi2{width:36px;height:36px;background:var(--sl-bg);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.mt{font-size:16px;font-weight:700;color:var(--text)}
+.mc2{margin-left:auto;width:28px;height:28px;border-radius:6px;background:var(--sl-bg);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text2);transition:all .12s}
+.mc2:hover{background:var(--red-bg);color:var(--red)}
+.fg{margin-bottom:12px}
+.fl{display:block;font-size:11.5px;font-weight:600;color:var(--text2);margin-bottom:4px}
+.fi2{width:100%;padding:8px 12px;border:1.5px solid var(--border2);border-radius:var(--r-sm);font-family:'Outfit',sans-serif;font-size:13.5px;color:var(--text);outline:none;transition:border-color .12s;background:#fff}
+.fi2:focus{border-color:var(--accent)}
+.fsel{appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%236B7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center}
+.mf{display:flex;justify-content:flex-end;gap:7px;margin-top:6px}
+
+/* ── WIZARD ── */
+.wsteps{display:flex;align-items:center;margin-bottom:18px}
+.ws{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--text3)}
+.ws.active{color:var(--text)}
+.ws.done{color:var(--green)}
+.wn{width:22px;height:22px;border-radius:50%;background:var(--sl-bg);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0}
+.ws.active .wn{background:var(--accent);color:#fff}
+.ws.done .wn{background:var(--green-bg);color:var(--green-t)}
+.wsep{flex:1;height:1px;background:var(--border);margin:0 7px}
+.pair-hint{background:var(--sl-bg);border-radius:var(--r-sm);padding:11px 13px;font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.6;border:1px solid var(--border)}
+.plat{display:flex;gap:7px;margin-bottom:12px}
+.pb3{flex:1;padding:8px;border-radius:var(--r-sm);border:1.5px solid var(--border2);background:#fff;display:flex;align-items:center;justify-content:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--text2);cursor:pointer;transition:all .12s}
+.pb3:hover{border-color:var(--accent);color:var(--text);background:var(--sl-bg)}
+
+/* ── ORIENTATION PICKER ── */
+.og{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px}
+.oc{border:1.5px solid var(--border2);border-radius:var(--r-sm);padding:14px 10px;cursor:pointer;transition:all .14s;text-align:center;background:#fff}
+.oc:hover{border-color:var(--accent);background:var(--sl-bg)}
+.oc.sel{border-color:var(--accent);background:var(--sl-bg);box-shadow:inset 0 0 0 1px var(--accent)}
+.oico{font-size:26px;margin-bottom:7px;display:block}
+.olbl{font-size:12.5px;font-weight:700;color:var(--text);margin-bottom:2px}
+.odeg{font-size:10.5px;color:var(--text3);font-family:'JetBrains Mono',monospace}
+
+/* ── GROUPS ── */
+.grp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.gc{background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:16px;transition:all .18s;cursor:pointer}
+.gc:hover{transform:translateY(-2px);box-shadow:var(--sh-lg);border-color:var(--border2)}
+.gch{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.gico{width:36px;height:36px;background:var(--sl-bg);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.gnm{font-size:13.5px;font-weight:700;color:var(--text)}
+.gsub{font-size:11px;color:var(--text3)}
+.gs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}
+.st{padding:2px 8px;background:var(--sl-bg);border-radius:20px;font-size:11px;color:var(--sl-text);font-weight:500}
+.gac{display:flex;gap:5px}
+.new-grp{background:var(--white);border:1.5px dashed var(--border2);border-radius:var(--r);padding:16px;margin-bottom:14px;display:none}
+.new-grp.open{display:block}
+.scl{display:flex;flex-direction:column;gap:5px;max-height:170px;overflow-y:auto;margin-top:5px;padding:3px}
+.scl label{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:7px;cursor:pointer;transition:background .1s}
+.scl label:hover{background:var(--sl-bg)}
+.empt{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:65px 40px;text-align:center;gap:11px}
+.ei{font-size:48px;opacity:.22}
+.et{font-size:18px;font-weight:700;color:var(--text)}
+.ed{font-size:13px;color:var(--text3);max-width:330px;line-height:1.65}
+
+/* ── FILTER ── */
+.fp{background:var(--white);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;margin-bottom:12px;display:none}
+.fp.open{display:block}
+.fr{display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end}
+.fl2{font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px}
+.tg{display:flex;gap:4px}
+.tb2{padding:4px 12px;border-radius:20px;border:1.5px solid var(--border2);background:transparent;font-family:'Outfit',sans-serif;font-size:11.5px;font-weight:600;color:var(--text2);cursor:pointer;transition:all .12s}
+.tb2.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* ── SORT ── */
+.sdd{position:relative}
+.sm{position:absolute;top:calc(100% + 4px);right:0;background:#fff;border:1px solid var(--border2);border-radius:10px;padding:4px;min-width:200px;box-shadow:var(--sh-lg);z-index:50;display:none}
+.sm.open{display:block}
+.so{padding:6px 10px;border-radius:6px;font-size:12.5px;color:var(--text2);cursor:pointer;transition:background .1s}
+.so:hover{background:var(--sl-bg);color:var(--text)}
+.so.active{color:var(--text);font-weight:600}
+
+/* ── DROPZONE ── */
+.dz{border:2px dashed var(--border2);border-radius:var(--r);padding:32px;text-align:center;cursor:pointer;transition:all .18s;background:var(--sl-bg)}
+.dz:hover,.dz.dov{border-color:var(--accent);background:#F8FAFF}
+.dz-ico{font-size:32px;margin-bottom:9px;opacity:.4}
+.dz-t{font-size:13px;color:var(--text2);margin-bottom:4px}
+.dz-h{font-size:11px;color:var(--text3)}
+
+/* ── TOAST ── */
+.tc{position:fixed;bottom:20px;right:20px;z-index:200;display:flex;flex-direction:column;gap:6px}
+.toast{background:#fff;border:1px solid var(--border);border-radius:10px;padding:10px 14px;box-shadow:var(--sh-lg);display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:500;color:var(--text);min-width:240px;animation:si .22s ease}
+.toast.success .td{background:var(--green)}
+.toast.error .td{background:var(--red)}
+.td{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+@keyframes si{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- SIDEBAR -->
+<aside class="sb">
+  <div class="sb-logo">
+    <div class="sb-badge"><div class="sb-icon">📺</div><span class="sb-name">Olrac</span></div>
+    <div class="sb-sub">Signage Platform</div>
+  </div>
+  <nav class="nav">
+    <div class="nav-lbl">Main</div>
+    <div class="ni active" onclick="showPage('dashboard')">
+      <svg class="ni-ico" viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 8a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1v-4zm8-8a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V4zm0 8a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/></svg>
+      <span>Dashboard</span>
+    </div>
+    <div class="ni" onclick="showPage('content')">
+      <svg class="ni-ico" viewBox="0 0 20 20" fill="currentColor"><path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"/></svg>
+      <span>Content</span>
+    </div>
+    <div class="ni" onclick="showPage('screens')">
+      <svg class="ni-ico" viewBox="0 0 20 20" fill="currentColor"><path d="M2 6a2 2 0 012-2h12a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6zm2 2v4h12V8H4z"/></svg>
+      <span>Screens</span>
+    </div>
+    <div class="ni" onclick="showPage('groups')">
+      <svg class="ni-ico" viewBox="0 0 20 20" fill="currentColor"><path d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM11 5a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V5zM14 11a1 1 0 011 1v1h1a1 1 0 110 2h-1v1a1 1 0 11-2 0v-1h-1a1 1 0 110-2h1v-1a1 1 0 011-1z"/></svg>
+      <span>Groups</span>
+    </div>
+    <div class="ni" onclick="showPage('websites')">
+      <svg class="ni-ico" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.083 9h1.946c.089-1.546.383-2.97.837-4.118A6.004 6.004 0 004.083 9zM10 2a8 8 0 100 16A8 8 0 0010 2zm0 2c-.076 0-.232.032-.465.262-.238.234-.497.623-.737 1.182-.389.907-.673 2.142-.766 3.556h3.936c-.093-1.414-.377-2.649-.766-3.556-.24-.56-.5-.948-.737-1.182C10.232 4.032 10.076 4 10 4zm3.971 5c-.089-1.546-.383-2.97-.837-4.118A6.004 6.004 0 0115.917 9h-1.946zm-2.003 2H8.032c.093 1.414.377 2.649.766 3.556.24.56.5.948.737 1.182.233.23.389.262.465.262.076 0 .232-.032.465-.262.238-.234.498-.623.737-1.182.389-.907.673-2.142.766-3.556zm1.166 4.118c.454-1.147.748-2.572.837-4.118h1.946a6.004 6.004 0 01-2.783 4.118zm-6.268 0C6.412 13.97 6.118 12.546 6.03 11H4.083a6.004 6.004 0 002.783 4.118z" clip-rule="evenodd"/></svg>
+      <span>Websites</span>
+    </div>
+    <div class="nav-lbl">Admin</div>
+    <div class="ni" onclick="showPage('reports')">
+      <svg class="ni-ico" viewBox="0 0 20 20" fill="currentColor"><path d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zm6-4a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zm6-3a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/></svg>
+      <span>Reports</span>
+    </div>
+    <div class="ni" onclick="showPage('activity')">
+      <svg class="ni-ico" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg>
+      <span>Activity Log</span>
+    </div>
+    <div class="ni" onclick="showPage('alerts')">
+      <svg class="ni-ico" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"/></svg>
+      <span>Alerts</span><span class="nbadge">2</span>
+    </div>
+  </nav>
+  <div class="sb-foot">
+    <div class="u-chip">
+      <div class="av">R</div>
+      <div style="flex:1"><div style="font-size:12.5px;font-weight:600;color:var(--text)">Admin</div><div style="font-size:10.5px;color:var(--text3)">Super Admin</div></div>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+  <header class="topbar">
+    <span class="tb-title" id="tb-title">Dashboard</span>
+    <div class="sbox"><svg width="12" height="12" viewBox="0 0 20 20" fill="var(--text3)"><path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/></svg><input type="text" placeholder="Search…"/></div>
+    <div class="ico-btn">🌙</div>
+    <div class="ico-btn"><svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z"/></svg></div>
+  </header>
+
+  <div class="cnt">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="stats-row">
+        <div class="sc"><div class="sc-lbl">Total screens</div><div class="sc-val">3</div><div class="sc-ch up">↑ 1 this week</div><div class="sc-ico g">📺</div></div>
+        <div class="sc"><div class="sc-lbl">Online now</div><div class="sc-val">2</div><div class="sc-ch up">↑ Healthy</div><div class="sc-ico gr">✅</div></div>
+        <div class="sc"><div class="sc-lbl">Content items</div><div class="sc-val">6</div><div class="sc-ch up">↑ 3 new</div><div class="sc-ico am">🖼️</div></div>
+        <div class="sc"><div class="sc-lbl">Plays today</div><div class="sc-val">—</div><div class="sc-ch nl">Enable reporting</div><div class="sc-ico bl">📊</div></div>
+      </div>
+      <div class="sh"><span class="sh-t">Screens</span><button class="btn btn-g btn-sm" onclick="showPage('screens')">View all</button></div>
+      <div class="sg" style="margin-bottom:20px">
+        <div class="scc" onclick="showPage('playlist')"><div class="sth"><div class="sprev">Lobby Display</div><span class="sstat on">● Online</span></div><div class="sinf"><div class="snm">Lobby Display</div><div class="smt">Few seconds ago · Landscape · 0°</div><div class="sac"><button class="btn btn-p btn-sm">Edit Playlist</button><button class="btn btn-g btn-sm">Settings</button></div></div></div>
+        <div class="scc"><div class="sth"><div class="sprev">Reception</div><span class="sstat on">● Online</span></div><div class="sinf"><div class="snm">Reception Screen</div><div class="smt">2 min ago · Portrait · 90°</div><div class="sac"><button class="btn btn-p btn-sm">Edit Playlist</button><button class="btn btn-g btn-sm">Settings</button></div></div></div>
+        <div class="scc"><div class="sth"><div class="sprev" style="color:rgba(255,255,255,.15)">Offline</div><span class="sstat off">● Offline</span></div><div class="sinf"><div class="snm">Cafeteria Board</div><div class="smt">3 hours ago · Landscape · 0°</div><div class="sac"><button class="btn btn-g btn-sm">Edit Playlist</button><button class="btn btn-g btn-sm">Settings</button></div></div></div>
+      </div>
+      <div class="sh"><span class="sh-t">Recent content</span><button class="btn btn-g btn-sm" onclick="showPage('content')">View all</button></div>
+      <div class="mg" id="dash-media"></div>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="page" id="page-content">
+      <div class="sh">
+        <span class="sh-t">Content library</span>
+        <div class="tb">
+          <div class="sdd"><button class="btn btn-g btn-sm" onclick="toggleSort(this)">↕ Sort</button><div class="sm" id="sort-menu"><div class="so active">Date added (newest)</div><div class="so">Date added (oldest)</div><div class="so">Alphabetical A–Z</div><div class="so">Alphabetical Z–A</div><div class="so">Start date</div><div class="so">Expiry date</div></div></div>
+          <button class="btn btn-g btn-sm" onclick="toggleFP()">⚡ Filters</button>
+          <button class="btn btn-p btn-sm" onclick="openM('up-modal')">+ Upload Files</button>
+        </div>
+      </div>
+      <div class="fp" id="fp">
+        <div class="fr">
+          <div><div class="fl2">Media type</div><div class="tg"><button class="tb2 active" onclick="this.classList.toggle('active')">Videos</button><button class="tb2 active" onclick="this.classList.toggle('active')">Images</button></div></div>
+          <div style="margin-left:18px"><div class="fl2">Orientation</div><div class="tg"><button class="tb2 active" onclick="this.classList.toggle('active')">Landscape</button><button class="tb2 active" onclick="this.classList.toggle('active')">Portrait</button></div></div>
+          <div style="margin-left:auto;display:flex;gap:6px;align-items:flex-end"><button class="btn btn-g btn-sm">Reset</button><button class="btn btn-p btn-sm" onclick="toggleFP()">Apply</button></div>
+        </div>
+      </div>
+      <div class="mg" id="content-media"></div>
+    </div>
+
+    <!-- SCREENS -->
+    <div class="page" id="page-screens">
+      <div class="sh">
+        <span class="sh-t">Screens</span>
+        <div class="tb"><button class="btn btn-g btn-sm">↕ Sort</button><button class="btn btn-p btn-sm" onclick="openPair()">+ Add Screen</button></div>
+      </div>
+      <div class="sg" id="screens-grid">
+        <div class="scc" onclick="showPage('playlist')"><div class="sth"><div class="sprev">Lobby Display</div><span class="sstat on">● Online</span></div><div class="sinf"><div class="snm">Lobby Display</div><div class="smt">Few seconds ago · Landscape · 0°</div><div class="sac"><button class="btn btn-p btn-sm">Edit Playlist</button><button class="btn btn-g btn-sm">Settings</button></div></div></div>
+        <div class="scc"><div class="sth"><div class="sprev">Reception</div><span class="sstat on">● Online</span></div><div class="sinf"><div class="snm">Reception Screen</div><div class="smt">2 min ago · Portrait · 90°</div><div class="sac"><button class="btn btn-p btn-sm">Edit Playlist</button><button class="btn btn-g btn-sm">Settings</button></div></div></div>
+        <div class="scc"><div class="sth"><div class="sprev" style="color:rgba(255,255,255,.15)">Offline</div><span class="sstat off">● Offline</span></div><div class="sinf"><div class="snm">Cafeteria Board</div><div class="smt">3 hours ago · Landscape · 0°</div><div class="sac"><button class="btn btn-g btn-sm">Edit Playlist</button><button class="btn btn-g btn-sm">Settings</button></div></div></div>
+      </div>
+    </div>
+
+    <!-- PLAYLIST EDITOR -->
+    <div class="page" id="page-playlist">
+      <div class="sh" style="margin-bottom:12px">
+        <button class="btn btn-g btn-sm" onclick="showPage('screens')">← Back</button>
+        <div style="flex:1;margin-left:8px"><div style="font-size:16px;font-weight:700;color:var(--text)">Lobby Display</div><div style="font-size:11px;color:var(--text3)">Landscape · 0° · For testing</div></div>
+        <span class="pill pg">● Online</span>
+        <button class="btn btn-g btn-sm" onclick="openM('set-modal')">⚙ Settings</button>
+        <button class="btn btn-g btn-sm">⏰ Hours</button>
+      </div>
+      <div class="pl-layout">
+        <div class="pl-panel">
+          <div class="ph"><span class="ph-t">Playlist</span><button class="btn btn-p btn-sm" id="save-btn" style="opacity:.35;pointer-events:none">Save Changes</button></div>
+          <div class="pb"><div class="pl-empty" id="pl-empty"><div class="pl-ei">⬇</div><div style="font-size:12px">Click + on items from the right to build your playlist</div></div><div id="pl-items"></div></div>
+        </div>
+        <div class="lib-panel">
+          <div class="ph"><span class="ph-t">Content library</span><button class="btn btn-g btn-sm" style="padding:3px 7px" onclick="openM('up-modal')">↑</button><button class="btn btn-g btn-sm" style="padding:3px 7px">↕</button><button class="btn btn-g btn-sm" style="padding:3px 7px">⚡</button></div>
+          <div class="pb" id="lib-body"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GROUPS -->
+    <div class="page" id="page-groups">
+      <div class="sh"><span class="sh-t">Screen groups</span><button class="btn btn-p btn-sm" onclick="openGrpForm()">+ Add Screen Group</button></div>
+      <div class="new-grp" id="new-grp-form">
+        <div style="font-size:13.5px;font-weight:700;color:var(--text);margin-bottom:12px">New screen group</div>
+        <div class="fg"><label class="fl">Group name *</label><input class="fi2" id="grp-name" type="text" placeholder="e.g. Lobby Screens"/></div>
+        <div class="fg">
+          <label class="fl">Assign screens</label>
+          <div class="scl">
+            <label><input type="checkbox" value="Lobby Display" style="accent-color:var(--accent);width:14px;height:14px"/><div><div style="font-size:12.5px;font-weight:600;color:var(--text)">Lobby Display</div><div style="font-size:10.5px;color:var(--text3)">Online · Landscape · 0°</div></div></label>
+            <label><input type="checkbox" value="Reception Screen" style="accent-color:var(--accent);width:14px;height:14px"/><div><div style="font-size:12.5px;font-weight:600;color:var(--text)">Reception Screen</div><div style="font-size:10.5px;color:var(--text3)">Online · Portrait · 90°</div></div></label>
+            <label><input type="checkbox" value="Cafeteria Board" style="accent-color:var(--accent);width:14px;height:14px"/><div><div style="font-size:12.5px;font-weight:600;color:var(--text)">Cafeteria Board</div><div style="font-size:10.5px;color:var(--text3)">Offline · Landscape · 0°</div></div></label>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:7px;margin-top:6px">
+          <button class="btn btn-g btn-sm" onclick="closeGrpForm()">Cancel</button>
+          <button class="btn btn-p btn-sm" onclick="createGrp()">Create Group</button>
+        </div>
+      </div>
+      <div class="grp-grid" id="grp-grid"></div>
+      <div class="empt" id="grp-empty"><div class="ei">🖥️</div><div class="et">No screen groups yet</div><div class="ed">Group multiple screens that share the same playlist. Create a group, assign screens, manage one playlist for all of them.</div><button class="btn btn-p" onclick="openGrpForm()">+ Add Screen Group</button></div>
+    </div>
+
+    <!-- WEBSITES -->
+    <div class="page" id="page-websites">
+      <div class="sh"><span class="sh-t">Websites</span><div class="tb"><button class="btn btn-g btn-sm">↕ Sort</button><button class="btn btn-p btn-sm" onclick="openM('web-modal')">+ Add Website</button></div></div>
+      <div class="mg"><div class="mc"><div class="mth"><div class="mtp" style="background:#F0F9FF">🌐</div><div class="mtype">🌐</div></div><div class="mi"><div class="mn">olrac</div><div class="mm">Website · 2 hours ago</div></div><div class="mmenu">⋮</div></div></div>
+    </div>
+
+    <!-- REPORTS -->
+    <div class="page" id="page-reports">
+      <div class="sh"><span class="sh-t">Playback report</span><span class="pill ps" style="margin-left:auto">1 screen reporting</span><button class="btn btn-g btn-sm">Enable Reporting</button></div>
+      <div style="display:flex;align-items:center;gap:7px;margin-bottom:16px;flex-wrap:wrap">
+        <select style="padding:6px 12px;border:1.5px solid var(--border2);border-radius:8px;font-family:'Outfit',sans-serif;font-size:12.5px;color:var(--text);background:#fff;outline:none;cursor:pointer"><option>Last 7 days</option><option>Last 30 days</option><option>This month</option></select>
+        <button class="btn btn-g btn-sm">↺ Refresh</button>
+        <button class="btn btn-g btn-sm" onclick="openM('exp-modal')">↓ Export</button>
+        <button class="btn btn-g btn-sm">⚡ Filters</button>
+      </div>
+      <div class="tw"><table class="gt"><thead><tr><th>Item</th><th>Type</th><th>Screens</th><th>Play count</th><th>Total duration</th></tr></thead><tbody><tr><td colspan="5" style="text-align:center;color:var(--text3);padding:38px;font-size:12.5px">Screens report playback data periodically. Data will appear once your screens have sent their first reports.</td></tr></tbody></table></div>
+    </div>
+
+    <!-- ACTIVITY -->
+    <div class="page" id="page-activity">
+      <div class="sh"><span class="sh-t">Activity log</span><button class="btn btn-g btn-sm">↓ Export</button></div>
+      <div class="tw"><table class="gt"><thead><tr><th>Time</th><th>User</th><th>Action</th><th>Target</th></tr></thead><tbody>
+        <tr><td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)">Today 3:35 PM</td><td><div style="display:flex;align-items:center;gap:6px"><div class="av" style="width:22px;height:22px;font-size:10px">R</div>Admin</div></td><td><span class="pill ps">Updated playlist</span></td><td>Lobby Display</td></tr>
+        <tr><td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)">Today 3:28 PM</td><td><div style="display:flex;align-items:center;gap:6px"><div class="av" style="width:22px;height:22px;font-size:10px">R</div>Admin</div></td><td><span class="pill pg">Uploaded content</span></td><td>Demo HD video (beach)</td></tr>
+        <tr><td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)">Today 3:27 PM</td><td><div style="display:flex;align-items:center;gap:6px"><div class="av" style="width:22px;height:22px;font-size:10px">R</div>Admin</div></td><td><span class="pill pa">Added screen</span></td><td>Lobby Display · Landscape · 0°</td></tr>
+        <tr><td style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text3)">Today 3:20 PM</td><td><div style="display:flex;align-items:center;gap:6px"><div class="av" style="width:22px;height:22px;font-size:10px">R</div>Admin</div></td><td><span class="pill ps">Logged in</span></td><td>Admin account</td></tr>
+      </tbody></table></div>
+    </div>
+
+    <!-- ALERTS -->
+    <div class="page" id="page-alerts">
+      <div class="sh"><span class="sh-t">Alerts</span><button class="btn btn-p btn-sm">+ New Alert</button></div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="background:#fff;border:1px solid #FECACA;border-radius:var(--r);padding:13px 16px;display:flex;align-items:center;gap:11px"><div style="width:36px;height:36px;border-radius:8px;background:var(--red-bg);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">🔴</div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--text)">Cafeteria Board went offline</div><div style="font-size:11px;color:var(--text3)">3 hours ago · Last seen 12:28 PM</div></div><button class="btn btn-g btn-sm">Dismiss</button></div>
+        <div style="background:#fff;border:1px solid #FDE68A;border-radius:var(--r);padding:13px 16px;display:flex;align-items:center;gap:11px"><div style="width:36px;height:36px;border-radius:8px;background:var(--amber-bg);display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0">⚠️</div><div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--text)">Content "Demo video (beach)" expiring soon</div><div style="font-size:11px;color:var(--text3)">Expires in 2 days · Used on 1 screen</div></div><button class="btn btn-g btn-sm">Dismiss</button></div>
+      </div>
+    </div>
+
+  </div>
+</main>
+</div>
+
+<!-- ═══ MODALS ═══ -->
+
+<!-- PAIR MODAL - 3-step wizard -->
+<div class="mo" id="pair-modal">
+  <div class="md">
+    <div class="mh"><div class="mi2">📺</div><div class="mt">Add screen</div><button class="mc2" onclick="closeM('pair-modal')">✕</button></div>
+
+    <!-- Step 1 -->
+    <div id="ps1">
+      <div class="wsteps"><div class="ws active"><div class="wn">1</div><span>Enter code</span></div><div class="wsep"></div><div class="ws"><div class="wn">2</div><span>Orientation</span></div><div class="wsep"></div><div class="ws"><div class="wn">3</div><span>Done</span></div></div>
+      <div class="pair-hint">Download the <strong>Olrac Signage</strong> app on your TV. On first launch it shows a pairing code — enter it below.</div>
+      <div class="plat"><div class="pb3">🎮 Google Play</div><div class="pb3">📦 Amazon Store</div><div class="pb3">⚡ BrightSign</div></div>
+      <div class="fg"><label class="fl">Pairing code *</label><input class="fi2" id="p-code" type="text" placeholder="e.g. 483719" style="font-family:'JetBrains Mono',monospace;font-size:22px;letter-spacing:5px;text-align:center"/></div>
+      <div class="fg"><label class="fl">Screen name *</label><input class="fi2" id="p-name" type="text" placeholder="e.g. Lobby Display"/></div>
+      <div class="mf"><button class="btn btn-g" onclick="closeM('pair-modal')">Cancel</button><button class="btn btn-p" onclick="pairS2()">Next →</button></div>
+    </div>
+
+    <!-- Step 2 -->
+    <div id="ps2" style="display:none">
+      <div class="wsteps"><div class="ws done"><div class="wn">✓</div><span>Enter code</span></div><div class="wsep"></div><div class="ws active"><div class="wn">2</div><span>Orientation</span></div><div class="wsep"></div><div class="ws"><div class="wn">3</div><span>Done</span></div></div>
+      <p style="font-size:12.5px;color:var(--text2);margin-bottom:14px;line-height:1.55">Select the physical mounting orientation of this screen. Content will be rotated accordingly.</p>
+      <div class="og">
+        <div class="oc sel" onclick="pickOrient(this,'Landscape',0)">
+          <span class="oico">🖥️</span>
+          <div class="olbl">Landscape</div>
+          <div class="odeg">+ 0°</div>
+        </div>
+        <div class="oc" onclick="pickOrient(this,'Portrait',90)">
+          <span class="oico">📱</span>
+          <div class="olbl">Portrait</div>
+          <div class="odeg">+ 90°</div>
+        </div>
+        <div class="oc" onclick="pickOrient(this,'Upside Down',180)">
+          <span class="oico" style="display:inline-block;transform:rotate(180deg)">🖥️</span>
+          <div class="olbl">Upside Down</div>
+          <div class="odeg">+ 180°</div>
+        </div>
+        <div class="oc" onclick="pickOrient(this,'Reverse Portrait',270)">
+          <span class="oico" style="display:inline-block;transform:rotate(180deg)">📱</span>
+          <div class="olbl">Reverse Portrait</div>
+          <div class="odeg">+ 270°</div>
+        </div>
+      </div>
+      <div class="mf"><button class="btn btn-g" onclick="pairBack()">← Back</button><button class="btn btn-p" onclick="pairS3()">Pair Screen</button></div>
+    </div>
+
+    <!-- Step 3 -->
+    <div id="ps3" style="display:none;text-align:center;padding:8px 0 4px">
+      <div class="wsteps"><div class="ws done"><div class="wn">✓</div><span>Enter code</span></div><div class="wsep"></div><div class="ws done"><div class="wn">✓</div><span>Orientation</span></div><div class="wsep"></div><div class="ws active"><div class="wn">3</div><span>Done</span></div></div>
+      <div style="font-size:46px;margin:14px 0 9px">✅</div>
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:5px" id="done-msg">Screen paired!</div>
+      <div style="font-size:12.5px;color:var(--text3);margin-bottom:20px" id="done-sub">Your screen will start showing content shortly.</div>
+      <button class="btn btn-p" onclick="closeM('pair-modal');showPage('screens')">Go to Screens</button>
+    </div>
+  </div>
+</div>
+
+<!-- UPLOAD MODAL -->
+<div class="mo" id="up-modal">
+  <div class="md">
+    <div class="mh"><div class="mi2">⬆️</div><div class="mt">Upload files</div><button class="mc2" onclick="closeM('up-modal')">✕</button></div>
+    <div class="dz" id="dz" onclick="document.getElementById('fi').click()"><div class="dz-ico">⬆</div><div class="dz-t">Drag and drop media files here</div><div class="dz-h">Supports MP4, MOV, JPG, PNG · Max 500 MB</div></div>
+    <input type="file" id="fi" style="display:none" multiple accept="video/*,image/*" onchange="handleF(this.files)"/>
+    <div class="mf" style="margin-top:12px"><button class="btn btn-g" onclick="closeM('up-modal')">Cancel</button><button class="btn btn-p">Upload</button></div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="mo" id="set-modal">
+  <div class="md">
+    <div class="mh"><div class="mi2">⚙️</div><div class="mt">Screen settings</div><button class="mc2" onclick="closeM('set-modal')">✕</button></div>
+    <div class="fg"><label class="fl">Screen orientation</label><select class="fi2 fsel"><option>Landscape (+ 0°)</option><option>Portrait (+ 90°)</option><option>Upside Down (+ 180°)</option><option>Reverse Portrait (+ 270°)</option></select></div>
+    <div class="fg"><label class="fl">Name *</label><input class="fi2" type="text" value="Lobby Display"/></div>
+    <div class="fg"><label class="fl">Description</label><input class="fi2" type="text" value="For testing purposes"/></div>
+    <div class="fg"><label class="fl">Tags</label><input class="fi2" type="text" placeholder="Enter tags…"/></div>
+    <div class="mf"><button class="btn btn-g" onclick="closeM('set-modal')">Cancel</button><button class="btn btn-p" onclick="closeM('set-modal');showToast('Settings saved','success')">Save</button></div>
+  </div>
+</div>
+
+<!-- WEBSITE MODAL -->
+<div class="mo" id="web-modal">
+  <div class="md md-sm">
+    <div class="mh"><div class="mi2">🌐</div><div class="mt">Add website</div><button class="mc2" onclick="closeM('web-modal')">✕</button></div>
+    <div class="fg"><label class="fl">Website name *</label><input class="fi2" type="text" placeholder="e.g. Company dashboard"/></div>
+    <div class="fg"><label class="fl">URL *</label><input class="fi2" type="url" placeholder="https://…"/></div>
+    <div class="mf"><button class="btn btn-g" onclick="closeM('web-modal')">Cancel</button><button class="btn btn-p" onclick="closeM('web-modal');showToast('Website added!','success')">Add Website</button></div>
+  </div>
+</div>
+
+<!-- EXPORT MODAL -->
+<div class="mo" id="exp-modal">
+  <div class="md md-sm">
+    <div class="mh"><div class="mi2">📊</div><div class="mt">Export options</div><button class="mc2" onclick="closeM('exp-modal')">✕</button></div>
+    <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:16px">
+      <label style="display:flex;align-items:center;gap:10px;padding:11px;border:1.5px solid var(--accent);border-radius:var(--r-sm);cursor:pointer;background:var(--sl-bg)"><input type="radio" name="exp" checked style="accent-color:var(--accent)"/><div><div style="font-size:12.5px;font-weight:600;color:var(--text)">Summary</div><div style="font-size:11px;color:var(--text3)">Totals per content item</div></div></label>
+      <label style="display:flex;align-items:center;gap:10px;padding:11px;border:1.5px solid var(--border2);border-radius:var(--r-sm);cursor:pointer"><input type="radio" name="exp" style="accent-color:var(--accent)"/><div><div style="font-size:12.5px;font-weight:600;color:var(--text)">Per-screen breakdown</div><div style="font-size:11px;color:var(--text3)">Totals per screen</div></div></label>
+      <label style="display:flex;align-items:center;gap:10px;padding:11px;border:1.5px solid var(--border2);border-radius:var(--r-sm);cursor:pointer"><input type="radio" name="exp" style="accent-color:var(--accent)"/><div><div style="font-size:12.5px;font-weight:600;color:var(--text)">Hourly detail</div><div style="font-size:11px;color:var(--text3)">Hour-by-hour per screen</div></div></label>
+    </div>
+    <div class="mf"><button class="btn btn-g" onclick="closeM('exp-modal')">Cancel</button><button class="btn btn-p" onclick="closeM('exp-modal');showToast('Report exported!','success')">↓ Export</button></div>
+  </div>
+</div>
+
+<div class="tc" id="tc"></div>
+
+<script>
+const media=[
+  {name:'Demo HD vertical video (flowers)',type:'Video',orient:'portrait',dur:'0:20',ico:'🌸',bg:'#FDF2F8'},
+  {name:'Demo HD video (beach)',type:'Video',orient:'landscape',dur:'0:08',ico:'🏖️',bg:'#EFF6FF'},
+  {name:'Demo HD video (waterfall)',type:'Video',orient:'landscape',dur:'0:15',ico:'💧',bg:'#F0FDF4'},
+  {name:'Demo landscape image (grass)',type:'Image',orient:'landscape',dur:null,ico:'🌿',bg:'#F0FDF4'},
+  {name:'Demo HD video (snowscape)',type:'Video',orient:'landscape',dur:'0:20',ico:'❄️',bg:'#EFF6FF'},
+  {name:'Demo portrait image (trees)',type:'Image',orient:'portrait',dur:null,ico:'🌳',bg:'#F7FEE7'},
+];
+let playlist=[],isDirty=false,groups=[],orient={label:'Landscape',deg:0};
+
+function renderMedia(id,items){
+  const c=document.getElementById(id);if(!c)return;
+  c.innerHTML=items.map((m,i)=>`<div class="mc" style="animation-delay:${i*.04}s"><div class="mth"><div class="mtp" style="background:${m.bg}">${m.ico}</div>${m.dur?`<div class="mbadge">${m.dur}</div>`:''}<div class="mtype">${m.type==='Video'?'▶':'📷'}</div></div><div class="mi"><div class="mn" title="${m.name}">${m.name}</div><div class="mm">${m.type} · ${m.orient} · 2h ago</div></div><div class="mmenu">⋮</div></div>`).join('');
+}
+
+function renderLib(){
+  const c=document.getElementById('lib-body');if(!c)return;
+  c.innerHTML=media.map((m,i)=>`<div class="li" onclick="addPL(${i})"><div class="lt" style="background:${m.bg}">${m.ico}</div><div class="lii"><div class="ln">${m.name}</div><div class="lm">${m.type} · ${m.orient}${m.dur?' · '+m.dur:''}</div></div><div class="ladd">+</div></div>`).join('');
+}
+
+function renderPL(){
+  const items=document.getElementById('pl-items');
+  const empty=document.getElementById('pl-empty');
+  const sb=document.getElementById('save-btn');
+  if(!items)return;
+  if(playlist.length===0){empty.style.display='flex';items.innerHTML='';}
+  else{
+    empty.style.display='none';
+    items.innerHTML=playlist.map((m,i)=>`<div class="pl-item"><span class="dh">⠿</span><div class="pit" style="background:${m.bg}">${m.ico}</div><div class="pii"><div class="pin">${m.name}</div><div class="pim">${m.type} · ${m.orient}</div></div>${m.dur?`<span class="pid">${m.dur}</span>`:''}<span class="prm" onclick="rmPL(${i})">✕</span></div>`).join('');
+  }
+  if(sb){sb.style.opacity=isDirty?'1':'.35';sb.style.pointerEvents=isDirty?'all':'none';if(isDirty)sb.onclick=()=>{isDirty=false;renderPL();showToast('Playlist saved!','success');};}
+}
+
+function addPL(i){playlist.push({...media[i]});isDirty=true;renderPL();showToast(`Added ${media[i].ico} ${media[i].name.split(' ').slice(0,3).join(' ')}…`,'success');}
+function rmPL(i){playlist.splice(i,1);isDirty=true;renderPL();}
+
+// Groups
+function renderGrps(){
+  const g=document.getElementById('grp-grid');
+  const e=document.getElementById('grp-empty');
+  if(groups.length===0){g.innerHTML='';e.style.display='flex';}
+  else{
+    e.style.display='none';
+    g.innerHTML=groups.map((gr,i)=>`<div class="gc"><div class="gch"><div class="gico">📺</div><div><div class="gnm">${gr.name}</div><div class="gsub">${gr.screens.length} screen${gr.screens.length!==1?'s':''}</div></div></div><div class="gs">${gr.screens.map(s=>`<span class="st">${s}</span>`).join('')||'<span class="st" style="color:var(--text3)">No screens assigned</span>'}</div><div class="gac"><button class="btn btn-g btn-sm">Edit Playlist</button><button class="btn btn-d btn-sm" onclick="event.stopPropagation();delGrp(${i})">Remove</button></div></div>`).join('');
+  }
+}
+function openGrpForm(){document.getElementById('new-grp-form').classList.add('open');document.getElementById('grp-name').focus();document.getElementById('grp-empty').style.display='none';}
+function closeGrpForm(){document.getElementById('new-grp-form').classList.remove('open');renderGrps();}
+function createGrp(){
+  const name=document.getElementById('grp-name').value.trim();
+  if(!name){showToast('Please enter a group name','error');return;}
+  const checked=[...document.querySelectorAll('#new-grp-form input[type=checkbox]:checked')].map(c=>c.value);
+  groups.push({name,screens:checked});
+  document.getElementById('grp-name').value='';
+  document.querySelectorAll('#new-grp-form input[type=checkbox]').forEach(c=>c.checked=false);
+  closeGrpForm();showToast(`Group "${name}" created!`,'success');
+}
+function delGrp(i){const n=groups[i].name;groups.splice(i,1);renderGrps();showToast(`Group "${n}" removed`,'success');}
+
+// Pair wizard
+function openPair(){
+  ['ps1','ps2','ps3'].forEach((id,i)=>document.getElementById(id).style.display=i===0?'block':'none');
+  document.getElementById('p-code').value='';
+  document.getElementById('p-name').value='';
+  document.querySelectorAll('.oc').forEach((c,i)=>c.classList.toggle('sel',i===0));
+  orient={label:'Landscape',deg:0};
+  openM('pair-modal');
+}
+function pairS2(){
+  const code=document.getElementById('p-code').value.trim();
+  const name=document.getElementById('p-name').value.trim();
+  if(!code||code.length<4){showToast('Enter a valid pairing code','error');return;}
+  if(!name){showToast('Enter a screen name','error');return;}
+  document.getElementById('ps1').style.display='none';
+  document.getElementById('ps2').style.display='block';
+}
+function pairBack(){document.getElementById('ps2').style.display='none';document.getElementById('ps1').style.display='block';}
+function pickOrient(el,label,deg){document.querySelectorAll('.oc').forEach(c=>c.classList.remove('sel'));el.classList.add('sel');orient={label,deg};}
+function pairS3(){
+  const name=document.getElementById('p-name').value.trim();
+  document.getElementById('ps2').style.display='none';
+  document.getElementById('ps3').style.display='block';
+  document.getElementById('done-msg').textContent=`"${name}" paired successfully!`;
+  document.getElementById('done-sub').textContent=`Orientation: ${orient.label} (${orient.deg}°) — content will start playing shortly.`;
+  // Add to grids
+  const card=`<div class="scc"><div class="sth"><div class="sprev">${name}</div><span class="sstat on">● Online</span></div><div class="sinf"><div class="snm">${name}</div><div class="smt">Just paired · ${orient.label} · ${orient.deg}°</div><div class="sac"><button class="btn btn-p btn-sm">Edit Playlist</button><button class="btn btn-g btn-sm">Settings</button></div></div></div>`;
+  ['screens-grid','dash-sg'].forEach(id=>{const g=document.getElementById(id);if(g)g.insertAdjacentHTML('beforeend',card);});
+  showToast(`"${name}" paired!`,'success');
+}
+
+// Page nav
+function showPage(id){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));
+  const p=document.getElementById('page-'+id);if(p)p.classList.add('active');
+  const titles={dashboard:'Dashboard',content:'Content Library',screens:'Screens',playlist:'Playlist Editor',groups:'Screen Groups',websites:'Websites',reports:'Playback Report',activity:'Activity Log',alerts:'Alerts'};
+  document.getElementById('tb-title').textContent=titles[id]||id;
+  const nm={dashboard:0,content:1,screens:2,playlist:2,groups:3,websites:4,reports:5,activity:6,alerts:7};
+  const ni=document.querySelectorAll('.ni');
+  if(nm[id]!==undefined&&ni[nm[id]])ni[nm[id]].classList.add('active');
+  if(id==='playlist'){renderLib();renderPL();}
+  if(id==='content')renderMedia('content-media',media);
+  if(id==='dashboard')renderMedia('dash-media',media.slice(0,4));
+  if(id==='groups')renderGrps();
+}
+
+// Modals
+function openM(id){document.getElementById(id).classList.add('open');}
+function closeM(id){document.getElementById(id).classList.remove('open');}
+document.querySelectorAll('.mo').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');}));
+
+// Sort
+function toggleSort(btn){
+  document.querySelectorAll('.sm').forEach(m=>m.classList.remove('open'));
+  const m=btn.parentElement.querySelector('.sm')||document.getElementById('sort-menu');
+  if(m)m.classList.toggle('open');
+}
+document.addEventListener('click',e=>{if(!e.target.closest('.sdd'))document.querySelectorAll('.sm').forEach(m=>m.classList.remove('open'));});
+document.querySelectorAll('.so').forEach(o=>o.addEventListener('click',function(){this.closest('.sm').querySelectorAll('.so').forEach(x=>x.classList.remove('active'));this.classList.add('active');this.closest('.sm').classList.remove('open');}));
+
+// Filter
+function toggleFP(){document.getElementById('fp').classList.toggle('open');}
+
+// Dropzone
+const dz=document.getElementById('dz');
+if(dz){
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dov');});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('dov'));
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('dov');handleF(e.dataTransfer.files);});
+}
+function handleF(f){if(f.length>0){closeM('up-modal');showToast(`Uploading ${f.length} file(s)…`,'success');}}
+
+// Toast
+function showToast(msg,type='success'){
+  const c=document.getElementById('tc');
+  const t=document.createElement('div');
+  t.className=`toast ${type}`;
+  t.innerHTML=`<div class="td"></div>${msg}`;
+  c.appendChild(t);
+  setTimeout(()=>t.remove(),3000);
+}
+
+showPage('dashboard');
+</script>
+</body>
+</html>

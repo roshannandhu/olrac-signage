@@ -1,0 +1,249 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-rail: var(--rail);
+  --color-rail-foreground: var(--rail-foreground);
+  --color-rail-muted: var(--rail-muted);
+  --color-panel: var(--panel);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-hairline: var(--hairline);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  --font-sans: var(--font-geist-sans);
+  --font-heading: var(--font-geist-sans);
+
+  /* Brand surfaces. The navy rail is the OLRAC signature and stays navy in both
+     themes; only the content canvas flips. --brand is the azure accent used on
+     navy; --brand-soft is its darker twin for accents on white, where azure
+     alone would not clear AA. */
+  --rail: #0b1b3a;
+  --rail-foreground: #ffffff;
+  --rail-muted: rgb(255 255 255 / 0.58);
+  --panel: #102550;
+  --brand: #7aa9ff;
+  --brand-soft: #1d4ed8;
+  --hairline: rgb(11 27 58 / 0.09);
+
+  --background: #f6f8fc;
+  --foreground: oklch(0.16 0.02 265);
+  --card: #ffffff;
+  --card-foreground: oklch(0.16 0.02 265);
+  --popover: #ffffff;
+  --popover-foreground: oklch(0.16 0.02 265);
+  --primary: #14306b;
+  --primary-foreground: #ffffff;
+  --secondary: #eef2f9;
+  --secondary-foreground: #14306b;
+  --muted: #eff3f9;
+  --muted-foreground: #5a6a86;
+  --accent: #e6edfb;
+  --accent-foreground: #14306b;
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: #e2e8f2;
+  --input: #dfe6f1;
+  --ring: #7aa9ff;
+  --chart-1: #14306b;
+  --chart-2: #2c5aa8;
+  --chart-3: #4d84d6;
+  --chart-4: #7aa9ff;
+  --chart-5: #a9c6ff;
+  --radius: 0.625rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: oklch(0.16 0.02 265);
+  --sidebar-primary: #14306b;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eef2f9;
+  --sidebar-accent-foreground: #14306b;
+  --sidebar-border: #e2e8f2;
+  --sidebar-ring: #7aa9ff;
+}
+
+.dark {
+  --rail: #060f26;
+  --rail-foreground: #ffffff;
+  --rail-muted: rgb(255 255 255 / 0.55);
+  --panel: #102550;
+  --brand: #7aa9ff;
+  --brand-soft: #7aa9ff;
+  --hairline: rgb(255 255 255 / 0.1);
+
+  --background: #0a1226;
+  --foreground: #f2f5fb;
+  --card: #111c37;
+  --card-foreground: #f2f5fb;
+  --popover: #111c37;
+  --popover-foreground: #f2f5fb;
+  --primary: #7aa9ff;
+  --primary-foreground: #0a1226;
+  --secondary: #1b2947;
+  --secondary-foreground: #f2f5fb;
+  --muted: #1b2947;
+  --muted-foreground: #9fb0cd;
+  --accent: #1b2947;
+  --accent-foreground: #f2f5fb;
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: rgb(255 255 255 / 0.1);
+  --input: rgb(255 255 255 / 0.15);
+  --ring: #7aa9ff;
+  --chart-1: #7aa9ff;
+  --chart-2: #5b8ae8;
+  --chart-3: #4570c9;
+  --chart-4: #2f57a4;
+  --chart-5: #1e3d7a;
+  --sidebar: #111c37;
+  --sidebar-foreground: #f2f5fb;
+  --sidebar-primary: #7aa9ff;
+  --sidebar-primary-foreground: #0a1226;
+  --sidebar-accent: #1b2947;
+  --sidebar-accent-foreground: #f2f5fb;
+  --sidebar-border: rgb(255 255 255 / 0.1);
+  --sidebar-ring: #7aa9ff;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+    text-rendering: optimizeLegibility;
+  }
+  html {
+    @apply font-sans;
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+::selection {
+  background: color-mix(in oklch, #2563eb 26%, transparent);
+}
+
+.signal-grid {
+  background-image:
+    linear-gradient(to right, rgb(122 169 255 / 0.09) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(122 169 255 / 0.09) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* ---------------------------------------------------------------------------
+   Motion
+   Durations follow the 150-300ms micro-interaction band; exits run at ~65% of
+   enter duration so leaving never competes for attention with arriving.
+   --------------------------------------------------------------------------- */
+:root {
+  --motion-exit: 140ms;
+  --motion-enter: 220ms;
+}
+
+/* Route transitions. React only starts a view transition when a <ViewTransition>
+   boundary participates — the experimental.viewTransition flag alone is not
+   enough — so these classes come from the boundary in dashboard/layout.tsx.
+   The old page leaves quickly; the new one arrives after it, so the two never
+   cross-fade through each other. */
+::view-transition-old(.page) {
+  animation: var(--motion-exit) ease-in both vt-leave;
+}
+::view-transition-new(.page) {
+  animation: var(--motion-enter) ease-out var(--motion-exit) both vt-arrive;
+}
+
+@keyframes vt-leave {
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@keyframes vt-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* Staggered entrance for card grids and list rows. Set --i on each child.
+   Capped at 8 steps so a long library page never crawls in. */
+.stagger > * {
+  animation: var(--motion-enter) ease-out both rise;
+  animation-delay: calc(min(var(--i, 0), 8) * 40ms);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* Cards lift on hover — transform/opacity only, never layout properties. */
+.lift {
+  transition:
+    transform 180ms ease-out,
+    box-shadow 180ms ease-out;
+}
+.lift:hover {
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(.page),
+  ::view-transition-new(.page) {
+    animation: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

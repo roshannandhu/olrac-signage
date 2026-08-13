@@ -1,0 +1,36 @@
+# The backend image builds from the project root so `backend` is a real package.
+# Without this file that context would ship ~500MB of things the image never needs.
+
+# Large local tooling
+ffmpeg_build/
+Redis/
+*.zip
+
+# Other project trees
+android-tv/
+android-watchdog/
+frontend/node_modules/
+frontend/.next/
+
+# Local environments and caches
+backend/venv/
+backend/venv_old_broken/
+**/__pycache__/
+.pytest_cache/
+.git/
+.gitignore
+
+# Runtime data that must never bake into an image
+uploads/
+backups/
+*.db
+*.db-wal
+*.db-shm
+*.dump
+backend/.env
+
+# Editor / agent scratch
+.agents/
+.claude/
+graphify-out/
+scratch/

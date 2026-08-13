@@ -1,44 +1,45 @@
-# Dependencies
-node_modules/
-
-# Build outputs
-dist/
-build/
-*.local
-
-# Environment
-.env
-.env.local
-.env.*.local
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
+# Runtime artifacts
+olrac_signage.db
+*.sqlite
+*.sqlite3
 *.log
-npm-debug.log*
-
-# Testing
-coverage/
+uploads/
+backups/
 
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
 .venv/
 venv/
-ENV/
+.env
+.env.*
+!.env.example
 
-# Supabase
-.supabase/
+# Node / Next.js
+node_modules/
+.next/
+frontend/out/
 
-# Misc
-*.tmp
-*.temp
+# Android / Gradle
+.gradle/
+android-tv/**/build/
+android-watchdog/**/build/
+**/build/
+*.apk
+local.properties
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local tooling and large binaries (added during P2 review)
+ffmpeg_build/
+Redis/
+*.mp4
+ffmpeg.zip
+Redis.zip
+*.dump
+*.db
+*.sql

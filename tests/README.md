@@ -1,0 +1,77 @@
+# Tests
+
+Run commands from the repository root.
+
+## Run everything
+
+```bash
+python -m pytest tests -q
+```
+
+`conftest.py` collects each backend script as its **own subprocess**. That is
+deliberate: `backend/database.py` builds the SQLAlchemy engine at import time from
+`DATABASE_URL`, so running the scripts in one shared process makes the first import
+win and the rest query a torn-down database — every script passes alone and the
+suite fails. One process per script keeps each engine bound to its own database.
+
+Because of that, these files must **not** define a `test_*` function; pytest would
+import them into the shared process and run them a second time. Each keeps an
+`if __name__ == "__main__"` block so it stays directly runnable.
+
+## Tenant isolation probe
+
+`test_tenant_isolation.py` builds two organisations and calls every admin route as
+org A against org B's ids, asserting 401/403/404 on all of them, plus that listings
+never disclose foreign rows, that A cannot attach B's media to its own playlist, and
+that a paired TV never syncs another organisation's playlist. A `422` is reported as
+an *invalid probe* rather than a pass, so a malformed payload can never hide a real
+leak behind schema validation.
+
+```bash
+python tests/test_tenant_isolation.py
+```
+
+## Quota enforcement
+
+`test_quotas.py` covers the plan limits (GOAL.md T6.1/T6.2): pairing past
+`max_screens` returns 409 with an upgrade message, an upload past the storage quota
+returns 413, an in-quota upload still succeeds, and raising the quota immediately
+unblocks the previously rejected upload.
+
+```bash
+python tests/test_quotas.py
+```
+
+## Feature parity check
+
+`test_feature_parity.py` uses a disposable SQLite database and verifies real-user authentication, role enforcement, screen groups, scheduled playlist items, assignment inheritance, and `204 Not Modified` sync behavior.
+
+```bash
+pip install -r backend/requirements-dev.txt
+python tests/test_feature_parity.py
+```
+
+## Storage and failure-path validation
+
+`validation.py` runs FastAPI in-process with Moto-backed S3. It covers upload, signed sync URLs, pairing expiry, and missing-resource handling without touching the working database.
+
+```bash
+python tests/validation.py
+```
+
+## Live E2E test
+
+`e2e_test.py` drives a running backend over `http://localhost:8000` (override with
+`OLRAC_BASE_URL`). Use an existing owner or editor account:
+
+```bash
+set OLRAC_TEST_USERNAME=owner
+set OLRAC_TEST_PASSWORD=your-password
+python tests/e2e_test.py
+```
+
+Step 8 downloads the uploaded file from the URL the API returns, which is built from
+`PUBLIC_BASE_URL`. If the server runs on a non-default port, start it with
+`PUBLIC_BASE_URL` matching, or that step fails while everything else passes.
+
+The live test creates records and uploads a fixture to the running environment; the isolated tests do not.

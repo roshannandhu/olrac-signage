@@ -1,15 +1,121 @@
 version: '3.8'
 
 services:
-  backend:
-    image: python:3.11-slim
-    container_name: olrac_signage_api
-    working_dir: /app
+  db:
+    image: postgres:15-alpine
+    container_name: olrac_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-olrac}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-olrac_password}
+      POSTGRES_DB: ${POSTGRES_DB:-olrac_signage}
+    ports:
+      - "5432:5432"
     volumes:
-      - .:/app
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-olrac}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: olrac_backend
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-olrac}:${POSTGRES_PASSWORD:-olrac_password}@db:5432/${POSTGRES_DB:-olrac_signage}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-mock}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-mock}
+      - AWS_REGION=${AWS_REGION:-auto}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-olrac-media}
+      - SECRET_KEY=${SECRET_KEY}
+      - INITIAL_ADMIN_USERNAME=${INITIAL_ADMIN_USERNAME:-}
+      - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD:-}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:8000}
+      - PLAYER_VERSION_CODE=${PLAYER_VERSION_CODE:-1}
+      - PLAYER_VERSION_NAME=${PLAYER_VERSION_NAME:-1.0}
+      - PLAYER_APK_URL=${PLAYER_APK_URL:-}
+      - PLAYER_UPDATE_MANDATORY=${PLAYER_UPDATE_MANDATORY:-false}
+      - PLAYER_SYNC_INTERVAL_SECONDS=${PLAYER_SYNC_INTERVAL_SECONDS:-60}
+      - SCREEN_OFFLINE_AFTER_SECONDS=${SCREEN_OFFLINE_AFTER_SECONDS:-150}
+      - PAYMENT_PROVIDER=${PAYMENT_PROVIDER:-razorpay}
+      - RAZORPAY_KEY_ID=${RAZORPAY_KEY_ID:-}
+      - RAZORPAY_KEY_SECRET=${RAZORPAY_KEY_SECRET:-}
+      - RAZORPAY_WEBHOOK_SECRET=${RAZORPAY_WEBHOOK_SECRET:-}
+      - RAZORPAY_STARTER_MONTHLY_PLAN_ID=${RAZORPAY_STARTER_MONTHLY_PLAN_ID:-}
+      - RAZORPAY_STARTER_YEARLY_PLAN_ID=${RAZORPAY_STARTER_YEARLY_PLAN_ID:-}
+      - RAZORPAY_BUSINESS_MONTHLY_PLAN_ID=${RAZORPAY_BUSINESS_MONTHLY_PLAN_ID:-}
+      - RAZORPAY_BUSINESS_YEARLY_PLAN_ID=${RAZORPAY_BUSINESS_YEARLY_PLAN_ID:-}
+      - BILLING_GRACE_DAYS=${BILLING_GRACE_DAYS:-7}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
     ports:
       - "8000:8000"
-    env_file:
-      - .env
-    command: >
-      bash -c "pip install -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      # Shared with the worker. Both containers resolve UPLOAD_DIR to /app/uploads,
+      # and with AWS_ACCESS_KEY_ID=mock (the default) media lives on local disk. Without
+      # a shared volume the worker cannot see the file the backend just saved, so every
+      # transcode fails — and any media that did land is lost on the next restart.
+      - uploads_data:/app/uploads
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: olrac_worker
+    command: python -m arq backend.worker.WorkerSettings
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-olrac}:${POSTGRES_PASSWORD:-olrac_password}@db:5432/${POSTGRES_DB:-olrac_signage}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-mock}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-mock}
+      - AWS_REGION=${AWS_REGION:-auto}
+      - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-olrac-media}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      # Shared with the worker. Both containers resolve UPLOAD_DIR to /app/uploads,
+      # and with AWS_ACCESS_KEY_ID=mock (the default) media lives on local disk. Without
+      # a shared volume the worker cannot see the file the backend just saved, so every
+      # transcode fails — and any media that did land is lost on the next restart.
+      - uploads_data:/app/uploads
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: olrac_frontend
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: olrac_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+volumes:
+  uploads_data:
+  postgres_data:
+  redis_data:

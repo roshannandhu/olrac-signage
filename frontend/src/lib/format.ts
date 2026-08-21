@@ -42,3 +42,31 @@ export function expiryLabel(value: string | null): string | null {
   if (days === 1) return 'Expires tomorrow'
   return `Expires in ${days} days`
 }
+
+/** Clip length as m:ss, the way a player scrubber shows it. */
+export function clipDuration(ms: number | null | undefined): string | null {
+  if (!ms || ms <= 0) return null
+  const total = Math.round(ms / 1000)
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}
+
+/**
+ * "portrait" / "landscape" for an asset, read off its largest rendition.
+ *
+ * Returns null when nothing has been transcoded yet — better to omit the word than to
+ * guess landscape and mislabel a portrait advert.
+ */
+export function assetOrientation(renditions?: { width: number; height: number }[]): string | null {
+  const largest = renditions?.slice().sort((a, b) => b.width * b.height - a.width * a.height)[0]
+  if (!largest?.width || !largest?.height) return null
+  return largest.height > largest.width ? 'portrait' : 'landscape'
+}
+
+/** Human file size. Whole numbers above 10 so a table of sizes stays aligned. */
+export function formatBytes(bytes: number | null | undefined): string {
+  if (!bytes) return '—'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  const value = bytes / 1024 ** exponent
+  return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`
+}

@@ -24,7 +24,9 @@ data class SignInRequest(
 
 data class EnrollRequest(
     val device_id: String,
-    val enrollment_token: String
+    val enrollment_token: String,
+    /** Survives reinstall, so the server reclaims this TV's screen instead of duplicating it. */
+    val installation_id: String? = null
 )
 
 data class EnrollResponse(
@@ -69,6 +71,9 @@ data class SyncResponse(
     val status: String?,
     val app_version: AppVersionDto?,
     val sync_interval_seconds: Int?
+,
+    val fit_mode: String? = null,
+    val maintenance_pin: String? = null
 )
 
 data class AppVersionDto(
@@ -96,6 +101,7 @@ data class PlaylistItemDto(
     val end_at: String?,
     val transition: String?,
     val transition_ms: Int?,
+    val rotation: Int? = null,
     val schedule: ScheduleDto?
 )
 
@@ -140,6 +146,13 @@ interface ApiService {
         @Path("device_id") deviceId: String,
         @Query("since") since: String? = null
     ): Response<SyncResponse>
+
+    // Proof of play. Must live on this interface: Retrofit's proxy only implements the
+    // interface it was created from, so calling it through any other one throws.
+    @POST("api/screens/play-logs/batch")
+    suspend fun uploadPlayLogs(
+        @Body request: com.olrac.signage.service.PlayLogBatchRequest
+    ): Response<Unit>
 
     @retrofit2.http.Multipart
     @POST("api/screenshots/device/{device_id}/screenshot")

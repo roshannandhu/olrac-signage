@@ -37,8 +37,8 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen bg-rail lg:grid-cols-[1.08fr_.92fr]">
-      <section className="signal-grid relative hidden overflow-hidden border-r border-white/10 p-12 text-white lg:flex lg:flex-col lg:justify-between xl:p-16">
+    <main className="grid grid-cols-1 min-h-screen bg-rail lg:grid-cols-[1.08fr_.92fr]">
+      <section className="relative hidden overflow-hidden border-r border-white/10 p-12 text-white lg:flex lg:flex-col lg:justify-between xl:p-16">
         <div className="absolute -left-28 top-1/3 size-80 rounded-full bg-brand/10 blur-3xl" aria-hidden="true" />
         <div className="relative flex items-center gap-3">
           <span className="grid size-11 place-items-center rounded-2xl bg-brand text-rail"><RadioTower className="size-5" /></span>

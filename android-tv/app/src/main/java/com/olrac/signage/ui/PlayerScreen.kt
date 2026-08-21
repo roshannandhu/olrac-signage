@@ -131,6 +131,11 @@ private fun DualSurfacePlayer(
     val itemIds = playlist.joinToString(",") { it.id.toString() }
     LaunchedEffect(itemIds) {
         val preservedIndex = currentItemId?.let { id -> playlist.indexOfFirst { it.id == id } } ?: -1
+        // A re-sync that drops the playing item abandons it mid-play. Clear the clock, because
+        // the start-time guards below only stamp it when null: left set, the next advance()
+        // would record the *incoming* item using the *outgoing* item's start time, attributing
+        // the play to the wrong media and inflating its duration (so completed/partial too).
+        if (preservedIndex < 0) currentItemStartedAtMs = null
         currentIndex = when {
             preservedIndex >= 0 -> preservedIndex
             currentIndex in playlist.indices -> currentIndex
@@ -402,6 +407,25 @@ private fun PlaybackSurface(
     player: ExoPlayer,
     modifier: Modifier
 ) {
+    // The server already resolved this from the per-item override and the screen's
+    // orientation, so a portrait advert on a landscape panel just works. Turning the
+    // surface is cheaper and sharper than re-encoding the media rotated.
+    // 90/270 swap width and height, so the frame is also scaled to fit the panel's other
+    // axis — without that a rotated video is cropped to the panel's short side.
+    val rotated = item.rotation == 90 || item.rotation == 270
+    val surface = if (item.rotation % 360 == 0) modifier else modifier.then(
+        Modifier.graphicsLayer {
+            rotationZ = item.rotation.toFloat()
+            if (rotated && size.width > 0f && size.height > 0f) {
+                val fit = minOf(size.width / size.height, size.height / size.width)
+                scaleX = fit
+                scaleY = fit
+            }
+        }
+    )
+    // "cover" fills the panel and crops; "contain" shows the whole frame letterboxed.
+    val imageScale = if (item.fitMode == "cover") ContentScale.Crop else ContentScale.Fit
+
     when (item.type) {
         "video" -> AndroidView(
             factory = { context ->
@@ -411,14 +435,14 @@ private fun PlaybackSurface(
                 }
             },
             update = { it.player = player },
-            modifier = modifier
+            modifier = surface
         )
 
         "image" -> AsyncImage(
             model = item.localPath?.let(::File),
             contentDescription = "Signage image",
-            contentScale = ContentScale.Crop,
-            modifier = modifier
+            contentScale = imageScale,
+            modifier = surface
         )
 
         else -> Box(modifier = modifier.background(Color.Black))

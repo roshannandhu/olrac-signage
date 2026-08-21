@@ -86,6 +86,7 @@ def run():
             })
             
         payload = {
+            "device_id": "p4-device",
             "screen_id": screen_id,
             "organization_id": org_id,
             "events": batch1_events
@@ -126,6 +127,7 @@ def run():
             "status": "partial"
         }
         r_skew = client.post("/api/screens/play-logs/batch", json={
+            "device_id": "p4-device",
             "screen_id": screen_id,
             "organization_id": org_id,
             "events": [skewed_event]
@@ -156,6 +158,7 @@ def run():
             })
             
         r_accum = client.post("/api/screens/play-logs/batch", json={
+            "device_id": "p4-device",
             "screen_id": screen_id,
             "organization_id": org_id,
             "events": accumulation_events
@@ -167,6 +170,7 @@ def run():
         # Test 4: Exceed 500 cap
         overflow_events = accumulation_events + [skewed_event]
         r_over = client.post("/api/screens/play-logs/batch", json={
+            "device_id": "p4-device",
             "screen_id": screen_id,
             "organization_id": org_id,
             "events": overflow_events

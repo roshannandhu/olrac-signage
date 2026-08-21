@@ -58,7 +58,7 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     volumes:
       # Shared with the worker. Both containers resolve UPLOAD_DIR to /app/uploads,
       # and with AWS_ACCESS_KEY_ID=mock (the default) media lives on local disk. Without
@@ -85,7 +85,7 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     volumes:
       # Shared with the worker. Both containers resolve UPLOAD_DIR to /app/uploads,
       # and with AWS_ACCESS_KEY_ID=mock (the default) media lives on local disk. Without
@@ -113,6 +113,14 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    # The worker exits if Redis is not reachable at start-up, so the services that depend
+    # on it wait for a real PONG rather than merely for the container to exist.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
     restart: unless-stopped
 
 volumes:

@@ -18,7 +18,6 @@ import android.widget.TextView;
 
 public class MainActivity extends Activity {
     private static final String TAG = "BootLauncher";
-    private static final String ABLESIGN = "com.olrac.signage";
     private static final long MIN_RELAUNCH_MS = 10000;
     private static long lastLaunchTime = 0;
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -27,37 +26,67 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (!isServiceEnabled()) {
-            showingSetup = true;
-            showSetupUI();
-        } else {
-            scheduleAbleSign(3000);
-        }
+        // No setup gate. The accessibility service is an optional extra, not a
+        // requirement: boot is handled by BootReceiver's AlarmManager and recovery by this
+        // activity being HOME, neither of which needs it. Refusing to start the player
+        // until someone walked into Settings on each TV was the reason the watchdog
+        // appeared dead on arrival.
+        // The launch itself is left to onResume, which always follows onCreate.
     }
 
+    /**
+     * This activity is the TV's HOME app and never finishes, so being resumed means the
+     * player is no longer in front — it crashed, was force-stopped, or someone pressed
+     * Home. Whatever the cause, the screen should be showing signage rather than this.
+     *
+     * The relaunch used to hang off onNewIntent, which the system does not deliver when it
+     * simply resumes an already-running HOME activity. That is the common case after a
+     * crash, so the watchdog would come to the foreground and sit there indefinitely —
+     * a dead screen in a shop, with the watchdog running exactly as designed.
+     */
     @Override
     protected void onResume() {
         super.onResume();
-        if (showingSetup && isServiceEnabled()) {
-            showingSetup = false;
-            scheduleAbleSign(1000);
-        }
+        if (showingSetup) return;   // only ever true if openAccessibilitySettings() was used
+        maybeLaunch();
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (showingSetup) return;
-        long now = SystemClock.elapsedRealtime();
-        if (now - lastLaunchTime > MIN_RELAUNCH_MS) {
-            scheduleAbleSign(3000);
-        }
+        // Home pressed while this activity is already resident and in front.
+        if (!showingSetup) maybeLaunch();
     }
 
+    /**
+     * Start the player unless an attempt is already in flight.
+     *
+     * The timestamp is claimed at scheduling time, not after the launch, so overlapping
+     * triggers collapse into one attempt and a player that refuses to start cannot spin
+     * the TV in a relaunch loop.
+     */
+    private void maybeLaunch() {
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastLaunchTime < MIN_RELAUNCH_MS) return;
+        lastLaunchTime = now;
+        scheduleAbleSign(2000);
+    }
+
+    /** Whether the optional accessibility service is on. Nothing gates on this. */
     private boolean isServiceEnabled() {
-        String s = Settings.Secure.getString(getContentResolver(),
+        String enabled = Settings.Secure.getString(getContentResolver(),
                 Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-        return s != null && s.contains(getPackageName() + "/.WatchdogAccessibilityService");
+        if (enabled == null) return false;
+
+        // Settings stores a colon-separated list of flattened components, but *which*
+        // flattening depends on the build: Android 16 writes the fully-qualified
+        // "pkg/pkg.Class", while others write the short "pkg/.Class". Matching only the
+        // short form made this return false while the service was demonstrably running,
+        // so the watchdog — which is the HOME app on a TV — sat on its setup screen
+        // instead of returning to the player. Both forms are accepted.
+        ComponentName self = new ComponentName(this, WatchdogAccessibilityService.class);
+        return enabled.contains(self.flattenToString())
+                || enabled.contains(self.flattenToShortString());
     }
 
     private void showSetupUI() {
@@ -106,13 +135,16 @@ public class MainActivity extends Activity {
     }
 
     private void launchAbleSign() {
-        lastLaunchTime = SystemClock.elapsedRealtime();
         try {
             Intent i = new Intent(Intent.ACTION_MAIN);
-            i.setComponent(new ComponentName(ABLESIGN, ABLESIGN + ".MainActivity"));
+            i.setComponent(WatchdogTarget.component(this));
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
             startActivity(i);
-            Log.i(TAG, "AbleSign launched");
+            // The accessibility state is logged rather than acted on: a TV that is
+            // misbehaving can then be told apart from one that simply never had the
+            // optional extra switched on.
+            Log.i(TAG, "AbleSign launched (accessibility extra "
+                    + (isServiceEnabled() ? "on" : "off") + ")");
         } catch (Exception e) {
             Log.e(TAG, "launch failed: " + e.getMessage());
         }

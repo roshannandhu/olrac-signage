@@ -7,10 +7,14 @@ from datetime import datetime, timedelta, timezone
 import boto3
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import database, models, schemas
 from ..media_selection import select_rendition
+from ..rotation import normalise as normalise_rotation, resolve_rotation
+from ..maps_link import MapsLinkError, parse as parse_maps_link
+from ..media_urls import is_s3_enabled, media_base_url, resolve_media_url
 from ..tenancy import TenantScope, get_tenant_scope, require_tenant_roles
 
 logger = logging.getLogger(__name__)
@@ -29,28 +33,6 @@ s3_client = boto3.client(
 
 def generate_pair_code() -> str:
     return "".join(random.choices(string.digits, k=6))
-
-
-def is_s3_enabled() -> bool:
-    key = os.getenv("AWS_ACCESS_KEY_ID")
-    return bool(key and key != "mock")
-
-
-def resolve_media_url(value: str | None) -> str | None:
-    if not value or not value.startswith("s3://") or not is_s3_enabled():
-        return value
-    try:
-        return s3_client.generate_presigned_url(
-            "get_object",
-            Params={
-                "Bucket": os.getenv("S3_BUCKET_NAME", "olrac-media"),
-                "Key": value.removeprefix("s3://"),
-            },
-            ExpiresIn=3600,
-        )
-    except Exception as exc:
-        print(f"Failed to generate presigned URL: {exc}")
-        return value
 
 
 def as_aware_utc(value: datetime) -> datetime:
@@ -125,7 +107,7 @@ def verify_device_auth(device_id: str, credentials: HTTPAuthorizationCredentials
     return screen
 
 
-@router.post("/register", response_model=schemas.ScreenResponse)
+@router.post("/register", response_model=schemas.RegisterResponse)
 def register_tv(req: schemas.RegisterRequest, db: Session = Depends(database.get_db)):
     db_screen = db.query(models.Screen).filter(models.Screen.device_id == req.device_id).first()
     if db_screen and db_screen.status != "waiting_pairing":
@@ -298,6 +280,26 @@ def enroll_device(req: schemas.EnrollRequest, db: Session = Depends(database.get
         )
         raise TOKEN_ERROR
 
+    if not screen and req.installation_id:
+        # A factory reset mints a fresh device_id, so the same panel would enrol again as
+        # a second screen and the fleet count would drift up with every wipe. The install
+        # id survives the reset, so the existing row is reclaimed and its history, group
+        # and playlist assignment stay with the physical screen.
+        screen = (
+            db.query(models.Screen)
+            .filter(
+                models.Screen.installation_id == req.installation_id,
+                models.Screen.organization_id == token.organization_id,
+            )
+            .first()
+        )
+        if screen:
+            logger.info(
+                "Reclaiming screen %s for installation %s (device id changed %s -> %s)",
+                screen.id, req.installation_id, screen.device_id, req.device_id,
+            )
+            screen.device_id = req.device_id
+
     if not screen:
         # New device counts against the plan, exactly as pairing does.
         ensure_screen_quota(db, token.organization_id, "enrol another device")
@@ -352,8 +354,15 @@ def auth_device(req: schemas.DeviceAuthRequest, db: Session = Depends(database.g
 async def get_screens(
     scope: TenantScope = Depends(get_tenant_scope),
 ):
-    screens = scope.query(models.Screen).order_by(models.Screen.name).all()
-    candidates = [s for s in screens if s.status != "waiting_pairing"]
+    # A screen still waiting to be paired is not part of the fleet: it has no name, no
+    # playlist and nothing to report, and listing it put placeholder cards in the grid.
+    screens = (
+        scope.query(models.Screen)
+        .filter(models.Screen.status != "waiting_pairing")
+        .order_by(models.Screen.name)
+        .all()
+    )
+    candidates = screens
 
     # One pipelined round-trip for the whole fleet. Awaiting EXISTS per screen inside
     # the loop is 500 sequential round-trips at 500 screens, which is the latency
@@ -384,7 +393,14 @@ async def get_screens(
 
     if changed:
         scope.db.commit()
-    return screens
+
+    shots = _latest_screenshots(scope, screens)
+    return [
+        schemas.ScreenResponse.model_validate(screen).model_copy(
+            update={"latest_screenshot": shots.get(screen.id)}
+        )
+        for screen in screens
+    ]
 
 
 def _is_recent(last_seen) -> bool:
@@ -401,6 +417,40 @@ def _is_recent(last_seen) -> bool:
     return (now - last_seen).total_seconds() < screen_offline_after_seconds()
 
 
+def _latest_screenshots(scope: TenantScope, screens) -> dict[int, str]:
+    """Most recent capture per screen, in one query.
+
+    The fleet grid shows a live thumbnail per screen. Fetching that per card is 500 round
+    trips at 500 screens, so the newest row per screen is picked with a window function.
+    """
+    if not screens:
+        return {}
+
+    ranked = (
+        select(
+            models.ScreenshotLog.screen_id.label("screen_id"),
+            models.ScreenshotLog.file_url.label("file_url"),
+            func.row_number()
+            .over(
+                partition_by=models.ScreenshotLog.screen_id,
+                order_by=models.ScreenshotLog.created_at.desc(),
+            )
+            .label("rank"),
+        )
+        .where(models.ScreenshotLog.screen_id.in_([s.id for s in screens]))
+    )
+    # Super admins read across tenants; everyone else must stay inside their own.
+    if scope.user.role != "super_admin":
+        ranked = ranked.where(models.ScreenshotLog.organization_id == scope.organization_id)
+
+    newest = ranked.subquery()
+    rows = scope.db.execute(
+        select(newest.c.screen_id, newest.c.file_url).where(newest.c.rank == 1)
+    ).all()
+
+    return {screen_id: resolve_media_url(file_url) for screen_id, file_url in rows}
+
+
 @router.put("/{screen_id}", response_model=schemas.ScreenResponse)
 def update_screen(
     screen_id: int,
@@ -412,8 +462,11 @@ def update_screen(
         raise HTTPException(status_code=404, detail="Screen not found")
     db_screen.name = screen.name
     db_screen.orientation = screen.orientation
+    # An operator setting orientation here means the heartbeat must stop overwriting it.
+    db_screen.orientation_source = "manual"
     if "group_id" in screen.model_fields_set:
         db_screen.group_id = screen.group_id
+    db_screen.assignment_updated_at = models.utcnow()
     scope.db.commit()
     scope.db.refresh(db_screen)
     return db_screen
@@ -437,10 +490,48 @@ def patch_screen(
         if not release:
             raise HTTPException(status_code=422, detail="Unknown release version code")
 
-    for field in ("name", "orientation", "group_id", "target_version_code"):
+    if "leader_screen_id" in fields and patch.leader_screen_id is not None:
+        if patch.leader_screen_id == screen_id:
+            raise HTTPException(status_code=422, detail="A screen cannot follow itself")
+        # scope.get keeps this inside the tenant: without it, a follower could be pointed
+        # at another organisation's screen and take its playback clock.
+        if not scope.get(models.Screen, patch.leader_screen_id):
+            raise HTTPException(status_code=422, detail="Unknown leader screen")
+
+    for field in (
+        "name",
+        "orientation",
+        "group_id",
+        "target_version_code",
+        "description",
+        "tags",
+        "location",
+        "latitude",
+        "longitude",
+        "place_id",
+        "timezone",
+        "fit_mode",
+        "maintenance_pin",
+        "sync_playback",
+        "sync_role",
+        "leader_screen_id",
+        "operating_mode",
+        "operating_hours",
+    ):
         if field in fields:
             setattr(db_screen, field, getattr(patch, field))
+    if "orientation" in fields:
+        # Explicit operator choice; auto-detection must not undo it on the next heartbeat.
+        db_screen.orientation_source = "manual"
+    # A leader has nothing to follow; keeping a stale pointer would make the player chase
+    # a clock it is supposed to be publishing.
+    if db_screen.sync_role == "leader":
+        db_screen.leader_screen_id = None
 
+    # The player asks "anything new since X?" and the answer is built from this marker.
+    # Orientation and fit_mode are answered in that same response, so without a bump the
+    # sync stays quiet and an operator's rotation change never reaches the panel.
+    db_screen.assignment_updated_at = models.utcnow()
     scope.db.commit()
     scope.db.refresh(db_screen)
     return db_screen
@@ -486,7 +577,13 @@ async def heartbeat(
         db_screen.device_version = req.app_version
     if req.storage_used:
         db_screen.storage_used = req.storage_used
-        
+
+    # Auto-detected orientation, but never over an operator's explicit choice. This is the
+    # only place auto-detection is applied; without the source check a manual override
+    # silently reverts on the next heartbeat.
+    if req.orientation is not None and db_screen.orientation_source != "manual":
+        db_screen.orientation = normalise_rotation(req.orientation)
+
     if req.screen_width is not None:
         db_screen.screen_width = req.screen_width
     if req.screen_height is not None:
@@ -719,10 +816,14 @@ def sync_tv(
                 # Resolve renditions urls as well if needed
                 for rend in item.content.renditions:
                     rend.file_url = resolve_media_url(rend.file_url) or rend.file_url
+                # Hand the player one number so it never has to work out precedence.
+                item.rotation = resolve_rotation(item, screen)
                 valid_items.append(item)
         playlist_payload.items = valid_items
 
     return schemas.SyncResponse(
+        fit_mode=screen.fit_mode or "contain",
+        maintenance_pin=screen.maintenance_pin,
         playlist=playlist_payload,
         playlist_updated_at=marker,
         status=screen.status,
@@ -740,31 +841,17 @@ def batch_upload_play_logs(
     if len(req.events) > 500:
         raise HTTPException(status_code=400, detail="Batch size exceeds limit of 500")
 
-    # The token's subject is "device:{device_id}". We must verify the token, then ensure
-    # the device matches the screen_id and organization_id in the payload to prevent cross-tenant injection.
-    from jose import jwt, JWTError
-    from .auth import ALGORITHM, get_secret_key
-    
-    if not credentials:
-        raise HTTPException(status_code=401, detail="Authentication required")
-        
-    try:
-        payload = jwt.decode(credentials.credentials, get_secret_key(), algorithms=[ALGORITHM])
-        sub = payload.get("sub")
-        if not sub or not sub.startswith("device:"):
-            raise HTTPException(status_code=401, detail="Invalid token")
-        device_id = sub.split(":", 1)[1]
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-        
-    screen = db.query(models.Screen).filter(models.Screen.device_id == device_id).first()
-    if not screen or not screen.device_secret_hash:
-        raise HTTPException(status_code=401, detail="Screen not found or revoked")
-        
+    # Same identity check as sync and heartbeat: a screen holding a device secret must
+    # present its token, one provisioned by pair code is known by its device id. This
+    # endpoint used to demand a JWT of its own, which no pair-code screen can produce, so
+    # every one of them had its proof of play rejected with 401 and reported zero plays.
+    device_id = req.device_id
+    screen = verify_device_auth(device_id, credentials, db)
+
     if screen.id != req.screen_id:
         logger.warning(f"Device {device_id} (screen {screen.id}) attempted to post logs for screen {req.screen_id}")
         raise HTTPException(status_code=403, detail="Screen ID mismatch")
-        
+
     if screen.organization_id != req.organization_id:
         logger.warning(f"Device {device_id} (org {screen.organization_id}) attempted to post logs for org {req.organization_id}")
         raise HTTPException(status_code=403, detail="Organization ID mismatch")
@@ -773,7 +860,26 @@ def batch_upload_play_logs(
         return {"status": "ok", "inserted": 0}
 
     from sqlalchemy.dialects.postgresql import insert
-    
+
+    # The player cannot attribute a play to a campaign: PlaylistItemEntity has no campaign
+    # column, so every device sends campaign_id = null. Left as-is that makes campaign_id
+    # NULL on every rollup row, and since all campaign analytics filter on it, every
+    # campaign reports zero plays forever. Derive it here from the playlist the event
+    # names -- server side, so it also repairs events already queued on devices.
+    # Scoped to the caller's org so a forged playlist_id cannot attribute across tenants.
+    playlist_ids = {ev.playlist_id for ev in req.events if ev.playlist_id is not None}
+    campaign_by_playlist: dict[int, int | None] = {}
+    if playlist_ids:
+        campaign_by_playlist = {
+            pid: cid
+            for pid, cid in db.query(models.Playlist.id, models.Playlist.campaign_id)
+            .filter(
+                models.Playlist.id.in_(playlist_ids),
+                models.Playlist.organization_id == req.organization_id,
+            )
+            .all()
+        }
+
     values = []
     now = models.utcnow()
     for ev in req.events:
@@ -783,7 +889,7 @@ def batch_upload_play_logs(
             "organization_id": req.organization_id,
             "media_id": ev.media_id,
             "playlist_id": ev.playlist_id,
-            "campaign_id": ev.campaign_id,
+            "campaign_id": ev.campaign_id or campaign_by_playlist.get(ev.playlist_id),
             "device_started_at": ev.device_started_at,
             "device_finished_at": ev.device_finished_at,
             "corrected_started_at": ev.corrected_started_at,
@@ -802,3 +908,21 @@ def batch_upload_play_logs(
     
     return {"status": "ok", "inserted": result.rowcount}
 
+
+
+@router.post("/resolve-location-link", response_model=schemas.ResolveLinkResponse)
+def resolve_location_link(
+    payload: schemas.ResolveLinkRequest,
+    tenant: TenantScope = Depends(get_tenant_scope),
+):
+    """Coordinates for a pasted Google Maps link.
+
+    Deliberately not a Google API call: every form of Maps URL already carries the
+    coordinate, so this needs no key and no billing account. Short links are resolved by
+    following the redirect, which is a plain HTTP request.
+    """
+    try:
+        latitude, longitude, name = parse_maps_link(payload.link)
+    except MapsLinkError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return schemas.ResolveLinkResponse(latitude=latitude, longitude=longitude, name=name)

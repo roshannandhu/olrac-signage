@@ -51,7 +51,7 @@ export default function CampaignAnalyticsPage() {
   const timeseries = timeseriesQuery.data || []
 
   if (!info || !stats) {
-    return <div className="space-y-6"><Skeleton className="h-24" /><div className="grid gap-4 md:grid-cols-4">{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-32" />)}</div><Skeleton className="h-[420px]" /></div>
+    return <div className="space-y-6"><Skeleton className="h-24" /><div className="grid grid-cols-1 gap-4 md:grid-cols-4">{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-32" />)}</div><Skeleton className="h-[420px]" /></div>
   }
 
   const cards = [
@@ -82,7 +82,7 @@ export default function CampaignAnalyticsPage() {
         }
       />
 
-      <section aria-label="Campaign statistics" className="stagger grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section aria-label="Campaign statistics" className="stagger grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map(({ label, value, icon: Icon, note }, index) => (
           <Card key={label} style={{ '--i': index } as React.CSSProperties} className="lift ring-hairline bg-card border-0 py-0 shadow-[0_1px_2px_rgba(15,23,42,.04)] ring-1">
             <CardContent className="p-5">

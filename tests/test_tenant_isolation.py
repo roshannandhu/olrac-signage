@@ -317,6 +317,9 @@ def run():
         # TV A (jwt_a) tries to post logs for TV B (b["screen"]) and Org B (b["org"])
         if 'jwt_a' in locals():
             batch_payload = {
+                # TV A identifies itself honestly and lies about whose screen the plays
+                # belong to. The server has to catch the mismatch, not the identity.
+                "device_id": "cross-tenant-tv-a",
                 "screen_id": b["screen"],
                 "organization_id": b["org"],
                 "events": [{

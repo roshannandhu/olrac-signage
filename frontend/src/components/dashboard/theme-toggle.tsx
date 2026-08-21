@@ -1,9 +1,8 @@
 'use client'
 
-import { Monitor, Moon, Sun } from 'lucide-react'
+import { Moon, Sun } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { useSyncExternalStore } from 'react'
-import { cn } from '@/lib/utils'
 
 const subscribe = () => () => {}
 
@@ -16,45 +15,26 @@ function useHydrated() {
   )
 }
 
-const options = [
-  { value: 'light', label: 'Light', icon: Sun },
-  { value: 'dark', label: 'Dark', icon: Moon },
-  { value: 'system', label: 'System', icon: Monitor },
-] as const
-
+/**
+ * One button in the top bar, light against dark.
+ *
+ * The app still follows the OS until someone presses this; the button is the explicit
+ * override, so it only needs the two end states rather than a three-way segmented control.
+ */
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme()
-  // Theme is only known on the client; until hydration no option reads as
-  // selected, which keeps server and client markup identical.
+  const { resolvedTheme, setTheme } = useTheme()
   const hydrated = useHydrated()
+  const isDark = hydrated && resolvedTheme === 'dark'
 
   return (
-    <div
-      role="radiogroup"
-      aria-label="Colour theme"
-      className="border-rail-foreground/10 grid grid-cols-3 gap-1 rounded-xl border p-1"
+    <button
+      onClick={() => setTheme(isDark ? 'light' : 'dark')}
+      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring grid size-10 cursor-pointer place-items-center rounded-lg transition-colors focus-visible:ring-2 focus-visible:outline-none"
     >
-      {options.map(({ value, label, icon: Icon }) => {
-        const active = hydrated && theme === value
-        return (
-          <button
-            key={value}
-            role="radio"
-            aria-checked={active}
-            aria-label={label}
-            onClick={() => setTheme(value)}
-            className={cn(
-              'grid h-8 cursor-pointer place-items-center rounded-lg transition-colors',
-              'focus-visible:ring-brand focus-visible:ring-2 focus-visible:outline-none',
-              active
-                ? 'bg-rail-foreground/10 text-brand'
-                : 'text-rail-muted hover:bg-rail-foreground/5 hover:text-rail-foreground',
-            )}
-          >
-            <Icon className="size-4" aria-hidden="true" />
-          </button>
-        )
-      })}
-    </div>
+      {/* Before hydration the resolved theme is unknown, so render the moon either way
+          and let the swap happen once on the client — no mismatched markup. */}
+      {isDark ? <Sun className="size-5" aria-hidden="true" /> : <Moon className="size-5" aria-hidden="true" />}
+    </button>
   )
 }

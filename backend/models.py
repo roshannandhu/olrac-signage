@@ -1,6 +1,7 @@
+import secrets
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, ForeignKey, Integer, String, Text, Time, JSON, Float
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, String, Text, Time, JSON, Float
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.types import TypeDecorator
 
@@ -115,8 +116,18 @@ class User(Base):
     role = Column(String, nullable=False, default="viewer")
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(UtcDateTime, nullable=False, default=utcnow)
+    # Profile fields. Nullable because every existing account predates them and username
+    # stays the login identifier -- these are display/contact only, so nothing breaks when
+    # they are unset.
+    full_name = Column(String, nullable=True)
+    email = Column(String, unique=True, index=True, nullable=True)
 
     organization = relationship("Organization", back_populates="users")
+
+    @property
+    def organization_name(self) -> str | None:
+        """Exposed so UserResponse can show the tenant by name instead of a bare id."""
+        return self.organization.name if self.organization else None
 
 
 class ScreenshotLog(Base):
@@ -166,6 +177,39 @@ class Screen(Base):
     pair_code_expires_at = Column(UtcDateTime, nullable=True)
     name = Column(String, nullable=True)
     orientation = Column(Integer, default=0)
+    # "auto" = whatever the panel last reported; "manual" = an operator set it and the
+    # heartbeat must stop overwriting it. Without this an override silently reverts on the
+    # next heartbeat, which reads as "rotation keeps resetting itself".
+    orientation_source = Column(String, nullable=False, default="auto")
+    description = Column(String, nullable=True)
+    # Free-form comma-separated labels, the same shape Content.tags uses.
+    tags = Column(String, nullable=True)
+    # Where the screen physically is. Stored together with the coordinates that produced
+    # it so a report's label and its map pin can never disagree; place_id lets a later
+    # lookup re-resolve the same place without re-searching by name.
+    location = Column(String, nullable=True, index=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    place_id = Column(String, nullable=True)
+    # How the player letterboxes content whose aspect ratio does not match the panel.
+    # "contain" shows the whole frame, "cover" fills the panel and crops.
+    fit_mode = Column(String, nullable=False, default="contain")
+    # Gate on the player's on-TV maintenance screen, reached by a remote key sequence.
+    # Per screen rather than per org so one leaked pin does not open the whole fleet;
+    # the player caches it locally because the screen exists to fix connectivity and
+    # must therefore work with the server unreachable.
+    maintenance_pin = Column(
+        String, nullable=False, default=lambda: f"{secrets.randbelow(10000):04d}"
+    )
+    # Video-wall support: followers take their playback clock from a leader screen.
+    sync_playback = Column(Boolean, nullable=False, default=False)
+    sync_role = Column(String, nullable=False, default="leader")
+    leader_screen_id = Column(Integer, ForeignKey("screens.id", ondelete="SET NULL"), nullable=True)
+    # Mon..Sun operating windows as {"mon": ["00:00", "23:59"], ...}; null means always on.
+    operating_hours = Column(JSON, nullable=True)
+    # "always" | "hours" | "never" — kept separate so clearing the schedule does not
+    # lose the windows an operator already typed in.
+    operating_mode = Column(String, nullable=False, default="always")
     status = Column(String, default="offline")
     last_seen = Column(UtcDateTime, nullable=False, default=utcnow)
     device_version = Column(String, nullable=True)
@@ -254,6 +298,9 @@ class Content(Base):
     duration_ms = Column(Integer, nullable=True)
     uploaded_at = Column(UtcDateTime, default=utcnow)
     status = Column(String, nullable=False, default="processing")
+    # When the current processing attempt began. The reaper uses this to find rows whose
+    # worker died mid-job; without it a killed worker leaves a permanent spinner.
+    processing_started_at = Column(UtcDateTime, nullable=True)
     processing_retries = Column(Integer, nullable=False, default=0)
     failed_reason = Column(String, nullable=True)
 
@@ -323,6 +370,9 @@ class PlaylistItem(Base):
     # NULL means inherit the containing playlist's transition setting.
     transition = Column(String, nullable=True)
     transition_ms = Column(Integer, nullable=True)
+    # Per-item rotation override in degrees (0/90/180/270). Null means "follow the
+    # screen", which is what almost every item should be.
+    rotation = Column(Integer, nullable=True)
 
     playlist = relationship("Playlist", back_populates="items")
     content = relationship("Content", back_populates="playlist_items")
@@ -383,15 +433,80 @@ class EnrollmentToken(Base):
     organization = relationship("Organization")
 
 
+class AdPlacement(Base):
+    """An advert sold to a client: what runs, for whom, when, and for how much.
+
+    Deliberately a thin record. It does not schedule anything itself — it owns the
+    playlist items it created (see AdPlacementTarget), so the playlist stays the single
+    thing the player, proof-of-play and rendition selection all read from. Two schedulers
+    would mean two answers to "what is on that screen right now".
+    """
+
+    __tablename__ = "ad_placements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    content_id = Column(Integer, ForeignKey("content.id", ondelete="CASCADE"), nullable=False, index=True)
+    advertiser = Column(String, nullable=False)
+    # Stored in the smallest currency unit so money never touches a float.
+    price_paise = Column(BigInteger, nullable=False, default=0)
+    is_paid = Column(Boolean, nullable=False, default=False)
+    starts_at = Column(UtcDateTime, nullable=False)
+    ends_at = Column(UtcDateTime, nullable=False)
+    notes = Column(String, nullable=True)
+    created_at = Column(UtcDateTime, nullable=False, default=utcnow)
+    updated_at = Column(UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    content = relationship("Content")
+    organization = relationship("Organization")
+    targets = relationship("AdPlacementTarget", back_populates="placement", cascade="all, delete-orphan")
+
+
+class AdPlacementTarget(Base):
+    """One place a booked advert runs, and the playlist item it put there.
+
+    Exactly one of screen_id / group_id is set. Holding playlist_item_id is what makes
+    "take this ad off that one screen" a single precise delete instead of a guess.
+    """
+
+    __tablename__ = "ad_placement_targets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    placement_id = Column(Integer, ForeignKey("ad_placements.id", ondelete="CASCADE"), nullable=False, index=True)
+    screen_id = Column(Integer, ForeignKey("screens.id", ondelete="CASCADE"), nullable=True, index=True)
+    group_id = Column(Integer, ForeignKey("screen_groups.id", ondelete="CASCADE"), nullable=True, index=True)
+    # SET NULL rather than CASCADE: if an operator deletes the item by hand on the screen
+    # page, the booking should survive as a record of what was sold, just no longer placed.
+    playlist_item_id = Column(Integer, ForeignKey("playlist_items.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(UtcDateTime, nullable=False, default=utcnow)
+
+    __table_args__ = (
+        CheckConstraint(
+            "(screen_id IS NOT NULL) <> (group_id IS NOT NULL)",
+            name="ck_placement_target_exactly_one",
+        ),
+    )
+
+    placement = relationship("AdPlacement", back_populates="targets")
+    screen = relationship("Screen")
+    group = relationship("ScreenGroup")
+    playlist_item = relationship("PlaylistItem")
+
+
 class PlayLog(Base):
     __tablename__ = "play_logs"
 
     event_id = Column(String, primary_key=True, index=True)
     screen_id = Column(Integer, ForeignKey("screens.id"), nullable=False, index=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
-    media_id = Column(Integer, ForeignKey("content.id"), nullable=True, index=True)
-    playlist_id = Column(Integer, ForeignKey("playlists.id"), nullable=True, index=True)
-    campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=True, index=True)
+    # No foreign keys on these three on purpose. This is an append-only audit log whose
+    # referents -- content, playlists, campaigns -- get deleted in normal operation, and a
+    # device can still be holding queued events for a deleted row. With FKs, that insert
+    # raised IntegrityError, the device retried its oldest batch forever, and every later
+    # play on that screen was lost behind the wedge. Indexes stay for the report queries.
+    media_id = Column(Integer, nullable=True, index=True)
+    playlist_id = Column(Integer, nullable=True, index=True)
+    campaign_id = Column(Integer, nullable=True, index=True)
 
     # Device local time (raw)
     device_started_at = Column(UtcDateTime, nullable=False)
@@ -420,10 +535,14 @@ class PlayLogHourlyRollup(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
-    campaign_id = Column(Integer, ForeignKey("campaigns.id"), nullable=True, index=True)
+    # Same reasoning as PlayLog: derived from an append-only log whose referents get
+    # deleted. Here it matters more -- the rollup is written by aggregate_play_logs, whose
+    # exception handler only prints (worker.py), so one FK violation would stop aggregation
+    # for the whole fleet and every report would read zero with no error surfaced.
+    campaign_id = Column(Integer, nullable=True, index=True)
     screen_id = Column(Integer, ForeignKey("screens.id"), nullable=False, index=True)
-    media_id = Column(Integer, ForeignKey("content.id"), nullable=True, index=True)
-    
+    media_id = Column(Integer, nullable=True, index=True)
+
     date_hour = Column(UtcDateTime, nullable=False, index=True)
     
     total_plays = Column(Integer, nullable=False, default=0)

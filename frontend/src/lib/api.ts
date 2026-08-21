@@ -1,10 +1,22 @@
 import { useAuthStore } from './store'
-import type { AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Role, Screen, ScreenGroup, Screenshot, TransitionName, User } from './types'
+import type { BookingReport, Placement, MediaReport, FitMode, OperatingMode, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Role, Screen, ScreenGroup, Screenshot, TransitionName, User } from './types'
 
-const API_BASE = `${(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '')}/api`
+const configuredUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '')
+let API_BASE = `${configuredUrl}/api`
 
-// The API lives on its own origin, so a WebSocket must be built from API_BASE and
-// not from window.location — pointing it at the Next.js host silently never connects.
+// If accessed on a mobile device over the local network, replace localhost with the actual IP.
+if (typeof window !== 'undefined') {
+  try {
+    const url = new URL(API_BASE)
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+      url.hostname = window.location.hostname
+      API_BASE = url.href.replace(/\/$/, '')
+    }
+  } catch {
+    // A malformed NEXT_PUBLIC_API_URL just means we keep the configured value.
+  }
+}
+
 export const WS_BASE = API_BASE.replace(/^http/, 'ws')
 
 export class ApiError extends Error {
@@ -49,7 +61,20 @@ export const api = {
     return response.json() as Promise<{ access_token: string; token_type: string; user: User }>
   },
   me: () => fetchWithAuth<User>('/auth/me'),
+  updateProfile: (data: { full_name?: string | null; email?: string | null }) =>
+    fetchWithAuth<User>('/auth/me', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    }),
+  changePassword: (data: { current_password: string; new_password: string }) =>
+    fetchWithAuth<void>('/auth/change-password', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    }),
   getScreens: () => fetchWithAuth<Screen[]>('/screens/'),
+  resolveLocationLink: (link: string) =>
+    fetchWithAuth<{ latitude: number; longitude: number; name: string | null }>(
+      '/screens/resolve-location-link',
+      { method: 'POST', body: JSON.stringify({ link }) },
+    ),
   // Partial by design: sending only the edited keys stops a rename from resetting
   // orientation, which is not editable anywhere in the dashboard.
   patchScreen: (id: number, data: Partial<{
@@ -57,6 +82,21 @@ export const api = {
     orientation: number
     group_id: number | null
     target_version_code: number | null
+    description: string | null
+    tags: string | null
+    location: string | null
+    latitude: number | null
+    longitude: number | null
+    place_id: string | null
+    timezone: string | null
+    fit_mode: FitMode
+    /** Four digits. The API rejects any other shape. */
+    maintenance_pin: string
+    sync_playback: boolean
+    sync_role: SyncRole
+    leader_screen_id: number | null
+    operating_mode: OperatingMode
+    operating_hours: Record<string, [string, string]> | null
   }>) => fetchWithAuth<Screen>(`/screens/${id}`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
   }),
@@ -78,8 +118,13 @@ export const api = {
   }),
   assignGroupPlaylist: (groupId: number, playlistId: number) =>
     fetchWithAuth<ScreenGroup>(`/groups/${groupId}/assign/${playlistId}`, { method: 'POST' }),
+  renameGroup: (groupId: number, name: string) => fetchWithAuth<ScreenGroup>(`/groups/${groupId}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }),
+  }),
+  deleteGroup: (groupId: number) => fetchWithAuth<{ status: string }>(`/groups/${groupId}`, { method: 'DELETE' }),
 
   getContent: () => fetchWithAuth<ContentItem[]>('/content/'),
+  getMediaReport: (contentId: number) => fetchWithAuth<MediaReport>(`/analytics/media/${contentId}`),
   // Uses XHR rather than fetch purely for upload progress: fetch cannot report it, and a
   // several-hundred-megabyte advert otherwise sits on "uploading" for minutes with no sign
   // of life. Error and 401 handling mirror authFetch.
@@ -128,6 +173,49 @@ export const api = {
   deleteContent: (id: number) => fetchWithAuth(`/content/${id}`, { method: 'DELETE' }),
   retryContentProcessing: (id: number) => fetchWithAuth<ContentItem>(`/content/${id}/retry`, { method: 'POST' }),
 
+  generateProvisioningQr: (data: {
+    wifi_ssid: string
+    wifi_password: string
+    wifi_security_type: string
+    max_uses: number
+  }) => fetchWithAuth<Record<string, unknown>>('/provisioning/qr', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+  }),
+
+  getBookingReport: (placementId: number) => fetchWithAuth<BookingReport>(`/placements/${placementId}/report`),
+  bookingReportPdfUrl: (placementId: number) => `${API_BASE}/placements/${placementId}/report.pdf`,
+  getPlacements: (contentId: number) => fetchWithAuth<Placement[]>(`/placements/?content_id=${contentId}`),
+  createPlacement: (data: {
+    content_id: number
+    advertiser: string
+    price_paise: number
+    is_paid: boolean
+    starts_at: string
+    ends_at: string
+    notes?: string | null
+    targets: { screen_id?: number; group_id?: number }[]
+  }) => fetchWithAuth<Placement>('/placements/', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+  }),
+  updatePlacement: (id: number, data: Partial<{
+    advertiser: string; price_paise: number; is_paid: boolean
+    starts_at: string; ends_at: string; notes: string | null
+  }>) => fetchWithAuth<Placement>(`/placements/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+  }),
+  addPlacementTarget: (id: number, target: { screen_id?: number; group_id?: number }) =>
+    fetchWithAuth<Placement>(`/placements/${id}/targets`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(target),
+    }),
+  removePlacementTarget: (id: number, targetId: number) =>
+    fetchWithAuth<Placement>(`/placements/${id}/targets/${targetId}`, { method: 'DELETE' }),
+  splitPlacementTarget: (id: number, targetId: number, excludeScreenIds: number[]) =>
+    fetchWithAuth<Placement>(`/placements/${id}/targets/${targetId}/split`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ exclude_screen_ids: excludeScreenIds }),
+    }),
+  deletePlacement: (id: number) => fetchWithAuth(`/placements/${id}`, { method: 'DELETE' }),
+
   getEnrollmentTokens: () => fetchWithAuth<EnrollmentToken[]>('/enrollment-tokens/'),
   createEnrollmentToken: (data: { description?: string, expires_at?: string, max_uses?: number }) => 
     fetchWithAuth<EnrollmentToken>('/enrollment-tokens/', {
@@ -152,6 +240,7 @@ export const api = {
   }),
   updatePlaylistItem: (playlistId: number, itemId: number, data: Partial<{
     duration: number
+    rotation: number | null
     start_at: string | null
     end_at: string | null
     schedule: Omit<ItemSchedule, 'id'> | null
@@ -188,7 +277,7 @@ export const api = {
   cancelEmergencyBroadcast: (data: { target_type: string, target_id: number | null, playlist_id: number }) =>
     fetchWithAuth('/emergency/broadcast', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
     
-  getScreenshots: (screenId: number) => fetchWithAuth<Screenshot[]>(`/screenshots?screen_id=${screenId}`),
+  getScreenshots: (screenId: number) => fetchWithAuth<Screenshot[]>(`/screenshots/${screenId}/screenshots`),
   requestScreenshot: (screenId: number) => fetchWithAuth(`/screenshots/${screenId}/request-screenshot`, { method: 'POST' }),
 
   getCampaigns: () => fetchWithAuth<Campaign[]>('/analytics/campaigns'),

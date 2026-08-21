@@ -8,7 +8,7 @@ import uuid
 from typing import Optional
 
 import boto3
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import Query, APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
@@ -17,9 +17,40 @@ from arq import create_pool
 from .. import models, schemas
 from ..database import REDIS_SETTINGS
 from ..tenancy import TenantScope, get_tenant_scope, require_tenant_roles
+from ..media_urls import delete_stored_file
 from .screens import is_s3_enabled, resolve_media_url
 
 router = APIRouter()
+
+
+def queue_processing(db, content: models.Content) -> None:
+    """Hand a video to the transcode worker, or mark it failed if we cannot.
+
+    The previous version fired the enqueue into a background task and swallowed every
+    exception, so an unreachable Redis left the row at "processing" forever and the
+    library showed a spinner that would never resolve. Silent and permanent is the worst
+    failure mode available, so a queue that cannot be reached is now a visible failure the
+    operator can retry.
+    """
+    import asyncio
+
+    async def _enqueue():
+        pool = await create_pool(REDIS_SETTINGS)
+        try:
+            await pool.enqueue_job("process_media", content.id)
+        finally:
+            await pool.close()
+
+    try:
+        # Route handlers here are sync, so FastAPI runs them in a worker thread with no
+        # event loop of their own — asyncio.run is safe and, unlike create_task, actually
+        # propagates the failure back to us.
+        asyncio.run(_enqueue())
+    except Exception as exc:  # noqa: BLE001 - any queue failure must surface, not vanish
+        logger.exception("Could not queue processing for content %s", content.id)
+        content.status = "failed"
+        content.failed_reason = f"Could not queue processing: {exc}"
+        db.commit()
 
 UPLOAD_DIR = os.path.join(pathlib.Path(__file__).parent.parent.parent.absolute(), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -35,7 +66,16 @@ s3_client = boto3.client(
 
 
 def public_upload_url(storage_key: str) -> str:
-    return f"{os.getenv('PUBLIC_BASE_URL', 'http://localhost:8000').rstrip('/')}/uploads/{storage_key}"
+    """Where an asset lives, stored as a path rather than a full URL.
+
+    This used to bake an absolute origin into the database at upload time, so every row
+    pointed at whatever host uploaded it — in practice a stale http://localhost:8000.
+    Thumbnails 404'd in the dashboard, and a TV could never download the media at all
+    because "localhost" on a TV means the TV. The origin is now applied when the record is
+    served, so the same row works from this machine, from a phone on the LAN, and from a
+    public deployment.
+    """
+    return f"/uploads/{storage_key}"
 
 
 def generate_video_thumbnail(video_path: str, stem: str, organization_id: int) -> str | None:
@@ -138,27 +178,15 @@ def upload_content(
         file_size_bytes=file_size_bytes,
         sha256=sha256,
         status="processing" if content_type == "video" else "ready",
+        processing_started_at=models.utcnow() if content_type == "video" else None,
     )
     scope.db.add(content)
     scope.db.commit()
     scope.db.refresh(content)
     
     if content.type == "video":
-        import asyncio
-        async def _enqueue():
-            pool = await create_pool(REDIS_SETTINGS)
-            await pool.enqueue_job("process_media", content.id)
-            await pool.close()
-        try:
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(_enqueue())
-            except RuntimeError:
-                asyncio.run(_enqueue())
-        except Exception as e:
-            # If Redis is down, the job won't be enqueued and remains in 'processing' state.
-            pass
-            
+        queue_processing(scope.db, content)
+
     return serialize_content(content)
 
 
@@ -176,22 +204,11 @@ def retry_content_processing(
     
     content.status = "processing"
     content.failed_reason = None
+    content.processing_started_at = models.utcnow()
     scope.db.commit()
     scope.db.refresh(content)
 
-    import asyncio
-    async def _enqueue():
-        pool = await create_pool(REDIS_SETTINGS)
-        await pool.enqueue_job("process_media", content.id)
-        await pool.close()
-    try:
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(_enqueue())
-        except RuntimeError:
-            asyncio.run(_enqueue())
-    except Exception as e:
-        logger.warning(f"Failed to enqueue retry for content {content.id}: {e}")
+    queue_processing(scope.db, content)
 
     return serialize_content(content)
 
@@ -199,6 +216,7 @@ def retry_content_processing(
 def get_all_content(
     search: str | None = None,
     tag: str | None = None,
+    limit: int = Query(500, ge=1, le=2000),
     scope: TenantScope = Depends(get_tenant_scope),
 ):
     query = scope.query(models.Content)
@@ -206,7 +224,12 @@ def get_all_content(
         query = query.filter(models.Content.name.ilike(f"%{search}%"))
     if tag:
         query = query.filter(models.Content.tags.ilike(f"%{tag}%"))
-    return [serialize_content(item) for item in query.order_by(models.Content.uploaded_at.desc()).all()]
+    # Capped rather than unbounded: this is the library listing, and without a ceiling one
+    # request grows with the whole account's upload history forever.
+    return [
+        serialize_content(item)
+        for item in query.order_by(models.Content.uploaded_at.desc()).limit(limit).all()
+    ]
 
 
 @router.put("/{content_id}", response_model=schemas.ContentResponse)
@@ -241,16 +264,14 @@ def delete_content(
     for item in playlist_items:
         scope.db.delete(item)
 
-    for stored_url in (content.file_url, content.thumbnail):
-        if stored_url and "/uploads/" in stored_url:
-            relative_path = stored_url.split("/uploads/", 1)[1]
-            local_path = pathlib.Path(UPLOAD_DIR, relative_path).resolve()
-            upload_root = pathlib.Path(UPLOAD_DIR).resolve()
-            if local_path.is_relative_to(upload_root) and local_path.exists():
-                try:
-                    local_path.unlink()
-                except OSError:
-                    pass
+    # Renditions are the big one: a video becomes four transcoded files, and deleting the
+    # content row cascaded the database rows away while leaving every file on disk. At
+    # 500 MB an advert that stranded gigabytes per deletion.
+    stored = [content.file_url, content.thumbnail]
+    stored.extend(rendition.file_url for rendition in content.renditions)
+    for stored_url in stored:
+        delete_stored_file(stored_url, UPLOAD_DIR)
+
     scope.db.delete(content)
     scope.db.commit()
     return {"status": "ok"}

@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.olrac.signage.BuildConfig
 import com.olrac.signage.data.AppDatabase
+import com.olrac.signage.data.DeviceState
 import com.olrac.signage.data.PlaylistItemEntity
 import com.olrac.signage.network.ApiClient
 import kotlinx.coroutines.Dispatchers
@@ -118,6 +119,12 @@ class PlaylistSynchronizer(context: Context) {
                     }
                 }
 
+                // Cached ahead of the empty-playlist return: a screen with nothing scheduled
+                // still has to be serviceable from the remote.
+                syncData.maintenance_pin?.takeIf { it.isNotBlank() }?.let {
+                    DeviceState(appContext).setMaintenancePin(it)
+                }
+
                 val playlist = syncData.playlist
                 if (playlist == null) {
                     dao.replaceAll(emptyList())
@@ -147,6 +154,8 @@ class PlaylistSynchronizer(context: Context) {
                         windowEnd = item.schedule?.end_time,
                         transition = item.transition,
                         transitionMs = item.transition_ms,
+                        rotation = item.rotation ?: 0,
+                        fitMode = syncData.fit_mode ?: "contain",
                         playlistDefaultTransition = playlist.default_transition ?: "fade",
                         playlistDefaultTransitionMs = playlist.default_transition_ms ?: 600,
                         sha256 = item.content.sha256,

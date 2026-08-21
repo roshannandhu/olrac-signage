@@ -52,8 +52,10 @@ higher `versionCode`.
    ```
 
 2. Launch OLRAC. If the preconfigured API URL is wrong, edit **Server URL**, then
-   choose **Save and reconnect**. After pairing, press Menu or Settings on the remote
-   to reopen this screen.
+   choose **Save and reconnect**. After pairing, reopen this screen from the remote with
+   **Up, Up, Down, Down, OK** within five seconds, then enter the screen's 4-digit
+   maintenance pin. The pin is shown under **Details** on the screen's dashboard page; a
+   TV that has never synced accepts `0000` until its first sync.
 3. Enter the six-digit code in the web dashboard and assign a playlist. Wait for the
    first complete download before testing offline playback.
 

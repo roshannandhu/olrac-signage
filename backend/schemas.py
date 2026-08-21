@@ -1,7 +1,10 @@
+import re
 from datetime import datetime, time
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+
+from .media_urls import resolve_media_url
 
 
 Role = Literal["owner", "editor", "viewer"]
@@ -50,14 +53,50 @@ class UserResponse(BaseModel):
     role: Role
     is_active: bool
     created_at: datetime
+    full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    # Read-only convenience for the account menu, which otherwise has only a numeric
+    # organization_id to show. Resolved from the relationship, never written through here.
+    organization_name: Optional[str] = None
 
+    # organization_name is resolved by User.organization_name on the model, so
+    # from_attributes picks it up like any other column.
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProfileUpdate(BaseModel):
+    """Self-service profile edit. Deliberately excludes role, is_active and password --
+    privilege changes stay on the owner-gated /api/users routes, and a password change
+    needs the current password (see PasswordChange)."""
+
+    full_name: Optional[str] = Field(default=None, max_length=120)
+    email: Optional[EmailStr] = None
+
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def valid_bcrypt_length(cls, value: str) -> str:
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("password must be at most 72 UTF-8 bytes")
+        return value
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+
+
+WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+_HHMM = re.compile(r"([01]\d|2[0-3]):[0-5]\d")
+
+FitMode = Literal["contain", "cover"]
+SyncRole = Literal["leader", "follower"]
+OperatingMode = Literal["always", "hours", "never"]
 
 
 class ScreenBase(BaseModel):
@@ -97,6 +136,23 @@ class ScreenPatch(BaseModel):
     orientation: Optional[int] = None
     group_id: Optional[int] = None
     target_version_code: Optional[int] = None
+    description: Optional[str] = None
+    tags: Optional[str] = None
+    # Set together: the label and the pin must always describe the same place.
+    location: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    place_id: Optional[str] = None
+    timezone: Optional[str] = None
+    fit_mode: Optional[FitMode] = None
+    # Exactly four digits: the player prompts for it on a TV remote, where anything
+    # longer or non-numeric is painful to type on a d-pad.
+    maintenance_pin: Optional[str] = Field(default=None, pattern=r"^\d{4}$")
+    sync_playback: Optional[bool] = None
+    sync_role: Optional[SyncRole] = None
+    leader_screen_id: Optional[int] = None
+    operating_mode: Optional[OperatingMode] = None
+    operating_hours: Optional[dict[str, list[str]]] = None
 
     @field_validator("orientation")
     @classmethod
@@ -105,11 +161,52 @@ class ScreenPatch(BaseModel):
             raise ValueError("orientation must be 0, 90, 180, or 270")
         return value
 
+    @field_validator("operating_hours")
+    @classmethod
+    def valid_hours(cls, value: Optional[dict[str, list[str]]]) -> Optional[dict[str, list[str]]]:
+        """Each day maps to exactly [start, end] as HH:MM.
+
+        Validated here rather than in the player: a malformed window is the difference
+        between a screen that runs all day and one that never wakes up.
+        """
+        if value is None:
+            return None
+        for day, window in value.items():
+            if day not in WEEKDAYS:
+                raise ValueError(f"unknown day '{day}'")
+            if len(window) != 2:
+                raise ValueError(f"{day} must be [start, end]")
+            for stamp in window:
+                if not _HHMM.fullmatch(stamp):
+                    raise ValueError(f"{day}: '{stamp}' is not HH:MM")
+        return value
+
 
 class ScreenResponse(ScreenBase):
     id: int
     pair_code: Optional[str]
     status: str
+    orientation_source: str = "auto"
+    # Newest capture, attached by the list endpoint so the fleet grid can show a live
+    # thumbnail without a request per card.
+    latest_screenshot: Optional[str] = None
+    # Update state, so the dashboard can monitor a rollout instead of guessing.
+    # app_version above is what the TV reports it is actually running.
+    target_version_code: Optional[int] = None
+    update_status: Optional[str] = None
+    description: Optional[str] = None
+    tags: Optional[str] = None
+    location: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    place_id: Optional[str] = None
+    fit_mode: FitMode = "contain"
+    maintenance_pin: Optional[str] = None
+    sync_playback: bool = False
+    sync_role: SyncRole = "leader"
+    leader_screen_id: Optional[int] = None
+    operating_mode: OperatingMode = "always"
+    operating_hours: Optional[dict[str, list[str]]] = None
     installation_id: Optional[str] = None
     last_seen: datetime
     playlist_id: Optional[int]
@@ -163,6 +260,11 @@ class MediaRenditionResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @model_validator(mode="after")
+    def absolutise_urls(self):
+        self.file_url = resolve_media_url(self.file_url) or self.file_url
+        return self
+
 
 class ContentResponse(ContentBase):
     id: int
@@ -179,6 +281,18 @@ class ContentResponse(ContentBase):
     renditions: List[MediaRenditionResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="after")
+    def absolutise_urls(self):
+        """Make stored locations fetchable, wherever this response is embedded.
+
+        Doing it here rather than in each router is deliberate: the playlists endpoint
+        forgot to, so nested content came back as bare paths and every thumbnail in the
+        playlist editor was blank while the same asset rendered fine in the library.
+        """
+        self.file_url = resolve_media_url(self.file_url) or self.file_url
+        self.thumbnail = resolve_media_url(self.thumbnail)
+        return self
 
 
 class ContentUpdate(ContentBase):
@@ -210,11 +324,20 @@ class ScheduleResponse(ScheduleBase):
 class PlaylistItemBase(BaseModel):
     content_id: int
     duration: int = Field(default=10, ge=1, le=86400)
+    # None means "follow the screen's own orientation"; a number overrides it for this item.
+    rotation: Optional[int] = None
     order: int = Field(default=0, ge=0)
     start_at: Optional[datetime] = None
     end_at: Optional[datetime] = None
     transition: Optional[TransitionName] = None
     transition_ms: Optional[int] = Field(default=None, ge=100, le=3000)
+
+    @field_validator("rotation")
+    @classmethod
+    def valid_rotation(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value not in (0, 90, 180, 270):
+            raise ValueError("rotation must be 0, 90, 180, or 270")
+        return value
 
     @model_validator(mode="after")
     def valid_date_range(self):
@@ -231,11 +354,20 @@ class PlaylistItemCreate(PlaylistItemBase):
 
 class PlaylistItemUpdate(BaseModel):
     duration: Optional[int] = Field(default=None, ge=1, le=86400)
+    # None clears the override so the item follows the screen's own orientation again.
+    rotation: Optional[int] = None
     start_at: Optional[datetime] = None
     end_at: Optional[datetime] = None
     schedule: Optional[ScheduleBase] = None
     transition: Optional[TransitionName] = None
     transition_ms: Optional[int] = Field(default=None, ge=100, le=3000)
+
+    @field_validator("rotation")
+    @classmethod
+    def valid_rotation(cls, value: Optional[int]) -> Optional[int]:
+        if value is not None and value not in (0, 90, 180, 270):
+            raise ValueError("rotation must be 0, 90, 180, or 270")
+        return value
 
     @model_validator(mode="after")
     def valid_date_range(self):
@@ -323,6 +455,24 @@ class ScreenGroupResponse(BaseModel):
 
 class RegisterRequest(BaseModel):
     device_id: str
+
+
+class RegisterResponse(BaseModel):
+    """
+    Deliberately narrow: /screens/register is unauthenticated, so it must not reuse
+    ScreenResponse. That schema carries tenant configuration — including
+    maintenance_pin — and anyone who knows a device_id can call this route.
+    Only what the TV needs to finish pairing goes here.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    device_id: Optional[str] = None
+    name: Optional[str] = None
+    status: str
+    pair_code: Optional[str] = None
+    pair_code_expires_at: Optional[datetime] = None
 
 
 class PairRequest(BaseModel):
@@ -419,6 +569,11 @@ class SyncResponse(BaseModel):
     status: Optional[str] = None
     app_version: Optional[AppVersionResponse] = None
     sync_interval_seconds: int = Field(default=60, ge=15, le=3600)
+    # How the player should scale content that does not match the panel's aspect ratio.
+    # Per screen rather than per item, which is how an operator thinks about a display.
+    fit_mode: FitMode = "contain"
+    # Cached by the player so the maintenance screen still opens with no network.
+    maintenance_pin: Optional[str] = None
 
 
 class PlanResponse(BaseModel):
@@ -498,6 +653,89 @@ class PlayEventItem(BaseModel):
 
 
 class PlayLogBatchRequest(BaseModel):
+    device_id: str
     screen_id: int
     organization_id: int
     events: List[PlayEventItem] = Field(..., max_length=500)
+
+
+# --- Ad bookings ---------------------------------------------------------------------
+
+class PlacementTargetRef(BaseModel):
+    """One place a booking runs. Exactly one of the two ids is set."""
+
+    screen_id: Optional[int] = None
+    group_id: Optional[int] = None
+
+    @model_validator(mode="after")
+    def exactly_one(self):
+        if (self.screen_id is None) == (self.group_id is None):
+            raise ValueError("a target must name either a screen or a group, not both")
+        return self
+
+
+class PlacementCreate(BaseModel):
+    content_id: int
+    advertiser: str = Field(min_length=1, max_length=200)
+    price_paise: int = Field(default=0, ge=0)
+    is_paid: bool = False
+    starts_at: datetime
+    ends_at: datetime
+    notes: Optional[str] = None
+    targets: List[PlacementTargetRef] = []
+
+    @model_validator(mode="after")
+    def valid_window(self):
+        if self.ends_at <= self.starts_at:
+            raise ValueError("the end date must be after the start date")
+        return self
+
+
+class PlacementUpdate(BaseModel):
+    advertiser: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    price_paise: Optional[int] = Field(default=None, ge=0)
+    is_paid: Optional[bool] = None
+    starts_at: Optional[datetime] = None
+    ends_at: Optional[datetime] = None
+    notes: Optional[str] = None
+
+
+class PlacementSplit(BaseModel):
+    """Screens to drop when converting a group booking into per-screen bookings."""
+
+    exclude_screen_ids: List[int] = []
+
+
+class PlacementTargetResponse(BaseModel):
+    id: int
+    screen_id: Optional[int]
+    group_id: Optional[int]
+    name: str
+    kind: Literal["screen", "group"]
+    # False when the playlist item was deleted by hand on the screen page: the deal is
+    # still recorded, it just is not on air there any more.
+    is_placed: bool
+
+
+class PlacementResponse(BaseModel):
+    id: int
+    content_id: int
+    advertiser: str
+    price_paise: int
+    is_paid: bool
+    starts_at: datetime
+    ends_at: datetime
+    notes: Optional[str]
+    created_at: datetime
+    targets: List[PlacementTargetResponse] = []
+
+
+class ResolveLinkRequest(BaseModel):
+    """A Google Maps share link, pasted by an operator."""
+    link: str
+
+
+class ResolveLinkResponse(BaseModel):
+    latitude: float
+    longitude: float
+    name: Optional[str] = None

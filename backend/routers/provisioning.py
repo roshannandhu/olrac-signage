@@ -24,9 +24,18 @@ def generate_provisioning_qr(
     base_url = os.getenv("PUBLIC_BASE_URL")
 
     if not cert_hash or not apk_url or not base_url:
+        missing = [
+            name for name, value in (
+                ("PROVISIONING_CERT_SHA256_BASE64", cert_hash),
+                ("PROVISIONING_APK_URL", apk_url),
+                ("PUBLIC_BASE_URL", base_url),
+            ) if not value
+        ]
+        # 503, not 500: nothing has crashed, the feature simply has no configuration yet.
+        # A 500 here reads as a bug and sends people looking in the wrong place.
         raise HTTPException(
-            status_code=500,
-            detail="Provisioning is not configured. Missing PROVISIONING_CERT_SHA256_BASE64, PROVISIONING_APK_URL, or PUBLIC_BASE_URL in .env"
+            status_code=503,
+            detail=f"Provisioning is not configured yet. Set {', '.join(missing)} in .env and restart the API.",
         )
 
     # Generate an enrollment token

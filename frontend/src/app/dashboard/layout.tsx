@@ -5,33 +5,56 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Image as ImageIcon,
-  AlertTriangle,
   BarChart3,
+  Bell,
+  ChevronDown,
   CreditCard,
-  Key,
-  LayoutDashboard,
-  ListVideo,
+  FolderCheck,
+  Image as ImageIcon,
+  Layers3,
   LogOut,
   MonitorPlay,
   Package,
+  QrCode,
   RadioTower,
+  Settings2,
+  UserRound,
   Users,
 } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { ThemeToggle } from '@/components/dashboard/theme-toggle'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuLinkItem,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 
+// The four things an operator touches daily. Everything else is one level down, under
+// Admin or the account menu, so the bar stays readable at a glance.
 const primaryLinks = [
-  { href: '/dashboard', label: 'Overview', icon: LayoutDashboard },
+  { href: '/dashboard/content', label: 'Content', icon: ImageIcon },
   { href: '/dashboard/screens', label: 'Screens', icon: MonitorPlay },
-  { href: '/dashboard/content', label: 'Library', icon: ImageIcon },
-  { href: '/dashboard/playlists', label: 'Playlists', icon: ListVideo },
-  { href: '/dashboard/campaigns', label: 'Campaigns', icon: BarChart3 },
-  { href: '/dashboard/releases', label: 'Releases', icon: Package },
-  { href: '/dashboard/emergency', label: 'Emergency', icon: AlertTriangle },
+  { href: '/dashboard/groups', label: 'Groups', icon: Layers3 },
+]
+
+const adminLinks = [
+  { href: '/dashboard/campaigns', label: 'Playback report', icon: BarChart3, ownerOnly: false },
+  { href: '/dashboard/alerts', label: 'Alerts', icon: Bell, ownerOnly: false },
+  { href: '/dashboard/files', label: 'File management', icon: FolderCheck, ownerOnly: false },
+  { href: '/dashboard/emergency', label: 'Emergency broadcast', icon: RadioTower, ownerOnly: false },
+  { href: '/dashboard/releases', label: 'App releases', icon: Package, ownerOnly: true },
+  { href: '/dashboard/provisioning', label: 'Provisioning', icon: QrCode, ownerOnly: true },
+]
+
+const accountLinks = [
+  { href: '/dashboard/team', label: 'Team', icon: Users, ownerOnly: true },
+  { href: '/dashboard/billing', label: 'Billing', icon: CreditCard, ownerOnly: true },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -48,91 +71,115 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (meQuery.data) setUser(meQuery.data)
   }, [meQuery.data, setUser])
 
-  const links = user?.role === 'owner'
-    ? [...primaryLinks, { href: '/dashboard/enrollment', label: 'Enrollment', icon: Key }, { href: '/dashboard/team', label: 'Team', icon: Users }, { href: '/dashboard/billing', label: 'Billing', icon: CreditCard }]
-    : primaryLinks
+  const isOwner = user?.role === 'owner'
+  const adminItems = adminLinks.filter((item) => !item.ownerOnly || isOwner)
+  const accountItems = accountLinks.filter((item) => !item.ownerOnly || isOwner)
 
-  const isActive = (href: string) => href === '/dashboard' ? pathname === href : pathname.startsWith(href)
+  const isActive = (href: string) => pathname.startsWith(href)
+  const adminActive = adminItems.some((item) => isActive(item.href))
   const logout = () => {
     clearSession()
     router.replace('/login')
   }
 
   if (!hydrated || !token) {
-    return <div className="bg-rail min-h-screen" aria-label="Loading dashboard" />
+    return <div className="bg-background min-h-screen" aria-label="Loading dashboard" />
   }
 
   return (
-    <div className="bg-background min-h-screen lg:grid lg:grid-cols-[248px_1fr]">
-      <a href="#dashboard-content" className="bg-card sr-only z-[100] rounded-lg px-4 py-3 font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4">
+    <div className="bg-background min-h-screen">
+      <a href="#dashboard-content" className="bg-card sr-only z-100 rounded-lg px-4 py-3 font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4">
         Skip to content
       </a>
 
-      <aside className="bg-rail text-rail-foreground hidden min-h-screen flex-col lg:sticky lg:top-0 lg:flex lg:h-screen">
-        <div className="border-rail-foreground/10 flex h-20 items-center gap-3 border-b px-6">
-          <span className="bg-brand text-rail grid size-10 place-items-center rounded-xl shadow-[0_0_30px_rgba(45,212,191,.18)]">
-            <RadioTower className="size-5" aria-hidden="true" />
-          </span>
-          <div>
-            <p className="text-[15px] font-bold tracking-[0.08em]">OLRAC</p>
-            <p className="text-brand/60 text-[10px] tracking-[0.22em] uppercase">Signage control</p>
-          </div>
-        </div>
+      <header className="border-hairline bg-card sticky top-0 z-40 border-b">
+        <div className="mx-auto flex h-16 w-full max-w-[1600px] items-center gap-2 px-4 sm:px-6 lg:px-8">
+          <Link href="/dashboard/screens" className="mr-4 flex shrink-0 items-center gap-2.5">
+            <span className="bg-primary text-primary-foreground grid size-8 place-items-center rounded-lg">
+              <RadioTower className="size-[18px]" aria-hidden="true" />
+            </span>
+            <span className="text-foreground hidden text-[17px] font-bold tracking-tight sm:block">Olrac Signage</span>
+          </Link>
 
-        <nav aria-label="Dashboard" className="flex-1 px-3 py-6">
-          <p className="text-rail-muted/60 mb-3 px-3 text-[10px] font-bold tracking-[0.2em] uppercase">Workspace</p>
-          <div className="space-y-1">
-            {links.map(({ href, label, icon: Icon }) => (
+          <nav aria-label="Main" className="hidden items-center gap-1 lg:flex">
+            {primaryLinks.map(({ href, label }) => (
               <Link key={href} href={href} className={cn(
-                'focus-visible:ring-brand flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:outline-none',
+                'focus-visible:ring-ring rounded-lg px-3.5 py-2 text-[15px] transition-colors focus-visible:ring-2 focus-visible:outline-none',
                 isActive(href)
-                  ? 'bg-rail-foreground/10 text-rail-foreground'
-                  : 'text-rail-muted hover:bg-rail-foreground/[.06] hover:text-rail-foreground',
+                  ? 'text-primary dark:text-brand font-semibold'
+                  : 'text-muted-foreground hover:text-foreground font-medium',
               )}>
-                <Icon className={cn('size-[18px]', isActive(href) && 'text-brand')} aria-hidden="true" />
                 {label}
-                {isActive(href) && <span className="bg-brand ml-auto size-1.5 rounded-full" aria-hidden="true" />}
               </Link>
             ))}
-          </div>
-        </nav>
+          </nav>
 
-        <div className="border-rail-foreground/10 space-y-3 border-t p-4">
-          <div className="bg-rail-foreground/[.045] flex items-center gap-3 rounded-xl p-3">
-            <div className="bg-rail-foreground/10 text-brand grid size-9 place-items-center rounded-lg text-sm font-bold">
-              {user?.username.slice(0, 2).toUpperCase() || '—'}
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{user?.username || 'Account'}</p>
-              <p className="text-rail-muted/70 text-xs capitalize">{user?.role || 'Loading'}</p>
-            </div>
+          <div className="ml-auto flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger className={cn(
+                'focus-visible:ring-ring flex h-10 cursor-pointer items-center gap-1 rounded-lg px-3 text-[15px] transition-colors focus-visible:ring-2 focus-visible:outline-none',
+                adminActive ? 'text-primary dark:text-brand font-semibold' : 'text-muted-foreground hover:text-foreground font-medium',
+              )}>
+                Admin <ChevronDown className="size-4" aria-hidden="true" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                {adminItems.map(({ href, label, icon: Icon }) => (
+                  <DropdownMenuLinkItem key={href} href={href} render={<Link href={href} />}>
+                    <Icon aria-hidden="true" /> {label}
+                  </DropdownMenuLinkItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <ThemeToggle />
+
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                aria-label="Account"
+                className="bg-primary text-primary-foreground focus-visible:ring-ring ml-1 grid size-9 cursor-pointer place-items-center rounded-full text-[13px] font-bold focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+              >
+                {(user?.full_name || user?.username)?.slice(0, 2).toUpperCase() || '—'}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuLabel>
+                  <p className="text-foreground truncate text-sm font-semibold">{user?.full_name || user?.username || 'Account'}</p>
+                  <p className="text-muted-foreground truncate text-xs">{user?.email || user?.username}</p>
+                  <p className="text-muted-foreground/70 mt-0.5 truncate text-xs">
+                    <span className="capitalize">{user?.role || 'Loading'}</span>
+                    {user?.organization_name ? ` · ${user.organization_name}` : ''}
+                  </p>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuLinkItem href="/dashboard/account" render={<Link href="/dashboard/account" />}>
+                  <UserRound aria-hidden="true" /> Profile
+                </DropdownMenuLinkItem>
+                {accountItems.map(({ href, label, icon: Icon }) => (
+                  <DropdownMenuLinkItem key={href} href={href} render={<Link href={href} />}>
+                    <Icon aria-hidden="true" /> {label}
+                  </DropdownMenuLinkItem>
+                ))}
+                <DropdownMenuLinkItem href="/dashboard/provisioning" render={<Link href="/dashboard/provisioning" />}>
+                  <Settings2 aria-hidden="true" /> Add new screen
+                </DropdownMenuLinkItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={logout}>
+                  <LogOut aria-hidden="true" /> Log out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-          <ThemeToggle />
-          <button onClick={logout} className="text-rail-muted hover:bg-rail-foreground/[.06] hover:text-rail-foreground focus-visible:ring-brand flex h-10 w-full cursor-pointer items-center gap-3 rounded-lg px-3 text-sm transition-colors focus-visible:ring-2 focus-visible:outline-none">
-            <LogOut className="size-4" aria-hidden="true" /> Sign out
-          </button>
         </div>
-      </aside>
+      </header>
 
-      <div className="min-w-0 pb-20 lg:pb-0">
-        <header className="border-hairline bg-background/90 sticky top-0 z-30 flex h-16 items-center justify-between border-b px-4 backdrop-blur-xl sm:px-6 lg:hidden">
-          <Link href="/dashboard" className="text-foreground flex items-center gap-2 font-bold tracking-[0.08em]">
-            <span className="bg-brand text-rail grid size-8 place-items-center rounded-lg"><RadioTower className="size-4" /></span>
-            OLRAC
-          </Link>
-          <Badge variant="outline" className="capitalize">{user?.role}</Badge>
-        </header>
+      <main id="dashboard-content" className="mx-auto w-full max-w-[1600px] px-4 py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:pb-10">
+        {children}
+      </main>
 
-        <main id="dashboard-content" className="mx-auto w-full max-w-[1500px] px-4 py-7 sm:px-6 sm:py-9 lg:px-10 lg:py-10">
-          {children}
-        </main>
-      </div>
-
-      <nav aria-label="Mobile dashboard" className="border-hairline bg-card/95 fixed inset-x-0 bottom-0 z-40 grid h-[72px] border-t px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden" style={{ gridTemplateColumns: `repeat(${Math.min(links.length, 6)}, minmax(0, 1fr))` }}>
-        {links.slice(0, 6).map(({ href, label, icon: Icon }) => (
+      <nav aria-label="Main" className="border-hairline bg-card/95 fixed inset-x-0 bottom-0 z-40 grid min-h-[72px] grid-cols-3 border-t px-2 pt-1 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
+        {primaryLinks.map(({ href, label, icon: Icon }) => (
           <Link key={href} href={href} className={cn(
-            'focus-visible:ring-brand flex min-w-0 flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none',
-            isActive(href) ? 'text-primary' : 'text-muted-foreground',
+            'focus-visible:ring-ring flex min-w-0 flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:outline-none',
+            isActive(href) ? 'text-primary dark:text-brand' : 'text-muted-foreground',
           )}>
             <Icon className="size-5" aria-hidden="true" />
             <span className="truncate">{label}</span>

@@ -47,6 +47,7 @@ import com.olrac.signage.data.AppDatabase
 import com.olrac.signage.data.DeviceState
 import com.olrac.signage.data.LaunchState
 import com.olrac.signage.data.LaunchStateResolver
+import com.olrac.signage.data.MaintenanceGesture
 import com.olrac.signage.data.RegistrationSnapshot
 import com.olrac.signage.network.ApiClient
 import com.olrac.signage.network.RegisterRequest
@@ -66,6 +67,7 @@ class MainActivity : ComponentActivity() {
     private var serverRevision by mutableIntStateOf(0)
     private var serverError by mutableStateOf<String?>(null)
     private var showServerSetup by mutableStateOf(false)
+    private var showPinPrompt by mutableStateOf(false)
     private var defaultHome by mutableStateOf(false)
     private var realtimeClient: RealtimeClient? = null
 
@@ -107,7 +109,16 @@ class MainActivity : ComponentActivity() {
                 resolveAndRefreshPairing(deviceId)
             }
 
-            if (showServerSetup) {
+            if (showPinPrompt) {
+                PinPromptScreen(
+                    expectedPin = deviceState.maintenancePin,
+                    onUnlocked = {
+                        showPinPrompt = false
+                        showServerSetup = true
+                    },
+                    onCancel = { showPinPrompt = false }
+                )
+            } else if (showServerSetup) {
                 ServerSetupScreen(
                     serverUrl = ApiClient.effectiveBaseUrl(this),
                     serverError = serverError,
@@ -164,11 +175,20 @@ class MainActivity : ComponentActivity() {
         if (hasFocus) hideSystemBars()
     }
 
+    private val maintenanceGesture = MaintenanceGesture()
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_SETTINGS) {
-            showServerSetup = true
-            return true
+        // Only while the player is on screen: inside the setup surfaces these keys are
+        // navigation, and matching there would swallow a press mid-form.
+        // Auto-repeat from a held key would otherwise flood the gesture buffer.
+        if (!showPinPrompt && !showServerSetup && (event == null || event.repeatCount == 0)) {
+            if (maintenanceGesture.record(keyCode, System.currentTimeMillis())) {
+                // The gesture only asks the question; DeviceState's pin answers it.
+                showPinPrompt = true
+                return true
+            }
         }
+
         if (keyCode == KeyEvent.KEYCODE_HOME || keyCode == KeyEvent.KEYCODE_APP_SWITCH) {
             return true
         }
@@ -503,6 +523,73 @@ private fun PairingScreen(
     }
 }
 
+/**
+ * Pin gate in front of [ServerSetupScreen], which can repoint the TV at another server.
+ *
+ * Verified against the locally cached pin rather than the server, because the screen it
+ * guards is the one an installer needs when the server is exactly what is broken.
+ */
+@Composable
+private fun PinPromptScreen(
+    expectedPin: String,
+    onUnlocked: () -> Unit,
+    onCancel: () -> Unit
+) {
+    var entered by remember { mutableStateOf("") }
+    var attemptsLeft by remember { mutableIntStateOf(MaintenanceGesture.MAX_PIN_ATTEMPTS) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    fun submit() {
+        if (entered == expectedPin) {
+            onUnlocked()
+            return
+        }
+        // Closing after a few misses keeps a 4-digit pin out of reach of someone
+        // patiently trying codes on the remote: each round costs them the gesture again.
+        attemptsLeft -= 1
+        entered = ""
+        if (attemptsLeft <= 0) onCancel() else error = "Incorrect pin. $attemptsLeft left."
+    }
+
+    SetupSurface {
+        Text(text = "Maintenance access", color = Color.White)
+        Text(
+            text = "Enter this screen's 4-digit pin. It is shown on the screen's page in the dashboard.",
+            color = Color.LightGray,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        OutlinedTextField(
+            value = entered,
+            onValueChange = { typed ->
+                entered = typed.filter { it.isDigit() }.take(4)
+                error = null
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Pin") },
+            supportingText = error?.let { message -> { Text(message) } },
+            isError = error != null,
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            colors = setupFieldColors()
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = { submit() },
+            enabled = entered.length == 4,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = AccentGreen, contentColor = Color.Black)
+        ) {
+            Text("Unlock")
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        TextButton(onClick = onCancel) {
+            Text("Back to player", color = Color.LightGray)
+        }
+    }
+}
+
 @Composable
 private fun ServerSetupScreen(
     serverUrl: String,
@@ -515,7 +602,7 @@ private fun ServerSetupScreen(
     SetupSurface {
         Text(text = "Player setup", color = Color.White)
         Text(
-            text = "Configure this TV's control-plane address. Press Menu at any time to return here.",
+            text = "Configure this TV's control-plane address.",
             color = Color.LightGray,
             textAlign = TextAlign.Center
         )

@@ -1,4 +1,5 @@
 import os
+import re
 import pathlib
 from contextlib import asynccontextmanager
 
@@ -14,7 +15,7 @@ from sqlalchemy.orm import Session
 from . import database, models
 from .billing import ensure_billing_catalog
 from .database import Base, engine
-from .routers import analytics, auth, billing, content, enrollment_tokens, groups, playlists, screens, users, websockets, emergency, screenshots, releases, provisioning
+from .routers import analytics, auth, billing, content, enrollment_tokens, groups, placements, playlists, screens, users, websockets, emergency, screenshots, releases, provisioning
 
 Base.metadata.create_all(bind=engine)
 
@@ -37,9 +38,23 @@ allowed_origins = [
     for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
     if origin.strip()
 ]
+
+# A dashboard opened from a phone or a TV on the same network is served from the host's
+# LAN address, not localhost, so that origin has to be allowed too or every request is
+# blocked by the browser before it leaves the device. Private ranges only — this never
+# opens the API to the public internet.
+_LAN_ORIGIN = re.compile(
+    r"^https?://("
+    r"localhost|127\.0\.0\.1|"
+    r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+    r"192\.168\.\d{1,3}\.\d{1,3}|"
+    r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
+    r")(:\d+)?$"
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=_LAN_ORIGIN.pattern,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -96,6 +111,7 @@ app.include_router(screens.router, prefix="/api/screens", tags=["screens"])
 app.include_router(groups.router, prefix="/api/groups", tags=["groups"])
 app.include_router(content.router, prefix="/api/content", tags=["content"])
 app.include_router(playlists.router, prefix="/api/playlists", tags=["playlists"])
+app.include_router(placements.router, prefix="/api/placements", tags=["placements"])
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(websockets.router, prefix="/api/ws", tags=["Websockets"])
 app.include_router(billing.router, prefix="/api/billing", tags=["billing"])

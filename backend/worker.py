@@ -12,9 +12,11 @@ from dotenv import load_dotenv
 from .database import SessionLocal, REDIS_SETTINGS
 from . import models
 from .models import Content, MediaRendition
+from .media_urls import delete_stored_file
 from .routers.content import UPLOAD_DIR, public_upload_url
 
 import shutil
+from sqlalchemy import or_
 
 project_root = Path(__file__).parent.parent
 if not shutil.which("ffmpeg"):
@@ -91,6 +93,13 @@ def process_media_sync(content_id: int):
         if not file_path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
         
+        # A retry re-transcodes every resolution, so anything from a previous attempt is
+        # stale. Without this each retry stacked another full set of renditions on the
+        # row — three attempts left twelve where there should be four.
+        db.query(MediaRendition).filter(MediaRendition.content_id == content.id).delete(
+            synchronize_session=False
+        )
+
         info = probe_file(file_path)
         # Persist the true length so a playlist item can default to it rather than a
         # flat 10 seconds, which truncates every advert longer than that.
@@ -163,7 +172,10 @@ def process_media_sync(content_id: int):
                 run_command_sync(cmd)
                 content.thumbnail = public_upload_url(f"{content.organization_id}/{thumb_filename}")
             except Exception:
-                pass
+                # Not fatal — the asset still plays without a thumbnail — but silence here
+                # is why "thumbnail not showing" was impossible to diagnose: the item was
+                # marked ready and nothing anywhere recorded that this step had failed.
+                logger.exception("thumbnail generation failed for content %s", content.id)
         
         content.status = "ready"
         db.commit()
@@ -194,20 +206,28 @@ async def recover_stuck_processing(ctx):
             return
         
         threshold = models.utcnow() - timedelta(minutes=10)
+        # Times the current attempt, not the upload. The previous version reset the timer
+        # by overwriting uploaded_at, which silently rewrote the "added 3 months ago" date
+        # shown in the library and broke sorting by date added.
         stuck_content = db.query(Content).filter(
             Content.status == "processing",
-            Content.uploaded_at < threshold
+            or_(
+                Content.processing_started_at < threshold,
+                Content.processing_started_at.is_(None),
+            ),
         ).all()
-        
+
         for c in stuck_content:
             c.processing_retries = (c.processing_retries or 0) + 1
             if c.processing_retries > 3:
                 c.status = "failed"
                 c.failed_reason = "Transcoding timed out and exceeded retry limit."
+                print(f"Content {c.id} failed after {c.processing_retries} attempts")
             else:
-                c.uploaded_at = models.utcnow()  # Reset the timer
+                c.processing_started_at = models.utcnow()
                 await redis.enqueue_job("process_media", c.id)
-                
+                print(f"Re-queued stuck content {c.id} (attempt {c.processing_retries})")
+
         db.commit()
     finally:
         db.close()
@@ -301,11 +321,49 @@ async def prune_play_logs(ctx):
         db.close()
 
 
+
+async def prune_screenshots(ctx):
+    """Keep only the newest captures per screen, and delete their files too.
+
+    Nothing removed these before. The UI only ever shows the newest ten, so the rest were
+    invisible while still consuming a row and an image file each — unbounded growth across
+    a fleet that captures regularly.
+    """
+    keep = int(os.getenv("SCREENSHOT_KEEP_PER_SCREEN", "10"))
+    db = SessionLocal()
+    removed = 0
+    try:
+        screen_ids = [row[0] for row in db.query(models.ScreenshotLog.screen_id).distinct()]
+        for screen_id in screen_ids:
+            stale = (
+                db.query(models.ScreenshotLog)
+                .filter(models.ScreenshotLog.screen_id == screen_id)
+                .order_by(models.ScreenshotLog.created_at.desc())
+                .offset(keep)
+                .all()
+            )
+            for shot in stale:
+                # File first: if the row goes and the unlink fails we lose the only
+                # pointer to it and it becomes an orphan.
+                delete_stored_file(shot.file_url, UPLOAD_DIR)
+                db.delete(shot)
+                removed += 1
+        db.commit()
+        if removed:
+            print(f"Pruned {removed} screenshots beyond the newest {keep} per screen.")
+    except Exception as e:
+        db.rollback()
+        print(f"Error pruning screenshots: {e}")
+    finally:
+        db.close()
+
+
 class WorkerSettings:
     functions = [process_media]
     cron_jobs = [
-        cron(recover_stuck_processing, minute=set(range(60))),
+        cron(recover_stuck_processing, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
         cron(aggregate_play_logs, minute={0, 15, 30, 45}),
-        cron(prune_play_logs, hour=3, minute=0)
+        cron(prune_play_logs, hour=3, minute=0),
+        cron(prune_screenshots, hour=3, minute=30),
     ]
     redis_settings = REDIS_SETTINGS

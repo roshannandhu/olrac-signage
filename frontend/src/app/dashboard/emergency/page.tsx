@@ -108,7 +108,7 @@ export default function EmergencyPage() {
         actions={canEdit ? <Badge variant="warning">Takes effect immediately</Badge> : <Badge variant="outline">View only</Badge>}
       />
 
-      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="ring-hairline bg-card border-0 py-0 shadow-[0_1px_2px_rgba(15,23,42,.04)] ring-1">
           <CardContent className="p-5 sm:p-6">
             <div className="flex items-start gap-3">
@@ -121,7 +121,7 @@ export default function EmergencyPage() {
               </div>
             </div>
 
-            <fieldset disabled={!canEdit || triggerMutation.isPending} className="mt-6 grid gap-4 sm:grid-cols-2">
+            <fieldset disabled={!canEdit || triggerMutation.isPending} className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Target</Label>
                 <Select value={targetType} onValueChange={(value) => { setTargetType(value || 'all'); setTargetId('') }}>

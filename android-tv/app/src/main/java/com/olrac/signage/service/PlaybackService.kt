@@ -14,7 +14,9 @@ import android.os.UserManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.olrac.signage.MainActivity
@@ -198,8 +200,20 @@ class PlaybackService : Service() {
             val syncRequest = PeriodicWorkRequestBuilder<SyncWorker>(15, TimeUnit.MINUTES).build()
             val heartbeatRequest =
                 PeriodicWorkRequestBuilder<HeartbeatWorker>(15, TimeUnit.MINUTES).build()
+            // Without a network constraint every offline run threw, returned Result.retry(),
+            // and pushed the upload further into WorkManager's exponential backoff -- up to the
+            // 5-hour cap -- which restored connectivity does NOT cancel. So a screen that spent
+            // the night offline could sit on a full queue for hours after coming back. Gating on
+            // CONNECTED means it simply does not run offline, and WorkManager releases it as soon
+            // as the network returns.
             val proofOfPlayRequest =
-                PeriodicWorkRequestBuilder<ProofOfPlayWorker>(15, TimeUnit.MINUTES).build()
+                PeriodicWorkRequestBuilder<ProofOfPlayWorker>(15, TimeUnit.MINUTES)
+                    .setConstraints(
+                        Constraints.Builder()
+                            .setRequiredNetworkType(NetworkType.CONNECTED)
+                            .build()
+                    )
+                    .build()
             
             WorkManager.getInstance(context).apply {
                 enqueueUniquePeriodicWork(
@@ -212,9 +226,11 @@ class PlaybackService : Service() {
                     ExistingPeriodicWorkPolicy.KEEP,
                     heartbeatRequest
                 )
+                // UPDATE, not KEEP: already-deployed screens have a constraint-less
+                // proof_of_play registered, and KEEP would leave them on it forever.
                 enqueueUniquePeriodicWork(
                     "proof_of_play",
-                    ExistingPeriodicWorkPolicy.KEEP,
+                    ExistingPeriodicWorkPolicy.UPDATE,
                     proofOfPlayRequest
                 )
             }

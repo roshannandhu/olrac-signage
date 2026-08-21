@@ -13,7 +13,6 @@ import android.view.accessibility.AccessibilityEvent;
 
 public class WatchdogAccessibilityService extends AccessibilityService {
     private static final String TAG = "WatchdogA11y";
-    private static final String ABLESIGN = "com.olrac.signage";
     private static boolean launched = false;
 
     @Override
@@ -47,9 +46,9 @@ public class WatchdogAccessibilityService extends AccessibilityService {
     }
 
     private void launchAbleSign(String from) {
-        Log.d(TAG, "launchAbleSign from=" + from);
+        Log.d(TAG, "launching " + WatchdogTarget.component(this) + " from=" + from);
         Intent i = new Intent(Intent.ACTION_MAIN);
-        i.setComponent(new ComponentName(ABLESIGN, ABLESIGN + ".MainActivity"));
+        i.setComponent(WatchdogTarget.component(this));
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
 
         // AlarmManager fires via system process — bypasses Realme/OPPO background launch restriction

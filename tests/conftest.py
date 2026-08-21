@@ -23,6 +23,8 @@ ISOLATED_SCRIPTS = {
     "test_datetime_aware.py",
     "test_sqlite_utc.py",
     "test_proof_of_play.py",
+    "test_play_log_attribution.py",
+    "test_account_profile.py",
     "test_analytics.py",
     "test_p6_websockets.py",
     "test_media_selection.py",

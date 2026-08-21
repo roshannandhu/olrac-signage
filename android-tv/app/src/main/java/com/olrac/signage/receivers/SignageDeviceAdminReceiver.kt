@@ -46,7 +46,8 @@ class SignageDeviceAdminReceiver : DeviceAdminReceiver() {
                         val deviceId = deviceState.deviceId
                         val request = EnrollRequest(
                             device_id = deviceId,
-                            enrollment_token = enrollmentToken
+                            enrollment_token = enrollmentToken,
+                            installation_id = deviceState.installationId
                         )
                         val response = ApiClient.service(context).enroll(request)
                         if (response.isSuccessful) {

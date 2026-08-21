@@ -9,12 +9,11 @@ import android.content.Intent;
 import android.os.SystemClock;
 
 public class BootReceiver extends BroadcastReceiver {
-    private static final String ABLESIGN = "com.olrac.signage";
 
     @Override
     public void onReceive(final Context context, Intent intent) {
         Intent i = new Intent(Intent.ACTION_MAIN);
-        i.setComponent(new ComponentName(ABLESIGN, ABLESIGN + ".MainActivity"));
+        i.setComponent(WatchdogTarget.component(context));
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
 
         // AlarmManager fires via system — bypasses Realme/OPPO background launch restriction

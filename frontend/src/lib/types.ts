@@ -8,6 +8,9 @@ export interface User {
   role: Role
   is_active: boolean
   created_at: string
+  full_name?: string | null
+  email?: string | null
+  organization_name?: string | null
 }
 
 export interface ContentItem {
@@ -22,6 +25,7 @@ export interface ContentItem {
   expires_at: string | null
   status: 'processing' | 'ready' | 'failed'
   failed_reason: string | null
+  duration_ms?: number | null
   renditions?: MediaRendition[]
 }
 
@@ -60,6 +64,8 @@ export interface PlaylistItem {
   id: number
   content_id: number
   duration: number
+  /** null = follow the screen's own orientation. */
+  rotation: number | null
   order: number
   start_at: string | null
   end_at: string | null
@@ -97,9 +103,24 @@ export interface Screen {
   last_error: string | null
   last_error_at: string | null
   effective_playlist_id: number | null
-  last_version_code: number | null
+  orientation_source?: 'auto' | 'manual'
+  latest_screenshot?: string | null
+  description?: string | null
+  tags?: string | null
+  location?: string | null
+  latitude?: number | null
+  longitude?: number | null
+  place_id?: string | null
+  fit_mode?: FitMode
+  /** Unlocks the player's on-TV maintenance screen. Four digits, per screen. */
+  maintenance_pin?: string | null
+  sync_playback?: boolean
+  sync_role?: SyncRole
+  leader_screen_id?: number | null
+  operating_mode?: OperatingMode
+  operating_hours?: Record<string, [string, string]> | null
   target_version_code: number | null
-  update_status: string | null
+  update_status: string | null  // pending | downloading | installing | success | failed
   screen_width: number | null
   screen_height: number | null
   refresh_rate: number | null
@@ -217,4 +238,116 @@ export interface Screenshot {
   screen_id: number
   url: string
   created_at: string
+}
+
+/** How the player handles content whose aspect ratio differs from the panel. */
+export type FitMode = 'contain' | 'cover'
+/** Video-wall role: a follower takes its playback clock from its leader. */
+export type SyncRole = 'leader' | 'follower'
+export type OperatingMode = 'always' | 'hours' | 'never'
+
+export const WEEKDAYS = [
+  { key: 'mon', label: 'Monday' },
+  { key: 'tue', label: 'Tuesday' },
+  { key: 'wed', label: 'Wednesday' },
+  { key: 'thu', label: 'Thursday' },
+  { key: 'fri', label: 'Friday' },
+  { key: 'sat', label: 'Saturday' },
+  { key: 'sun', label: 'Sunday' },
+] as const
+
+export interface MediaPeriodStats {
+  total_plays: number
+  completed_plays: number
+  error_plays: number
+  success_percent: number
+}
+
+export interface MediaScreenRow {
+  screen_id: number
+  screen_name: string
+  group_name: string | null
+  location: string | null
+  latitude: number | null
+  longitude: number | null
+  total_plays: number
+  completed_plays: number
+  error_plays: number
+  last_played: string | null
+}
+
+export interface MediaLocationRow {
+  /** The screen's real location, falling back to its group name when unset. */
+  location: string
+  screens: number
+  total_plays: number
+  completed_plays: number
+}
+
+/** Proof-of-play for a single advert, from the deduplicated hourly rollups. */
+export interface MediaReport {
+  content_id: number
+  today: MediaPeriodStats
+  week: MediaPeriodStats
+  month: MediaPeriodStats
+  lifetime: MediaPeriodStats
+  per_screen: MediaScreenRow[]
+  per_location: MediaLocationRow[]
+  daily: { date: string; total_plays: number; completed_plays: number }[]
+}
+
+export interface PlacementTarget {
+  id: number
+  screen_id: number | null
+  group_id: number | null
+  name: string
+  kind: 'screen' | 'group'
+  /** False if the playlist item was deleted by hand — sold, but no longer on air there. */
+  is_placed: boolean
+}
+
+/** An advert sold to a client: who, how long, where, and for how much. */
+export interface Placement {
+  id: number
+  content_id: number
+  advertiser: string
+  price_paise: number
+  is_paid: boolean
+  starts_at: string
+  ends_at: string
+  notes: string | null
+  created_at: string
+  targets: PlacementTarget[]
+}
+
+export interface BookingReportScreen {
+  screen_id: number
+  screen_name: string
+  location: string | null
+  latitude: number | null
+  longitude: number | null
+  online: boolean
+  last_seen: string | null
+  total_plays: number
+  completed_plays: number
+  /** The screen has not reported recently, so this figure may still rise. */
+  counts_may_be_incomplete: boolean
+}
+
+/** Proof of delivery for one booking: only its window, only its screens. */
+export interface BookingReport {
+  placement_id: number
+  advertiser: string
+  content_name: string
+  content_id: number
+  starts_at: string
+  ends_at: string
+  price_paise: number
+  is_paid: boolean
+  generated_at: string
+  totals: { total_plays: number; completed_plays: number; error_plays: number; success_percent: number }
+  per_screen: BookingReportScreen[]
+  per_location: { location: string; screens: number; total_plays: number }[]
+  daily: { date: string; total_plays: number }[]
+  stale_screens: string[]
 }

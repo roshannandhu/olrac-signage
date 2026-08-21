@@ -26,5 +26,10 @@ data class PlaylistItemEntity(
     val playlistDefaultTransition: String = "fade",
     val playlistDefaultTransitionMs: Int = 600,
     val sha256: String? = null,
-    val fileSizeBytes: Long? = 0L
+    val fileSizeBytes: Long? = 0L,
+    // Degrees to turn this item on this panel, already resolved by the server from the
+    // per-item override and the screen's orientation. The player must not re-derive it.
+    val rotation: Int = 0,
+    // "contain" letterboxes the whole frame, "cover" fills the panel and crops.
+    val fitMode: String = "contain"
 )

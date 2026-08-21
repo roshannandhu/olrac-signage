@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [PlaylistItemEntity::class, PlayEventEntity::class], version = 6, exportSchema = false)
+@Database(entities = [PlaylistItemEntity::class, PlayEventEntity::class], version = 7, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun playlistDao(): PlaylistDao
     abstract fun playEventDao(): PlayEventDao
@@ -23,7 +23,8 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "signage_database"
                 ).addMigrations(
-                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6
+                    MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
+                    MIGRATION_6_7
                 ).build()
                 INSTANCE = instance
                 instance
@@ -66,6 +67,15 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE playlist_items ADD COLUMN playlistId INTEGER")
+            }
+        }
+
+        // Defaults match the entity, so cached items keep playing upright and letterboxed
+        // until the next sync fills in the server-resolved values.
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE playlist_items ADD COLUMN rotation INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE playlist_items ADD COLUMN fitMode TEXT NOT NULL DEFAULT 'contain'")
             }
         }
 

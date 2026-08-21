@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
+import { api } from '@/lib/api'
 
 export default function ProvisioningPage() {
   const [wifiSsid, setWifiSsid] = useState('')
@@ -20,29 +21,18 @@ export default function ProvisioningPage() {
     setQrPayload(null)
 
     try {
-      const res = await fetch('/api/provisioning/qr', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          wifi_ssid: wifiSsid,
-          wifi_password: wifiPassword,
-          wifi_security_type: wifiSecurity,
-          max_uses: maxUses,
-        }),
+      // Must go through the shared client: a bare '/api/...' resolves against the
+      // dashboard's own origin, so this hit the Next dev server and 404'd instead of
+      // reaching the API — the whole page was dead.
+      const payload = await api.generateProvisioningQr({
+        wifi_ssid: wifiSsid,
+        wifi_password: wifiPassword,
+        wifi_security_type: wifiSecurity,
+        max_uses: maxUses,
       })
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(body.detail || `HTTP Error ${res.status}`)
-      }
-
-      const payload = await res.json()
       setQrPayload(JSON.stringify(payload))
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not generate the provisioning code')
     } finally {
       setLoading(false)
     }

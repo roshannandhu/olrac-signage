@@ -1,3 +1,4 @@
+@import "leaflet/dist/leaflet.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -106,44 +107,48 @@
 }
 
 .dark {
-  --rail: #060f26;
+  /* Neutral near-black, not navy. Surfaces step up in lightness with elevation
+     (page < card < popover/raised) so depth reads without borders doing all the work.
+     The azure brand accent is kept — it is the only colour on the page. */
+  --rail: #0b0b0c;
   --rail-foreground: #ffffff;
   --rail-muted: rgb(255 255 255 / 0.55);
-  --panel: #102550;
+  --panel: #1e1e21;
   --brand: #7aa9ff;
   --brand-soft: #7aa9ff;
-  --hairline: rgb(255 255 255 / 0.1);
+  --hairline: rgb(255 255 255 / 0.11);
 
-  --background: #0a1226;
-  --foreground: #f2f5fb;
-  --card: #111c37;
-  --card-foreground: #f2f5fb;
-  --popover: #111c37;
-  --popover-foreground: #f2f5fb;
+  --background: #0b0b0c;
+  --foreground: #f4f4f5;
+  --card: #151517;
+  --card-foreground: #f4f4f5;
+  --popover: #1a1a1d;
+  --popover-foreground: #f4f4f5;
   --primary: #7aa9ff;
-  --primary-foreground: #0a1226;
-  --secondary: #1b2947;
-  --secondary-foreground: #f2f5fb;
-  --muted: #1b2947;
-  --muted-foreground: #9fb0cd;
-  --accent: #1b2947;
-  --accent-foreground: #f2f5fb;
+  --primary-foreground: #0b0b0c;
+  --secondary: #1e1e21;
+  --secondary-foreground: #f4f4f5;
+  --muted: #1e1e21;
+  /* 4.9:1 on --card, so secondary text still clears AA. */
+  --muted-foreground: #a1a1aa;
+  --accent: #26262a;
+  --accent-foreground: #f4f4f5;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: rgb(255 255 255 / 0.1);
-  --input: rgb(255 255 255 / 0.15);
+  --border: rgb(255 255 255 / 0.11);
+  --input: rgb(255 255 255 / 0.16);
   --ring: #7aa9ff;
   --chart-1: #7aa9ff;
   --chart-2: #5b8ae8;
   --chart-3: #4570c9;
   --chart-4: #2f57a4;
   --chart-5: #1e3d7a;
-  --sidebar: #111c37;
-  --sidebar-foreground: #f2f5fb;
+  --sidebar: #151517;
+  --sidebar-foreground: #f4f4f5;
   --sidebar-primary: #7aa9ff;
-  --sidebar-primary-foreground: #0a1226;
-  --sidebar-accent: #1b2947;
-  --sidebar-accent-foreground: #f2f5fb;
-  --sidebar-border: rgb(255 255 255 / 0.1);
+  --sidebar-primary-foreground: #0b0b0c;
+  --sidebar-accent: #26262a;
+  --sidebar-accent-foreground: #f4f4f5;
+  --sidebar-border: rgb(255 255 255 / 0.11);
   --sidebar-ring: #7aa9ff;
 }
 
@@ -165,14 +170,6 @@
 ::selection {
   background: color-mix(in oklch, #2563eb 26%, transparent);
 }
-
-.signal-grid {
-  background-image:
-    linear-gradient(to right, rgb(122 169 255 / 0.09) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(122 169 255 / 0.09) 1px, transparent 1px);
-  background-size: 28px 28px;
-}
-
 /* ---------------------------------------------------------------------------
    Motion
    Durations follow the 150-300ms micro-interaction band; exits run at ~65% of

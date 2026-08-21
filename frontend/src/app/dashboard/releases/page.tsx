@@ -91,7 +91,7 @@ export default function ReleasesPage() {
           }}
           className="space-y-4 pt-2"
         >
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="version-code">Version code</Label>
               <Input id="version-code" type="number" min={1} value={versionCode} onChange={(event) => setVersionCode(event.target.value)} placeholder="5" required />
@@ -191,7 +191,7 @@ export default function ReleasesPage() {
                   {screens.map((screen) => (
                     <TableRow key={screen.id}>
                       <TableCell className="font-medium">{screen.name || `Screen ${screen.id}`}</TableCell>
-                      <TableCell className="text-muted-foreground tabular-nums">{screen.last_version_code ?? 'Unknown'}</TableCell>
+                      <TableCell className="text-muted-foreground tabular-nums">{screen.app_version || 'Unknown'}</TableCell>
                       <TableCell className="text-muted-foreground">{screen.update_status || '—'}</TableCell>
                       <TableCell>
                         <Select

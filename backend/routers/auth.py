@@ -125,6 +125,60 @@ def read_current_user(user: models.User = Depends(get_current_user)):
     return user
 
 
+@router.patch("/me", response_model=schemas.UserResponse)
+def update_current_user(
+    patch: schemas.ProfileUpdate,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Self-service profile edit, for the account menu.
+
+    Separate from PUT /api/users/{id}, which is owner-gated because it can change role and
+    is_active. Anyone may edit their own display name and email; nobody gets to change
+    their own privileges here.
+    """
+    updates = patch.model_dump(exclude_unset=True)
+    if "email" in updates and updates["email"] is not None:
+        updates["email"] = str(updates["email"])
+        clash = (
+            db.query(models.User)
+            .filter(models.User.email == updates["email"], models.User.id != user.id)
+            .first()
+        )
+        if clash:
+            raise HTTPException(status_code=409, detail="That email is already in use")
+
+    for field, value in updates.items():
+        setattr(user, field, value)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+def change_own_password(
+    payload: schemas.PasswordChange,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(database.get_db),
+):
+    """Change your own password.
+
+    Requires the current password. PUT /api/users/{id} can also set a password but is
+    owner-only and verifies nothing, so it is an admin reset, not a self-service change --
+    without this route a non-owner could never rotate their own credentials, and a
+    borrowed session could change the password of whoever was logged in.
+    """
+    if not verify_password(payload.current_password, user.hashed_password):
+        raise HTTPException(status_code=403, detail="Current password is incorrect")
+
+    if payload.current_password == payload.new_password:
+        raise HTTPException(status_code=400, detail="New password must differ from the current one")
+
+    user.hashed_password = get_password_hash(payload.new_password)
+    db.commit()
+    return None
+
+
 def get_or_create_default_organization(db: Session) -> models.Organization:
     organization = db.query(models.Organization).filter(models.Organization.slug == "default").first()
     if not organization:

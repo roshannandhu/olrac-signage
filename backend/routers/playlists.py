@@ -165,6 +165,12 @@ def update_playlist_item(
     fields = payload.model_fields_set
     if "duration" in fields:
         item.duration = payload.duration
+    # A video occupies the screen for exactly as long as the clip runs, so its duration
+    # tracks the media rather than whatever a form last posted. Images keep a real choice.
+    if item.content and item.content.type == "video" and item.content.duration_ms:
+        item.duration = max(1, round(item.content.duration_ms / 1000))
+    if "rotation" in fields:
+        item.rotation = payload.rotation
     if "start_at" in fields:
         item.start_at = payload.start_at
     if "end_at" in fields:

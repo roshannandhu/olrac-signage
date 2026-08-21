@@ -21,11 +21,11 @@ export default function CampaignsPage() {
       <PageHeader eyebrow="Reporting" title="Campaigns" description="Proof-of-play reporting for every campaign running across your network." />
 
       {campaignsQuery.isLoading ? (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-40" />)}</div>
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-40" />)}</div>
       ) : !campaigns.length ? (
         <EmptyState icon={BarChart3} title="No campaigns yet" description="Assign a campaign to a playlist and its playback analytics will appear here." />
       ) : (
-        <div className="stagger grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="stagger grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {campaigns.map((campaign, index) => (
             <Link
               key={campaign.id}

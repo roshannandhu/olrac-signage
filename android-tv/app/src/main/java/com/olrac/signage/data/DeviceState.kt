@@ -1,9 +1,11 @@
 package com.olrac.signage.data
 
 import android.content.Context
+import android.provider.Settings
 import java.util.UUID
 
 class DeviceState(context: Context) {
+    private val appContext = context.applicationContext
     private val preferences = context.applicationContext.getSharedPreferences(
         PREFERENCES_NAME,
         Context.MODE_PRIVATE
@@ -18,6 +20,29 @@ class DeviceState(context: Context) {
             return generatedId
         }
 
+    /**
+     * An identity that survives reinstalling the app.
+     *
+     * [deviceId] lives in SharedPreferences, so clearing app data or reinstalling wipes it
+     * and the TV comes back looking like a brand new screen — which left a duplicate ghost
+     * in the fleet and consumed another slot of the plan's screen quota. ANDROID_ID is
+     * stable for the life of the OS install, so the server can recognise the returning TV
+     * and reclaim its existing screen.
+     *
+     * Falls back to the random id when ANDROID_ID is unavailable, which is no worse than
+     * the previous behaviour.
+     */
+    @Suppress("HardwareIds")
+    val installationId: String
+        get() {
+            val androidId = try {
+                Settings.Secure.getString(appContext.contentResolver, Settings.Secure.ANDROID_ID)
+            } catch (_: Exception) {
+                null
+            }
+            return androidId?.takeIf { it.isNotBlank() && it != "9774d56d682e549c" } ?: deviceId
+        }
+
     val isPaired: Boolean
         get() = preferences.getBoolean(KEY_IS_PAIRED, false)
 
@@ -26,6 +51,22 @@ class DeviceState(context: Context) {
 
     val apiBaseUrlOverride: String?
         get() = preferences.getString(KEY_API_BASE_URL, null)
+
+    /**
+     * Gate for the on-TV maintenance screen, issued per screen by the server and refreshed
+     * on every sync.
+     *
+     * Cached locally on purpose: that screen exists to repair a wrong server address, so it
+     * has to open when the server cannot be reached. [DEFAULT_MAINTENANCE_PIN] covers a TV
+     * that has never completed a sync, which is a device holding no configuration worth
+     * protecting yet.
+     */
+    val maintenancePin: String
+        get() = preferences.getString(KEY_MAINTENANCE_PIN, null) ?: DEFAULT_MAINTENANCE_PIN
+
+    fun setMaintenancePin(pin: String) {
+        preferences.edit().putString(KEY_MAINTENANCE_PIN, pin).commit()
+    }
 
     fun markPaired(screenName: String?) {
         preferences.edit()
@@ -49,7 +90,11 @@ class DeviceState(context: Context) {
         const val KEY_IS_PAIRED = "is_paired"
         const val KEY_SCREEN_NAME = "screen_name"
         const val KEY_API_BASE_URL = "api_base_url"
+        const val KEY_MAINTENANCE_PIN = "maintenance_pin"
         const val DEFAULT_SCREEN_NAME = "OLRAC Screen"
+        // Applies only before the first successful sync; the server's per-screen pin
+        // replaces it and every paired screen gets a distinct one.
+        const val DEFAULT_MAINTENANCE_PIN = "0000"
     }
 }
 

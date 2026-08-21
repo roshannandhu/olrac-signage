@@ -1,22 +1,25 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
+import { useBulkSelection } from '@/hooks/use-bulk-selection'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, ImageIcon, Search, Tag, Trash2, Upload, UploadCloud, Video, X } from 'lucide-react'
+import { CheckCircle2, ImageIcon, RefreshCw, Search, Trash2, Upload, UploadCloud, Video, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { ErrorState } from '@/components/dashboard/error-state'
+import { AssetCard, AssetGrid, OverlayBadge } from '@/components/dashboard/asset-card'
+import { BulkActionBar, SelectAllCheckbox } from '@/components/dashboard/bulk-action-bar'
+import { ListToolbar, commonSorts, sortItems, type CommonSort } from '@/components/dashboard/list-toolbar'
 import { MediaThumbnail } from '@/components/dashboard/media-thumbnail'
-import { PageHeader } from '@/components/dashboard/page-header'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
-import { expiryLabel, relativeTime } from '@/lib/format'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
+import { assetOrientation, clipDuration, expiryLabel, relativeTime } from '@/lib/format'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import type { ContentItem } from '@/lib/types'
@@ -56,15 +59,41 @@ export default function ContentPage() {
   const fileInput = useRef<HTMLInputElement>(null)
 
   const [search, setSearch] = useState('')
+  const [sort, setSort] = useState<CommonSort>('newest')
   const [tagFilter, setTagFilter] = useState<string | null>(null)
   const [deleteItem, setDeleteItem] = useState<ContentItem | null>(null)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  // Dragging over the whole page, not just the dialog — depth counting because dragenter
+  // and dragleave also fire for every child element the pointer crosses.
+  const [pageDragDepth, setPageDragDepth] = useState(0)
 
   const allTags = useMemo(() => [...new Set(content.flatMap((item) => item.tags?.split(',').map((tag) => tag.trim()).filter(Boolean) || []))].sort(), [content])
-  const filtered = useMemo(() => content.filter((item) => {
-    const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) || item.tags?.toLowerCase().includes(search.toLowerCase())
-    const matchesTag = !tagFilter || item.tags?.split(',').map((tag) => tag.trim()).includes(tagFilter)
-    return matchesSearch && matchesTag
-  }), [content, search, tagFilter])
+  const filtered = useMemo(() => {
+    const matches = content.filter((item) => {
+      const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) || item.tags?.toLowerCase().includes(search.toLowerCase())
+      const matchesTag = !tagFilter || item.tags?.split(',').map((tag) => tag.trim()).includes(tagFilter)
+      return matchesSearch && matchesTag
+    })
+    return sortItems(matches, sort, (item) => item.name, (item) => item.uploaded_at)
+  }, [content, search, sort, tagFilter])
+
+  const bulk = useBulkSelection(filtered)
+
+  const bulkDelete = useMutation({
+    mutationFn: async () => {
+      // Sequential: the worker cleans up renditions per asset and parallel deletes make it
+      // contend with itself for the same files.
+      for (const id of bulk.selected) await api.deleteContent(id)
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['content'] })
+      queryClient.invalidateQueries({ queryKey: ['playlists'] })
+      toast.success(`${bulk.selected.length} asset${bulk.selected.length === 1 ? '' : 's'} deleted`)
+      bulk.clear()
+      setBulkDeleteOpen(false)
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
 
   const addFiles = (files: FileList | null) => {
     if (!files?.length) return
@@ -226,67 +255,164 @@ export default function ContentPage() {
     </Dialog>
   )
 
+  const dropHandlers = canEdit ? {
+    onDragEnter: (event: React.DragEvent) => {
+      if (event.dataTransfer.types.includes('Files')) setPageDragDepth((depth) => depth + 1)
+    },
+    onDragOver: (event: React.DragEvent) => {
+      if (event.dataTransfer.types.includes('Files')) event.preventDefault()
+    },
+    onDragLeave: () => setPageDragDepth((depth) => Math.max(0, depth - 1)),
+    onDrop: (event: React.DragEvent) => {
+      if (!event.dataTransfer.files?.length) return
+      event.preventDefault()
+      setPageDragDepth(0)
+      addFiles(event.dataTransfer.files)
+      setUploadOpen(true)
+    },
+  } : {}
+
   return (
-    <div className="space-y-8">
-      <PageHeader eyebrow="Asset library" title="Content" description="Keep every campaign asset organized, searchable, and ready to drop into a playlist." actions={canEdit ? uploadDialog : <Badge variant="outline">View only</Badge>} />
+    <div className="relative" {...dropHandlers}>
+      {pageDragDepth > 0 && (
+        <div className="border-primary bg-primary/5 pointer-events-none fixed inset-4 z-50 grid place-items-center rounded-2xl border-2 border-dashed backdrop-blur-sm">
+          <div className="text-center">
+            <UploadCloud className="text-primary dark:text-brand mx-auto size-10" aria-hidden="true" />
+            <p className="text-foreground mt-3 text-lg font-semibold">Drop to upload</p>
+            <p className="text-muted-foreground text-sm">Images and video</p>
+          </div>
+        </div>
+      )}
+      <ListToolbar
+        title="Content library"
+        action={canEdit ? uploadDialog : <Badge variant="outline">View only</Badge>}
+        sort={{ value: sort, onChange: setSort, options: commonSorts }}
+        search={{ value: search, onChange: setSearch, placeholder: 'Search' }}
+        filters={
+          <>
+            <DropdownMenuItem onClick={() => setTagFilter(null)} className={!tagFilter ? 'bg-accent font-medium' : undefined}>
+              All tags
+            </DropdownMenuItem>
+            {allTags.map((tag) => (
+              <DropdownMenuItem key={tag} onClick={() => setTagFilter(tag)} className={tagFilter === tag ? 'bg-accent font-medium' : undefined}>
+                {tag}
+              </DropdownMenuItem>
+            ))}
+            {allTags.length === 0 && <p className="text-muted-foreground px-3 py-2 text-sm">No tags yet</p>}
+          </>
+        }
+      />
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div className="relative w-full lg:max-w-md"><Search className="text-muted-foreground/70 pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search media or tags…" className="bg-card pl-9" aria-label="Search content" /></div>
-        {allTags.length > 0 && <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Filter by tag"><Button size="sm" variant={!tagFilter ? 'secondary' : 'outline'} onClick={() => setTagFilter(null)}>All</Button>{allTags.map((tag) => <Button key={tag} size="sm" variant={tagFilter === tag ? 'secondary' : 'outline'} className="bg-card" onClick={() => setTagFilter(tag)}><Tag data-icon="inline-start" /> {tag}</Button>)}</div>}
-      </div>
+      {canEdit && filtered.length > 0 && (
+        <div className="mb-3">
+          <SelectAllCheckbox
+            checked={bulk.allVisibleSelected}
+            indeterminate={bulk.someVisibleSelected}
+            onChange={bulk.toggleAll}
+            label={`Select all ${filtered.length}`}
+          />
+        </div>
+      )}
 
-      {contentQuery.isLoading ? <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">{Array.from({ length: 8 }).map((_, index) => <Skeleton key={index} className="h-72" />)}</div> : !content.length ? (
+      {canEdit && (
+        <BulkActionBar count={bulk.selected.length} noun="asset" onClear={bulk.clear}>
+          <Button size="sm" variant="destructive" onClick={() => setBulkDeleteOpen(true)}>
+            <Trash2 data-icon="inline-start" /> Delete selected
+          </Button>
+        </BulkActionBar>
+      )}
+
+      {contentQuery.isLoading ? (
+        <AssetGrid>{Array.from({ length: 8 }).map((_, index) => <Skeleton key={index} className="h-64 rounded-xl" />)}</AssetGrid>
+      ) : !content.length ? (
         <EmptyState icon={ImageIcon} title="Your library is empty" description="Upload an image or video, then add it to a playlist and publish it to a screen." action={canEdit ? <Button onClick={() => setUploadOpen(true)}><Upload data-icon="inline-start" /> Upload first asset</Button> : undefined} />
       ) : !filtered.length ? (
         <EmptyState icon={Search} title="No matching media" description="Try a different search term or clear the selected tag filter." action={<Button variant="outline" onClick={() => { setSearch(''); setTagFilter(null) }}>Clear filters</Button>} />
       ) : (
-        <div className="stagger grid gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-          {filtered.map((item, index) => {
+        <AssetGrid>
+          {filtered.map((item) => {
             const expiry = expiryLabel(item.expires_at)
-            return <Card key={item.id} style={{ '--i': index } as React.CSSProperties} className={`group/card lift ring-hairline bg-card relative overflow-hidden border-0 py-0 shadow-[0_1px_2px_rgba(15,23,42,.04)] ring-1 ${item.status === 'processing' ? 'opacity-80' : 'hover:shadow-[0_15px_40px_rgba(15,23,42,.08)]'}`}>
-              <MediaThumbnail item={item} className="aspect-video" />
-              {item.status === 'processing' && (
-                <div className="bg-background/50 absolute inset-0 z-10 grid place-items-center backdrop-blur-[2px]">
-                  <div className="flex flex-col items-center gap-3">
-                    <div className="border-brand size-6 animate-spin rounded-full border-2 border-t-transparent" />
-                    <span className="text-foreground text-xs font-semibold tracking-wider uppercase shadow-sm">Processing…</span>
-                  </div>
-                </div>
-              )}
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="text-foreground truncate font-semibold">{item.name}</h2>
-                    <p className="text-muted-foreground/70 mt-1 flex items-center gap-1.5 text-xs capitalize">
-                      {item.type === 'video' ? <Video className="size-3" /> : <ImageIcon className="size-3" />} {item.type} · added {relativeTime(item.uploaded_at)}
-                    </p>
-                  </div>
-                  {canEdit && (
-                    <button onClick={() => setDeleteItem(item)} className="text-muted-foreground/40 hover:bg-destructive/10 hover:text-destructive focus-visible:ring-destructive grid size-8 shrink-0 place-items-center rounded-lg focus-visible:ring-2 focus-visible:outline-none" aria-label={`Delete ${item.name}`}>
-                      <Trash2 className="size-4" />
-                    </button>
-                  )}
-                </div>
-                {item.status === 'failed' && (
-                  <div className="border-destructive/20 bg-destructive/5 mt-3 rounded-lg border p-3 text-sm">
-                    <p className="text-destructive font-semibold">Processing failed</p>
-                    <p className="text-muted-foreground mt-1 text-xs">{item.failed_reason || 'An unknown error occurred.'}</p>
-                    {canEdit && (
-                      <Button variant="outline" size="sm" className="mt-2 h-7 text-xs" disabled={retryMutation.isPending} onClick={() => retryMutation.mutate(item.id)}>
-                        {retryMutation.isPending ? 'Retrying…' : 'Retry'}
-                      </Button>
-                    )}
-                  </div>
+            const orientation = assetOrientation(item.renditions)
+            const duration = clipDuration(item.duration_ms)
+            return (
+              <div key={item.id} className="relative">
+                {canEdit && (
+                  <label className="absolute top-2.5 right-2.5 z-10 grid size-7 cursor-pointer place-items-center rounded-md bg-black/50 backdrop-blur">
+                    <input
+                      type="checkbox"
+                      className="accent-primary size-4"
+                      checked={bulk.isSelected(item.id)}
+                      onChange={(event) => bulk.toggle(item.id, event.target.checked)}
+                      aria-label={`Select ${item.name}`}
+                    />
+                  </label>
                 )}
-                <div className="mt-4 flex min-h-6 flex-wrap gap-1.5">
-                  {expiry && <Badge variant={expiry === 'Expired' ? 'danger' : 'warning'}>{expiry}</Badge>}
-                  {item.tags?.split(',').map((tag) => tag.trim()).filter(Boolean).slice(0, 3).map((tag) => <Badge key={tag} variant="secondary">{tag}</Badge>)}
-                </div>
-              </CardContent>
-            </Card>
+              <AssetCard
+                href={`/dashboard/content/${item.id}`}
+                title={item.name}
+                subtitle={
+                  <>
+                    {/* Only the leading noun is capitalised — `capitalize` on the whole
+                        line title-cases the timestamp into "22 Hours Ago". */}
+                    <span className="capitalize">{item.type}</span>
+                    {orientation && ` • ${orientation}`}
+                    {` • ${relativeTime(item.uploaded_at)}`}
+                  </>
+                }
+                preview={
+                  <>
+                    <MediaThumbnail item={item} className="size-full" />
+                    {item.status === 'processing' && (
+                      <div className="bg-background/50 absolute inset-0 grid place-items-center backdrop-blur-[2px]">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="border-primary size-6 animate-spin rounded-full border-2 border-t-transparent" />
+                          <span className="text-foreground text-[11px] font-semibold tracking-wider uppercase">Processing</span>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                }
+                badges={
+                  <>
+                    {expiry && <OverlayBadge tone="danger">{expiry}</OverlayBadge>}
+                    {item.status === 'failed' && <OverlayBadge tone="danger">Failed</OverlayBadge>}
+                  </>
+                }
+                cornerBadge={duration ? <OverlayBadge>{duration}</OverlayBadge> : undefined}
+                menu={canEdit ? (
+                  <>
+                    {item.status === 'failed' && (
+                      <DropdownMenuItem onClick={() => retryMutation.mutate(item.id)}>
+                        <RefreshCw aria-hidden="true" /> Retry processing
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={() => setDeleteItem(item)} className="text-destructive">
+                      <Trash2 aria-hidden="true" /> Delete
+                    </DropdownMenuItem>
+                  </>
+                ) : undefined}
+              />
+              </div>
+            )
           })}
-        </div>
+        </AssetGrid>
       )}
+
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {bulk.selected.length} asset{bulk.selected.length === 1 ? '' : 's'}?</DialogTitle>
+            <DialogDescription>
+              They are removed from every playlist, and their files and transcoded renditions are deleted from disk. Players stop using them on the next sync.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter showCloseButton>
+            <Button variant="destructive" disabled={bulkDelete.isPending} onClick={() => bulkDelete.mutate()}>
+              {bulkDelete.isPending ? 'Deleting…' : `Delete ${bulk.selected.length}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(deleteItem)} onOpenChange={(open) => !open && setDeleteItem(null)}>
         <DialogContent>

@@ -11,7 +11,15 @@ OLRAC is an end-to-end digital signage platform for centrally managing Android T
 - Foreground 60-second sync (server configurable), immediate reconnect sync, and atomic playlist activation after every media file is cached.
 - Android Room/file caching with local-clock schedule filtering, including overnight windows.
 - Real user accounts with JWT authentication and `owner`, `editor`, and `viewer` permissions. There is no `admin/admin` bypass.
-- Player release metadata through `/api/screens/player-version`. The player records available releases; unattended APK installation is intentionally deployment-managed because it requires device-owner/managed-device privileges.
+- Staged player rollout. A published build starts as a **draft** and reaches nobody; pin it
+  to a few screens to form a canary ring, then promote it to **released** for every screen
+  that has no pin. A screen that fails to install its pinned build three times in a row is
+  unpinned automatically and stays on the version it is already running.
+- Player releases carry a mandatory SHA-256 digest and an `https` APK URL. The player
+  refuses to install a build it cannot verify. Publishing and promoting are restricted to
+  the `super_admin` platform account, because a release reaches every tenant's fleet;
+  organisation owners can still pin their own screens. Silent installation requires
+  device-owner provisioning (see P9).
 
 ## Project structure
 
@@ -33,6 +41,13 @@ Copy `backend/.env.example` to `backend/.env` and set a long random `SECRET_KEY`
 python -m backend.seed_admin owner
 ```
 
+Publishing player releases needs the platform operator account, which has no signup or
+dashboard path on purpose — it is the only role that can push an APK to every tenant:
+
+```bash
+python -m backend.seed_admin platform-ops --role super_admin
+```
+
 Install runtime and test dependencies:
 
 ```bash
@@ -44,10 +59,15 @@ pip install -r backend/requirements-dev.txt
 From the repository root:
 
 ```bash
-backend/venv/Scripts/alembic -c backend/alembic.ini upgrade head
+alembic -c backend/alembic.ini upgrade head
 ```
 
-On macOS/Linux, use the equivalent `alembic` executable from your environment.
+`backend/venv/` in this repository is a Windows environment (`Scripts/`, `.exe`). On
+macOS or Linux create your own:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -r backend/requirements-dev.txt
+```
 
 ### 3. Run the applications
 
@@ -110,9 +130,8 @@ server configuration, offline verification, and update-recovery checks.
 Run from the repository root:
 
 ```bash
-python tests/test_feature_parity.py
-python tests/validation.py
 python -m pytest tests -q
+python tests/validation.py
 
 cd frontend
 npx tsc --noEmit
@@ -120,8 +139,8 @@ npm run lint
 npm run build
 
 cd ../android-tv
-gradle :app:test
-gradle :app:assembleDebug
+./gradlew :app:test
+./gradlew :app:assembleDebug
 ```
 
 The optional live HTTP test requires a running backend and explicit account credentials:

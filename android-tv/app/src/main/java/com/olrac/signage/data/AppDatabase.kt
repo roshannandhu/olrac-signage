@@ -7,7 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
-@Database(entities = [PlaylistItemEntity::class, PlayEventEntity::class], version = 7, exportSchema = false)
+@Database(entities = [PlaylistItemEntity::class, PlayEventEntity::class], version = 8, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun playlistDao(): PlaylistDao
     abstract fun playEventDao(): PlayEventDao
@@ -24,7 +24,7 @@ abstract class AppDatabase : RoomDatabase() {
                     "signage_database"
                 ).addMigrations(
                     MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6,
-                    MIGRATION_6_7
+                    MIGRATION_6_7, MIGRATION_7_8
                 ).build()
                 INSTANCE = instance
                 instance
@@ -76,6 +76,16 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE playlist_items ADD COLUMN rotation INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE playlist_items ADD COLUMN fitMode TEXT NOT NULL DEFAULT 'contain'")
+            }
+        }
+
+        // Nullable on purpose. Events already queued were stamped before the offset was
+        // recorded, so null is the truthful value for them: "we do not know what offset
+        // produced these timestamps." The upload treats that as "correct me with the
+        // current offset", which is the right repair for the only case that was broken.
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE play_events ADD COLUMN clockOffsetMs INTEGER")
             }
         }
 

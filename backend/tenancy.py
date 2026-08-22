@@ -21,13 +21,12 @@ class TenantScope:
 
     @property
     def organization_id(self) -> int:
-        if self.user.role == "super_admin":
-            # For super_admin, we might need a way to specify target org, but if they are
-            # acting on their own scope without one, they bypass org checks or use None.
-            # However, typically a super_admin can't just inject None if a column is non-nullable.
-            # In this context, if they need to act on a specific org, it should be passed explicitly.
-            # For queries, if they use `scope.organization_id`, it will return their own org.
-            pass
+        # A super_admin has an organisation of its own like any other account, and this
+        # returns it. Cross-tenant reach is expressed in `query()` below, which drops the
+        # organisation filter -- not here, where a None would flow into non-nullable
+        # foreign keys on every create. (This used to hold a `pass` under a comment
+        # weighing options that were never decided; the behaviour it described is what
+        # the code already did.)
         if self.user.organization_id is None:
             raise HTTPException(status_code=403, detail="User is not assigned to an organization")
         return self.user.organization_id

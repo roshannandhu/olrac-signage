@@ -6,10 +6,29 @@ from .auth import get_password_hash
 
 router = APIRouter()
 
+# A tenant owner administers their own organisation's team. A super_admin is a platform
+# operator who merely happens to sit in some organisation row, so an owner must not be
+# able to reach one: demoting or deleting it is a denial of service against the platform,
+# and creating one is privilege escalation. Schemas already forbid the input value
+# (TenantRole), and this is the second lock -- the one that still holds if a schema is
+# widened by accident later.
+PLATFORM_ROLE = "super_admin"
+
+
+def deny_platform_account(user: models.User) -> None:
+    if user.role == PLATFORM_ROLE:
+        raise HTTPException(status_code=403, detail="Platform accounts are not managed here")
+
+
 
 @router.get("/", response_model=list[schemas.UserResponse])
 def list_users(scope: TenantScope = Depends(require_tenant_roles("owner", writable=False))):
-    return scope.query(models.User).order_by(models.User.created_at).all()
+    return (
+        scope.query(models.User)
+        .filter(models.User.role != PLATFORM_ROLE)
+        .order_by(models.User.created_at)
+        .all()
+    )
 
 
 @router.post("/", response_model=schemas.UserResponse, status_code=201)
@@ -17,6 +36,9 @@ def create_user(payload: schemas.UserCreate, scope: TenantScope = Depends(requir
     username = payload.username.strip()
     if scope.db.query(models.User).filter(models.User.username == username).first():
         raise HTTPException(status_code=409, detail="Username already exists")
+
+    if payload.role == PLATFORM_ROLE:
+        raise HTTPException(status_code=403, detail="Cannot create a platform account")
 
     user = models.User(
         organization_id=scope.organization_id,
@@ -36,6 +58,9 @@ def update_user(user_id: int, payload: schemas.UserUpdate, scope: TenantScope = 
     user = scope.get(models.User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    deny_platform_account(user)
+    if payload.role == PLATFORM_ROLE:
+        raise HTTPException(status_code=403, detail="Cannot grant a platform role")
 
     if payload.role is not None and user.role == "owner" and payload.role != "owner":
         owner_count = scope.query(models.User).filter(models.User.role == "owner", models.User.is_active.is_(True)).count()
@@ -63,6 +88,7 @@ def delete_user(user_id: int, scope: TenantScope = Depends(require_tenant_roles(
     user = scope.get(models.User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    deny_platform_account(user)
     if user.role == "owner":
         owner_count = scope.query(models.User).filter(models.User.role == "owner", models.User.is_active.is_(True)).count()
         if owner_count <= 1:

@@ -22,6 +22,13 @@ object UpdateManager {
         val apkUrl = update.apk_url
         if (apkUrl.isNullOrBlank()) return@withContext false
 
+        // Refuse before spending bandwidth on a download that could never be trusted.
+        UpdateGate.rejectionFor(apkUrl, update.sha256)?.let { reason ->
+            Log.e(TAG, "Refusing update ${update.version_code}: $reason")
+            recordStatus(context, "failed: $reason")
+            return@withContext false
+        }
+
         try {
             val request = Request.Builder().url(apkUrl).build()
             val response = client.newCall(request).execute()
@@ -41,15 +48,15 @@ object UpdateManager {
                 }
             }
 
-            if (!update.sha256.isNullOrBlank()) {
-                val computedHash = computeSha256(apkFile)
-                if (!computedHash.equals(update.sha256, ignoreCase = true)) {
-                    Log.e(TAG, "SHA256 mismatch for update. Expected: ${update.sha256}, Got: $computedHash")
-                    apkFile.delete()
-                    val prefs = context.getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
-                    prefs.edit().putString("update_status", "failed: sha256 mismatch").apply()
-                    return@withContext false
-                }
+            // Fail closed. This check used to run only `if (!update.sha256.isNullOrBlank())`,
+            // so a release published without a digest was installed unverified -- and on a
+            // device-owner TV that install is silent. An unpinned APK is now never run.
+            val computedHash = computeSha256(apkFile)
+            if (!UpdateGate.digestMatches(update.sha256, computedHash)) {
+                Log.e(TAG, "SHA256 mismatch for update. Expected: ${update.sha256}, Got: $computedHash")
+                apkFile.delete()
+                recordStatus(context, "failed: sha256 mismatch")
+                return@withContext false
             }
 
             Log.d(TAG, "Update downloaded successfully to ${apkFile.absolutePath}")
@@ -112,6 +119,13 @@ object UpdateManager {
         } catch (e: Exception) {
             Log.e(TAG, "Error launching install intent", e)
         }
+    }
+
+    private fun recordStatus(context: Context, status: String) {
+        context.getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
+            .edit()
+            .putString("update_status", status)
+            .apply()
     }
 
     private fun computeSha256(file: File): String {

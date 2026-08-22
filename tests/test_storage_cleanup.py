@@ -34,11 +34,16 @@ try:
     from backend.routers.auth import create_access_token, get_password_hash  # noqa: E402
     from backend.media_urls import delete_stored_file  # noqa: E402
     import backend.routers.content as content_router  # noqa: E402
+    import backend.media_storage as media_storage  # noqa: E402
     import backend.worker as worker  # noqa: E402
 
     # Point every writer at the temp directory, never the real uploads folder.
     content_router.UPLOAD_DIR = tmp.name
     worker.UPLOAD_DIR = tmp.name
+    # Screenshot pruning deletes through media_storage now, so that module owns the root
+    # the sweep resolves against; without this the test would silently exercise the real
+    # uploads/ directory instead of the temp one.
+    media_storage.UPLOAD_DIR = tmp.name
     org_dir = Path(tmp.name, "1")
     org_dir.mkdir(parents=True, exist_ok=True)
 

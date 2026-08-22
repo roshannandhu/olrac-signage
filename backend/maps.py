@@ -71,13 +71,23 @@ def fetch_static_map(points: list[dict], width: int = 640, height: int = 360) ->
     if not url:
         return None
     try:
-        import requests
+        # urllib rather than requests, which was imported here and listed in no
+        # requirements file. Because every error below is swallowed, the missing package
+        # did not crash anything -- it just meant the map was silently absent from every
+        # client report in any environment that had not hand-installed it. The Razorpay
+        # provider already calls out over urllib; this matches it and drops the
+        # undeclared dependency instead of adding it.
+        import urllib.request
 
-        response = requests.get(url, timeout=10)
-        if response.status_code != 200 or not response.content:
-            logger.warning("Static map request failed: HTTP %s", response.status_code)
+        with urllib.request.urlopen(url, timeout=10) as response:
+            if response.status != 200:
+                logger.warning("Static map request failed: HTTP %s", response.status)
+                return None
+            content = response.read()
+        if not content:
+            logger.warning("Static map request returned an empty body")
             return None
-        return response.content
+        return content
     except Exception as exc:  # noqa: BLE001 - a missing map must not break a client report
         logger.warning("Static map could not be fetched: %s", exc)
         return None

@@ -1,5 +1,5 @@
 import { useAuthStore } from './store'
-import type { BookingReport, Placement, MediaReport, FitMode, OperatingMode, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Role, Screen, ScreenGroup, Screenshot, TransitionName, User } from './types'
+import type { AlertSummary, FleetAlert, BookingReport, Placement, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
 
 const configuredUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '')
 let API_BASE = `${configuredUrl}/api`
@@ -257,10 +257,12 @@ export const api = {
     fetchWithAuth(`/playlists/${playlistId}/items/${itemId}`, { method: 'DELETE' }),
 
   getUsers: () => fetchWithAuth<User[]>('/users/'),
-  createUser: (data: { username: string; password: string; role: Role }) => fetchWithAuth<User>('/users/', {
+  // TenantRole, not Role: the API refuses to create a platform account here, so the
+  // type should not let the dashboard try.
+  createUser: (data: { username: string; password: string; role: TenantRole }) => fetchWithAuth<User>('/users/', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
   }),
-  updateUser: (id: number, data: { role?: Role; is_active?: boolean }) => fetchWithAuth<User>(`/users/${id}`, {
+  updateUser: (id: number, data: { role?: TenantRole; is_active?: boolean }) => fetchWithAuth<User>(`/users/${id}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
   }),
 
@@ -297,7 +299,17 @@ export const api = {
     URL.revokeObjectURL(url)
   },
 
+  getAlerts: (includeResolved = false) =>
+    fetchWithAuth<FleetAlert[]>(`/alerts/?include_resolved=${includeResolved}`),
+  getAlertSummary: () => fetchWithAuth<AlertSummary>('/alerts/summary'),
+  acknowledgeAlert: (id: number) =>
+    fetchWithAuth<FleetAlert>(`/alerts/${id}/acknowledge`, { method: 'POST' }),
+
   getReleases: () => fetchWithAuth<AppRelease[]>('/releases/'),
-  createRelease: (data: { version_code: number, version_name: string, apk_url: string, sha256: string | null, mandatory: boolean }) =>
+  // sha256 is required, not nullable: the player refuses to install an APK it cannot
+  // verify, so a release without one could never reach a screen.
+  createRelease: (data: { version_code: number, version_name: string, apk_url: string, sha256: string, mandatory: boolean }) =>
     fetchWithAuth<AppRelease>('/releases/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }),
+  promoteRelease: (versionCode: number, rolloutState: RolloutState) =>
+    fetchWithAuth<AppRelease>(`/releases/${versionCode}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rollout_state: rolloutState }) }),
 }

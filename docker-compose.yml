@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15-alpine
@@ -8,8 +6,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-olrac}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-olrac_password}
       POSTGRES_DB: ${POSTGRES_DB:-olrac_signage}
+    # Bound to loopback: "5432:5432" published the database on every interface of the
+    # host, which on a cloud VM is the open internet.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
@@ -52,6 +52,14 @@ services:
       - RAZORPAY_BUSINESS_YEARLY_PLAN_ID=${RAZORPAY_BUSINESS_YEARLY_PLAN_ID:-}
       - BILLING_GRACE_DAYS=${BILLING_GRACE_DAYS:-7}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # Read by the code but never passed here, so in Docker the client-report map was
+      # always blank and the P9 provisioning QR could not be generated at all.
+      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
+      - PROVISIONING_APK_URL=${PROVISIONING_APK_URL:-}
+      - PROVISIONING_CERT_SHA256_BASE64=${PROVISIONING_CERT_SHA256_BASE64:-}
+      - PLAY_LOG_RETENTION_DAYS=${PLAY_LOG_RETENTION_DAYS:-180}
+      - SCREENSHOT_KEEP_PER_SCREEN=${SCREENSHOT_KEEP_PER_SCREEN:-10}
+      - PLAYER_APK_SHA256=${PLAYER_APK_SHA256:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -81,6 +89,11 @@ services:
       - S3_ENDPOINT_URL=${S3_ENDPOINT_URL:-}
       - S3_BUCKET_NAME=${S3_BUCKET_NAME:-olrac-media}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      # The worker writes renditions and prunes screenshots, so it needs the same
+      # retention settings and public origin the backend has.
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:8000}
+      - PLAY_LOG_RETENTION_DAYS=${PLAY_LOG_RETENTION_DAYS:-180}
+      - SCREENSHOT_KEEP_PER_SCREEN=${SCREENSHOT_KEEP_PER_SCREEN:-10}
     depends_on:
       db:
         condition: service_healthy
@@ -97,9 +110,13 @@ services:
   frontend:
     build:
       context: ./frontend
+      # Next inlines NEXT_PUBLIC_* at build time. Setting them under `environment`
+      # did nothing: the bundle was compiled with the defaults, so every deployment
+      # that was not on localhost shipped a dashboard calling an API that was not there.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY:-}
     container_name: olrac_frontend
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
     ports:
       - "3000:3000"
     depends_on:
@@ -110,7 +127,7 @@ services:
     image: redis:7-alpine
     container_name: olrac_redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     # The worker exits if Redis is not reachable at start-up, so the services that depend

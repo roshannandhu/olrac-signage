@@ -16,5 +16,21 @@ data class PlayEventEntity(
     val correctedFinishedAt: String,
     val durationMs: Int,
     val status: String,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    /**
+     * Server-clock offset known when this play was recorded, or null if the device had
+     * never successfully reached the server.
+     *
+     * The corrected timestamps above are computed with whatever offset was available at
+     * record time. On a TV that has not synced yet that offset is 0, so `corrected` equals
+     * a device clock that may be hours wrong -- and because rollups bucket on
+     * `corrected_started_at`, a week of offline plays landed in the wrong hours and stayed
+     * there. Nothing ever revisited them.
+     *
+     * Keeping the offset that was actually in force lets the upload distinguish the two
+     * cases: an event stamped with a known offset is already right and is left alone, and
+     * one stamped with no offset is corrected with the offset learned since. See
+     * ProofOfPlayWorker.
+     */
+    val clockOffsetMs: Long? = null
 )

@@ -1,0 +1,35 @@
+# The repository was authored on Windows and is now also worked on from Linux. Without a
+# normalisation rule, simply checking the tree out on the other platform rewrote every
+# line ending, and `git status` reported 100 files changed with 280,340 insertions and
+# 280,340 deletions -- the entire codebase, with no actual edit in it. Committing that
+# would have destroyed `git blame` for every file at once.
+#
+# Text files are stored with LF in the repository and checked out however the platform
+# prefers. Run `git add --renormalize .` once after adding this file.
+* text=auto eol=lf
+
+# Windows-only scripts must keep CRLF or cmd.exe mis-parses them.
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Never touched: Gradle's wrapper script is executed by sh on every platform.
+gradlew text eol=lf
+gradlew.bat text eol=crlf
+
+# Binary, so git must not attempt any conversion.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.mp4 binary
+*.apk binary
+*.jar binary
+*.keystore binary
+*.db binary
+*.dump binary
+*.zip binary
+*.pdf binary
+*.ttf binary
+*.woff binary
+*.woff2 binary

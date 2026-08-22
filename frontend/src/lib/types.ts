@@ -1,4 +1,12 @@
-export type Role = 'owner' | 'editor' | 'viewer'
+/**
+ * `super_admin` is the platform operator, not a tenant role. It is the only role that may
+ * publish or promote a player release, because a release installs across every tenant's
+ * fleet. The team page never offers it — TenantRole is what that page may assign.
+ */
+export type Role = 'super_admin' | 'owner' | 'editor' | 'viewer'
+export type TenantRole = 'owner' | 'editor' | 'viewer'
+/** Promotion ring for a player build. Only `released` reaches screens with no pin. */
+export type RolloutState = 'draft' | 'canary' | 'released'
 export type TransitionName = 'none' | 'fade' | 'slide_left' | 'slide_right' | 'slide_up' | 'slide_down' | 'zoom'
 
 export interface User {
@@ -190,6 +198,7 @@ export interface AppRelease {
   apk_url: string
   sha256: string | null
   mandatory: boolean
+  rollout_state: RolloutState
   created_at: string
 }
 
@@ -350,4 +359,26 @@ export interface BookingReport {
   per_location: { location: string; screens: number; total_plays: number }[]
   daily: { date: string; total_plays: number }[]
   stale_screens: string[]
+}
+
+export type AlertSeverity = 'critical' | 'warning'
+
+export interface FleetAlert {
+  id: number
+  kind: string
+  severity: AlertSeverity
+  title: string
+  detail: string | null
+  screen_id: number | null
+  content_id: number | null
+  raised_at: string
+  resolved_at: string | null
+  acknowledged_at: string | null
+}
+
+export interface AlertSummary {
+  total: number
+  critical: number
+  warning: number
+  unacknowledged: number
 }

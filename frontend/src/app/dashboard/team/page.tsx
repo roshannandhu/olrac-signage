@@ -18,13 +18,21 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import { relativeTime } from '@/lib/format'
 import { useAuthStore } from '@/lib/store'
-import type { Role } from '@/lib/types'
+import type { Role, TenantRole } from '@/lib/types'
 
-const roleDescription: Record<Role, string> = {
+// Keyed by TenantRole, not Role: `super_admin` is a platform account, never a workspace
+// member. The API filters those rows out of this list, and the backend refuses to create
+// or edit one here, so the team page has no reason to describe it.
+const roleDescription: Record<TenantRole, string> = {
   owner: 'Full access, including team management',
   editor: 'Can publish and manage signage content',
   viewer: 'Read-only access to network status',
 }
+
+const TENANT_ROLES: TenantRole[] = ['owner', 'editor', 'viewer']
+
+/** Narrow an API-supplied role for display; a platform account should never appear. */
+const asTenantRole = (role: Role): TenantRole => (role === 'super_admin' ? 'viewer' : role)
 
 export default function TeamPage() {
   const queryClient = useQueryClient()
@@ -33,7 +41,7 @@ export default function TeamPage() {
   const [open, setOpen] = useState(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState<Role>('viewer')
+  const [role, setRole] = useState<TenantRole>('viewer')
 
   const createMutation = useMutation({
     mutationFn: () => api.createUser({ username: username.trim(), password, role }),
@@ -41,7 +49,7 @@ export default function TeamPage() {
     onError: (error: Error) => toast.error(error.message),
   })
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: { role?: Role; is_active?: boolean } }) => api.updateUser(id, data),
+    mutationFn: ({ id, data }: { id: number; data: { role?: TenantRole; is_active?: boolean } }) => api.updateUser(id, data),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['users'] }); toast.success('Access updated') },
     onError: (error: Error) => toast.error(error.message),
   })
@@ -60,7 +68,7 @@ export default function TeamPage() {
             <form onSubmit={(event) => { event.preventDefault(); createMutation.mutate() }} className="space-y-4 pt-2">
               <div className="space-y-2"><Label htmlFor="team-username">Username</Label><Input id="team-username" value={username} onChange={(event) => setUsername(event.target.value)} minLength={3} placeholder="alex" required /></div>
               <div className="space-y-2"><Label htmlFor="team-password">Temporary password</Label><Input id="team-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} autoComplete="new-password" placeholder="At least 8 characters" required /></div>
-              <div className="space-y-2"><Label>Role</Label><Select value={role} onValueChange={(value: Role | null) => value && setRole(value)}><SelectTrigger className="w-full"><SelectValue>{(value: Role | null) => value ? value[0].toUpperCase() + value.slice(1) : 'Choose role'}</SelectValue></SelectTrigger><SelectContent>{(['owner', 'editor', 'viewer'] as Role[]).map((value) => <SelectItem key={value} value={value}><span className="capitalize">{value}</span></SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground/70">{roleDescription[role]}</p></div>
+              <div className="space-y-2"><Label>Role</Label><Select value={role} onValueChange={(value: TenantRole | null) => value && setRole(value)}><SelectTrigger className="w-full"><SelectValue>{(value: TenantRole | null) => value ? value[0].toUpperCase() + value.slice(1) : 'Choose role'}</SelectValue></SelectTrigger><SelectContent>{TENANT_ROLES.map((value) => <SelectItem key={value} value={value}><span className="capitalize">{value}</span></SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground/70">{roleDescription[role]}</p></div>
               <Button type="submit" className="w-full" disabled={username.trim().length < 3 || password.length < 8 || createMutation.isPending}>{createMutation.isPending ? 'Creating…' : 'Create account'}</Button>
             </form>
           </DialogContent>
@@ -69,7 +77,7 @@ export default function TeamPage() {
 
       {usersQuery.isLoading ? <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-64" />)}</div> : !users.length ? <EmptyState icon={Users} title="No team members" description="Create the first individual account for your signage operators." /> : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {users.map((user) => <Card key={user.id} className="border-0 bg-card py-0 shadow-[0_1px_2px_rgba(15,23,42,.04)] ring-1 ring-hairline"><CardContent className="p-5"><div className="flex items-start gap-3"><span className="grid size-11 place-items-center rounded-xl bg-primary/10 text-primary dark:text-brand"><UserRound className="size-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate font-semibold text-foreground">{user.username}</h2>{user.id === currentUser?.id && <Badge variant="secondary">You</Badge>}</div><p className="mt-1 text-xs text-muted-foreground/70">Added {relativeTime(user.created_at)}</p></div><Badge variant={user.is_active ? 'success' : 'danger'}>{user.is_active ? 'Active' : 'Disabled'}</Badge></div><div className="mt-5 space-y-2"><Label className="text-xs text-muted-foreground">Workspace role</Label><Select value={user.role} disabled={updateMutation.isPending} onValueChange={(value: Role | null) => value && updateMutation.mutate({ id: user.id, data: { role: value } })}><SelectTrigger className="w-full"><SelectValue>{(value: Role | null) => value ? value[0].toUpperCase() + value.slice(1) : 'Role'}</SelectValue></SelectTrigger><SelectContent>{(['owner', 'editor', 'viewer'] as Role[]).map((value) => <SelectItem key={value} value={value}><span className="capitalize">{value}</span></SelectItem>)}</SelectContent></Select><p className="text-xs leading-5 text-muted-foreground/70">{roleDescription[user.role]}</p></div><div className="mt-5 flex items-center justify-between border-t border-hairline pt-4"><span className="flex items-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="size-3.5" /> Individual login</span><Button size="sm" variant={user.is_active ? 'outline' : 'secondary'} disabled={user.id === currentUser?.id || updateMutation.isPending} onClick={() => updateMutation.mutate({ id: user.id, data: { is_active: !user.is_active } })}>{user.is_active ? 'Disable' : 'Enable'}</Button></div></CardContent></Card>)}
+          {users.map((user) => <Card key={user.id} className="border-0 bg-card py-0 shadow-[0_1px_2px_rgba(15,23,42,.04)] ring-1 ring-hairline"><CardContent className="p-5"><div className="flex items-start gap-3"><span className="grid size-11 place-items-center rounded-xl bg-primary/10 text-primary dark:text-brand"><UserRound className="size-5" /></span><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate font-semibold text-foreground">{user.username}</h2>{user.id === currentUser?.id && <Badge variant="secondary">You</Badge>}</div><p className="mt-1 text-xs text-muted-foreground/70">Added {relativeTime(user.created_at)}</p></div><Badge variant={user.is_active ? 'success' : 'danger'}>{user.is_active ? 'Active' : 'Disabled'}</Badge></div><div className="mt-5 space-y-2"><Label className="text-xs text-muted-foreground">Workspace role</Label><Select value={asTenantRole(user.role)} disabled={updateMutation.isPending} onValueChange={(value: TenantRole | null) => value && updateMutation.mutate({ id: user.id, data: { role: value } })}><SelectTrigger className="w-full"><SelectValue>{(value: TenantRole | null) => value ? value[0].toUpperCase() + value.slice(1) : 'Role'}</SelectValue></SelectTrigger><SelectContent>{TENANT_ROLES.map((value) => <SelectItem key={value} value={value}><span className="capitalize">{value}</span></SelectItem>)}</SelectContent></Select><p className="text-xs leading-5 text-muted-foreground/70">{roleDescription[asTenantRole(user.role)]}</p></div><div className="mt-5 flex items-center justify-between border-t border-hairline pt-4"><span className="flex items-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="size-3.5" /> Individual login</span><Button size="sm" variant={user.is_active ? 'outline' : 'secondary'} disabled={user.id === currentUser?.id || updateMutation.isPending} onClick={() => updateMutation.mutate({ id: user.id, data: { is_active: !user.is_active } })}>{user.is_active ? 'Disable' : 'Enable'}</Button></div></CardContent></Card>)}
         </div>
       )}
     </div>

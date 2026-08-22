@@ -17,13 +17,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { api } from '@/lib/api'
+import type { RolloutState } from '@/lib/types'
 import { relativeTime } from '@/lib/format'
 import { useAuthStore } from '@/lib/store'
 
 export default function ReleasesPage() {
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
-  const canEdit = user?.role === 'owner' || user?.role === 'editor'
+  // Pinning a screen to a build is a tenant action: it affects only that screen.
+  const canPin = user?.role === 'owner' || user?.role === 'editor'
+  // Publishing and promoting are platform actions: a release installs across every
+  // tenant's fleet, so an organisation owner must not be able to do either.
+  const canPublish = user?.role === 'super_admin'
 
   const [publishOpen, setPublishOpen] = useState(false)
   const [versionCode, setVersionCode] = useState('')
@@ -45,6 +50,20 @@ export default function ReleasesPage() {
     onError: (error: Error) => toast.error(error.message || 'Failed to publish release'),
   })
 
+  const promoteMutation = useMutation({
+    mutationFn: ({ versionCode, rolloutState }: { versionCode: number; rolloutState: RolloutState }) =>
+      api.promoteRelease(versionCode, rolloutState),
+    onSuccess: (release) => {
+      toast.success(
+        release.rollout_state === 'released'
+          ? `v${release.version_code} is now live for every screen without a pin`
+          : `v${release.version_code} moved to ${release.rollout_state}`,
+      )
+      queryClient.invalidateQueries({ queryKey: ['releases'] })
+    },
+    onError: (error: Error) => toast.error(error.message || 'Failed to change the rollout ring'),
+  })
+
   const targetMutation = useMutation({
     mutationFn: ({ screenId, targetCode }: { screenId: number; targetCode: number | null }) =>
       api.patchScreen(screenId, { target_version_code: targetCode }),
@@ -61,16 +80,24 @@ export default function ReleasesPage() {
 
   const releases = releasesQuery.data || []
   const screens = screensQuery.data || []
-  const latest = releases.reduce<number | null>((max, release) => Math.max(max ?? 0, release.version_code), null)
+  // The highest *promoted* build: that is what a screen with no pin actually receives.
+  // Labelling the highest version_code "Latest" was misleading once drafts existed --
+  // an unreleased build would have worn the badge while reaching nobody.
+  const latest = releases.reduce<number | null>(
+    (max, release) => (release.rollout_state === 'released' ? Math.max(max ?? 0, release.version_code) : max),
+    null,
+  )
   // Base UI renders the raw value unless given a function, so without this the
   // trigger reads "global" rather than naming the version the screen will run.
+  const ringLabel = (value: RolloutState | null) =>
+    value === 'released' ? 'Released' : value === 'canary' ? 'Canary' : 'Draft'
   const versionLabel = (value: string | null) => {
     if (!value || value === 'global') return 'Follow latest'
     const release = releases.find((entry) => String(entry.version_code) === value)
     return release ? `v${release.version_code} · ${release.version_name}` : `v${value}`
   }
 
-  const publishDialog = canEdit ? (
+  const publishDialog = canPublish ? (
     <Dialog open={publishOpen} onOpenChange={setPublishOpen}>
       <DialogTrigger render={<Button />}><PackagePlus data-icon="inline-start" /> Publish release</DialogTrigger>
       <DialogContent className="sm:max-w-md">
@@ -85,7 +112,7 @@ export default function ReleasesPage() {
               version_code: parseInt(versionCode, 10),
               version_name: versionName.trim(),
               apk_url: apkUrl.trim(),
-              sha256: sha256.trim() || null,
+              sha256: sha256.trim().toLowerCase(),
               mandatory: false,
             })
           }}
@@ -109,20 +136,20 @@ export default function ReleasesPage() {
             <Label htmlFor="apk-sha">SHA256 <span className="text-muted-foreground/70 font-normal">(optional)</span></Label>
             <Input id="apk-sha" value={sha256} onChange={(event) => setSha256(event.target.value)} placeholder="Hex digest" className="font-mono" />
           </div>
-          <Button type="submit" className="w-full" disabled={!versionCode || !versionName.trim() || !apkUrl.trim() || createMutation.isPending}>
+          <Button type="submit" className="w-full" disabled={!versionCode || !versionName.trim() || !apkUrl.trim() || !/^[0-9a-fA-F]{64}$/.test(sha256.trim()) || createMutation.isPending}>
             {createMutation.isPending ? 'Publishing…' : 'Publish release'}
           </Button>
         </form>
       </DialogContent>
     </Dialog>
-  ) : <Badge variant="outline">View only</Badge>
+  ) : <Badge variant="outline">Platform-managed</Badge>
 
   return (
     <div className="space-y-8">
       <PageHeader
         eyebrow="Player updates"
         title="Releases"
-        description="Publish player builds and choose which version each screen should run before rolling it out fleet-wide."
+        description="Publish player builds, trial them on a few screens, then promote to the fleet."
         actions={publishDialog}
       />
 
@@ -133,7 +160,7 @@ export default function ReleasesPage() {
             icon={Package}
             title="No releases published"
             description="Publish a player build to make it available to your fleet."
-            action={canEdit ? <Button onClick={() => setPublishOpen(true)}><PackagePlus data-icon="inline-start" /> Publish first release</Button> : undefined}
+            action={canPublish ? <Button onClick={() => setPublishOpen(true)}><PackagePlus data-icon="inline-start" /> Publish first release</Button> : undefined}
           />
         ) : (
           <Card className="ring-hairline bg-card border-0 py-0 shadow-[0_1px_2px_rgba(15,23,42,.04)] ring-1">
@@ -143,6 +170,7 @@ export default function ReleasesPage() {
                   <TableRow>
                     <TableHead>Version</TableHead>
                     <TableHead>Name</TableHead>
+                    <TableHead>Ring</TableHead>
                     <TableHead>APK</TableHead>
                     <TableHead>SHA256</TableHead>
                     <TableHead>Published</TableHead>
@@ -156,6 +184,26 @@ export default function ReleasesPage() {
                         {release.version_code === latest && <Badge variant="success" className="ml-2">Latest</Badge>}
                       </TableCell>
                       <TableCell>{release.version_name}</TableCell>
+                      <TableCell>
+                        {canPublish ? (
+                          <Select
+                            value={release.rollout_state}
+                            onValueChange={(value) => promoteMutation.mutate({ versionCode: release.version_code, rolloutState: value as RolloutState })}
+                            disabled={promoteMutation.isPending}
+                          >
+                            <SelectTrigger className="w-[130px]" aria-label={`Rollout ring for version ${release.version_code}`}>
+                              <SelectValue>{(value: string | null) => ringLabel(value as RolloutState)}</SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="draft">Draft</SelectItem>
+                              <SelectItem value="canary">Canary</SelectItem>
+                              <SelectItem value="released">Released</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Badge variant={release.rollout_state === 'released' ? 'success' : 'outline'}>{ringLabel(release.rollout_state)}</Badge>
+                        )}
+                      </TableCell>
                       <TableCell className="text-muted-foreground max-w-xs truncate" title={release.apk_url}>{release.apk_url}</TableCell>
                       <TableCell className="text-muted-foreground max-w-[120px] truncate font-mono text-xs" title={release.sha256 || undefined}>{release.sha256 || '—'}</TableCell>
                       <TableCell className="text-muted-foreground">{relativeTime(release.created_at)}</TableCell>
@@ -171,7 +219,7 @@ export default function ReleasesPage() {
       <section aria-labelledby="staged-rollout" className="space-y-4">
         <div>
           <h2 id="staged-rollout" className="text-foreground text-sm font-semibold">Staged rollout</h2>
-          <p className="text-muted-foreground mt-1 text-sm">Pin individual screens to a version to trial a build before releasing it to everyone.</p>
+          <p className="text-muted-foreground mt-1 text-sm">Pin individual screens to a version to trial a build before releasing it to everyone. A draft or canary build reaches only the screens pinned to it; a screen that fails to install its pinned build three times is unpinned automatically and stays on the version it is running.</p>
         </div>
         {screensQuery.isLoading ? <Skeleton className="h-48" /> : !screens.length ? (
           <EmptyState icon={Rocket} title="No screens paired" description="Pair a screen before staging a rollout." />
@@ -196,7 +244,7 @@ export default function ReleasesPage() {
                       <TableCell>
                         <Select
                           value={screen.target_version_code ? String(screen.target_version_code) : 'global'}
-                          disabled={!canEdit || targetMutation.isPending}
+                          disabled={!canPin || targetMutation.isPending}
                           onValueChange={(value) => targetMutation.mutate({
                             screenId: screen.id,
                             targetCode: !value || value === 'global' ? null : parseInt(value, 10),

@@ -83,14 +83,24 @@ def upgrade() -> None:
     # The rollup's unique index covers nullable campaign_id/media_id, and Postgres treats
     # NULLs as distinct -- so for real traffic (campaign_id was always NULL) the index
     # rejected nothing, and a concurrent or re-run aggregate_play_logs could insert a
-    # second row for the same hour, double counting every SUM(total_plays). NULLS NOT
-    # DISTINCT (PG15+) makes the constraint actually hold.
+    # second row for the same hour, double counting every SUM(total_plays).
+    #
+    # Expressed with COALESCE rather than NULLS NOT DISTINCT. The latter says exactly what
+    # is meant, but it is PostgreSQL 15 and newer only, and this migration ran on anything
+    # older with "syntax error at or near NULLS" -- which is every default Ubuntu 22.04
+    # install (PG 14) and several managed services still on 13/14. The whole upgrade chain
+    # stopped there, so the database could not be built at all; it only ever worked because
+    # docker-compose happens to pin postgres:15-alpine.
+    #
+    # COALESCE(...,-1) is identical in effect and valid since 9.6. -1 is safe as the
+    # sentinel: both columns hold positive primary keys.
     op.execute(f'DROP INDEX IF EXISTS {_ROLLUP_UNIQUE_INDEX}')
     op.execute(f"""
         CREATE UNIQUE INDEX {_ROLLUP_UNIQUE_INDEX}
         ON play_log_hourly_rollups (
-            organization_id, campaign_id, screen_id, media_id, date_hour
-        ) NULLS NOT DISTINCT
+            organization_id, COALESCE(campaign_id, -1), screen_id,
+            COALESCE(media_id, -1), date_hour
+        )
     """)
 
 

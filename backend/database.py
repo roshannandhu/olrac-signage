@@ -27,7 +27,6 @@ def get_db():
         db.close()
 
 import redis.asyncio as redis_async
-import warnings
 from arq.connections import RedisSettings
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -36,12 +35,14 @@ redis_pool = redis_async.ConnectionPool.from_url(REDIS_URL)
 def get_redis():
     return redis_async.Redis(connection_pool=redis_pool)
 
-if REDIS_URL.startswith("redis://"):
-    parts = REDIS_URL.split("://")[1].split("/")
-    host_port = parts[0].split(":")
-    redis_host = host_port[0]
-    redis_port = int(host_port[1]) if len(host_port) > 1 else 6379
-    redis_db = int(parts[1]) if len(parts) > 1 else 0
-    REDIS_SETTINGS = RedisSettings(host=redis_host, port=redis_port, database=redis_db)
-else:
-    REDIS_SETTINGS = RedisSettings()
+# arq parses the DSN itself, so credentials, TLS (rediss://) and the database index all
+# survive. The hand-rolled split() this replaces understood only "redis://host:port/db",
+# which is the one shape no managed provider hands out:
+#
+#   redis://default:pw@host:6379   -> ValueError: int("pw@host") -- crashed at IMPORT, so
+#                                     the whole API failed to boot.
+#   rediss://default:pw@host:6379  -> did not match "redis://", fell through to
+#                                     RedisSettings() = localhost:6379. Worse than the
+#                                     crash: the app started, the queue looked healthy,
+#                                     and no job ever ran.
+REDIS_SETTINGS = RedisSettings.from_dsn(REDIS_URL)

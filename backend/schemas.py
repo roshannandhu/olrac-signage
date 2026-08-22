@@ -7,8 +7,21 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, mo
 from .media_urls import resolve_media_url
 
 
-Role = Literal["owner", "editor", "viewer"]
+# "super_admin" is the platform operator, not a tenant role: it is the only role that may
+# publish an AppRelease, and a release installs across every tenant's fleet.
+#
+# Role is the *output* type -- what a user may be. TenantRole is the *input* type: the
+# roles an organisation's owner is allowed to hand out from the team page. They are
+# deliberately different. Sharing one type let an owner POST {"role": "super_admin"} to
+# /api/users and mint themselves a platform operator, turning tenant ownership into
+# control of every other tenant's TVs. A super_admin is created only by
+# `python -m backend.seed_admin --role super_admin`, which needs shell access to the host.
+Role = Literal["super_admin", "owner", "editor", "viewer"]
+TenantRole = Literal["owner", "editor", "viewer"]
 PlaybackState = Literal["playing", "idle", "error"]
+# Promotion order for a player build: draft -> canary -> released. Only "released"
+# is offered to screens that carry no explicit target_version_code pin.
+RolloutState = Literal["draft", "canary", "released"]
 TransitionName = Literal[
     "none",
     "fade",
@@ -23,7 +36,7 @@ TransitionName = Literal[
 class UserCreate(BaseModel):
     username: str = Field(min_length=3, max_length=64)
     password: str = Field(min_length=8, max_length=128)
-    role: Role = "viewer"
+    role: TenantRole = "viewer"
 
     @field_validator("password")
     @classmethod
@@ -34,7 +47,7 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    role: Optional[Role] = None
+    role: Optional[TenantRole] = None
     is_active: Optional[bool] = None
     password: Optional[str] = Field(default=None, min_length=8, max_length=128)
 
@@ -193,7 +206,10 @@ class ScreenResponse(ScreenBase):
     # Update state, so the dashboard can monitor a rollout instead of guessing.
     # app_version above is what the TV reports it is actually running.
     target_version_code: Optional[int] = None
-    update_status: Optional[str] = None
+    # Capped but not enumerated: the backend must keep accepting heartbeats from APKs
+    # older than whatever the current status vocabulary is, so an unrecognised value is
+    # stored rather than rejected. The cap stops a malformed device filling the column.
+    update_status: Optional[str] = Field(default=None, max_length=64)
     description: Optional[str] = None
     tags: Optional[str] = None
     location: Optional[str] = None
@@ -547,20 +563,58 @@ class AppVersionResponse(BaseModel):
 
 
 class AppReleaseCreate(BaseModel):
-    version_code: int
-    version_name: str
-    apk_url: str
-    # Optional so an existing release can be registered before its checksum is known,
-    # but UpdateManager refuses to install when it is absent on the device side.
-    sha256: Optional[str] = None
+    version_code: int = Field(ge=1)
+    version_name: str = Field(min_length=1, max_length=50)
+    apk_url: str = Field(max_length=2048)
+    # Mandatory, and it was not always so. The device verifies the APK it downloads
+    # against this digest; when it was optional a release published without one was
+    # installed unverified, which made the checksum a decoration rather than a control.
+    # There is no legitimate reason to publish a build whose bytes you cannot pin.
+    sha256: str = Field(min_length=64, max_length=64)
     mandatory: bool = False
+    # New builds land as drafts. Publishing one used to make it live for every unpinned
+    # screen the instant it was created, which left no way to try a build on five TVs
+    # first. Promote with PATCH /api/releases/{version_code} once the ring looks healthy.
+    rollout_state: RolloutState = "draft"
+
+    @field_validator("apk_url")
+    @classmethod
+    def https_only(cls, value: str) -> str:
+        # Plain HTTP would let anyone on the path swap the APK. The digest below would
+        # catch that, but defence in depth is cheap here and the player installs this
+        # file silently when it is device owner.
+        if not value.startswith("https://"):
+            raise ValueError("apk_url must be an https:// URL")
+        return value
+
+    @field_validator("sha256")
+    @classmethod
+    def hex_digest(cls, value: str) -> str:
+        candidate = value.strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", candidate):
+            raise ValueError("sha256 must be 64 hexadecimal characters")
+        return candidate
 
 
 class AppReleaseResponse(AppReleaseCreate):
     id: int
     created_at: datetime
+    # Widened back to optional purely for rows written before the digest was mandatory.
+    # Serialising one of those against the stricter parent raised ValidationError, which
+    # surfaced as a 500 on the releases list rather than as the legacy row it is. The
+    # player treats a null digest as "refuse to install", so an unpinned old release is
+    # inert rather than dangerous.
+    sha256: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AppReleasePatch(BaseModel):
+    """Promote (or demote) a build. The only mutable field: version_code, apk_url and
+    sha256 are the identity of an artefact that screens may already be pinned to, and
+    editing them would silently repoint those screens at different bytes."""
+
+    rollout_state: RolloutState
 
 
 class SyncResponse(BaseModel):
@@ -739,3 +793,30 @@ class ResolveLinkResponse(BaseModel):
     latitude: float
     longitude: float
     name: Optional[str] = None
+
+
+AlertSeverity = Literal["critical", "warning"]
+
+
+class AlertResponse(BaseModel):
+    id: int
+    kind: str
+    severity: AlertSeverity
+    title: str
+    detail: Optional[str] = None
+    screen_id: Optional[int] = None
+    content_id: Optional[int] = None
+    raised_at: datetime
+    resolved_at: Optional[datetime] = None
+    acknowledged_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AlertSummaryResponse(BaseModel):
+    """Counts for the header badge, so it does not have to fetch every alert."""
+
+    total: int
+    critical: int
+    warning: int
+    unacknowledged: int

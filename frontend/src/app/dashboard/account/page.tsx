@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Building2, KeyRound, UserRound } from 'lucide-react'
 import { toast } from 'sonner'
@@ -28,14 +28,20 @@ export default function AccountPage() {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
 
-  // Seed the form once the profile arrives. Keyed on the record's identity rather than the
+  // Seed the form once the profile arrives, keyed on the record's identity rather than the
   // whole object so a background refetch cannot overwrite what is being typed.
-  const loadedId = meQuery.data?.id
-  useEffect(() => {
-    if (!meQuery.data) return
+  //
+  // Adjusted during render rather than in an effect. An effect runs after paint, so the
+  // inputs flashed empty for a frame before filling in, and it tripped
+  // react-hooks/set-state-in-effect. React re-runs the component immediately on a
+  // set-during-render and never commits the intermediate output, so this is the pattern
+  // React documents for deriving state from a changed input.
+  const [seededId, setSeededId] = useState<number | null>(null)
+  if (meQuery.data && meQuery.data.id !== seededId) {
+    setSeededId(meQuery.data.id)
     setFullName(meQuery.data.full_name || '')
     setEmail(meQuery.data.email || '')
-  }, [loadedId])
+  }
 
   const profileMutation = useMutation({
     mutationFn: () =>

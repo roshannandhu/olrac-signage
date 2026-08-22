@@ -153,6 +153,10 @@ class PlaybackService : Service() {
 
         connectivityWatcher = ConnectivityWatcher(this) {
             immediateSyncSignals.trySend(Unit)
+            // Push the queued proof of play the moment the network is back, rather than
+            // waiting out the 15-minute periodic window. After an outage that queue is
+            // exactly what the operator is waiting to see.
+            ProofOfPlayWorker.enqueueNow(this)
         }.also(ConnectivityWatcher::start)
 
         pollingJob = serviceScope.launch {

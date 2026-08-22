@@ -70,7 +70,7 @@ try:
         (mall_a, 2, 5, 5, 0),
         (mall_b, 3, 7, 7, 0),
         (airport, 40, 100, 90, 10),   # older than today, inside the month
-        (ungrouped, 5, 3, 3, 0),      # no group — must land in "Ungrouped screens"
+        (ungrouped, 5, 3, 3, 0),      # no location and no group — must still be reported
     ]
     for screen, hours, total, completed, errors in rollups:
         db.add(models.PlayLogHourlyRollup(
@@ -99,19 +99,26 @@ try:
     assert food_court["group_name"] == "Phoenix Mall", food_court
 
     # Per-place: the two mall screens roll up into one place.
+    #
+    # Keyed on the screen's location, falling back to its group and then to a placeholder.
+    # This assertion used to expect "Ungrouped screens", from when the report keyed on the
+    # screen *group* -- a playlist-sharing construct with nothing to do with geography, so
+    # two screens in one mall in different groups were reported as two separate places.
+    # The grouping was fixed; this file was not in any collection list at the time, so it
+    # never ran again and kept asserting the old behaviour. See routers/analytics.py.
     places = {row["location"]: row for row in report["per_location"]}
-    assert set(places) == {"Phoenix Mall", "City Airport", "Ungrouped screens"}, places
+    assert set(places) == {"Phoenix Mall", "City Airport", "No location set"}, places
     assert places["Phoenix Mall"]["screens"] == 2
     assert places["Phoenix Mall"]["total_plays"] == 22, places["Phoenix Mall"]
     assert places["City Airport"]["total_plays"] == 100
-    # A screen with no group still has to appear, or its plays vanish from the report.
-    assert places["Ungrouped screens"]["total_plays"] == 3, places["Ungrouped screens"]
+    # A screen with neither location nor group still has to appear, or its plays vanish.
+    assert places["No location set"]["total_plays"] == 3, places["No location set"]
 
     # Success percentage is completed / total, not completed / attempts.
     assert report["lifetime"]["success_percent"] == round(114 / 125 * 100, 1)
 
     assert report["daily"], "expected a timeseries"
-    print("  ok  totals, per-screen, per-group (incl. ungrouped) and timeseries")
+    print("  ok  totals, per-screen, per-location (incl. unplaced) and timeseries")
 
     # Another tenant must not be able to read this advert's numbers.
     rival = {"Authorization": f"Bearer {create_access_token(data={'sub': intruder.username})}"}

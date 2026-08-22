@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 
 from arq import cron
@@ -12,11 +13,12 @@ from dotenv import load_dotenv
 from .database import SessionLocal, REDIS_SETTINGS
 from . import models
 from .models import Content, MediaRendition
-from .media_urls import delete_stored_file
-from .routers.content import UPLOAD_DIR, public_upload_url
+from . import media_storage
+from .routers.content import UPLOAD_DIR  # noqa: F401  (re-exported for scripts)
 
 import shutil
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 
 project_root = Path(__file__).parent.parent
 if not shutil.which("ffmpeg"):
@@ -72,6 +74,10 @@ def compute_sha256(filepath):
 
 def process_media_sync(content_id: int):
     db = SessionLocal()
+    # Scratch directory for this job, removed in `finally` whatever happens. Renditions
+    # used to be written straight into the uploads tree beside the source, so a transcode
+    # that died halfway left partial mp4s behind that nothing ever cleaned up.
+    workspace = tempfile.mkdtemp(prefix=f"olrac_transcode_{content_id}_")
     try:
         content = db.query(Content).filter(Content.id == content_id).first()
         if not content:
@@ -82,16 +88,15 @@ def process_media_sync(content_id: int):
             content.status = "ready"
             db.commit()
             return
-        
-        if content.file_url.startswith("s3://"):
-            storage_key = content.file_url[5:]
-            raise NotImplementedError("S3 transcoding is not implemented in this local script yet")
-        else:
-            storage_key = content.file_url.split("/uploads/")[1]
 
-        file_path = Path(UPLOAD_DIR) / storage_key
-        if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
+        # One code path for both backends. ffmpeg cannot read an s3:// URL, so object
+        # storage is pulled down first; local storage is copied into the same scratch
+        # directory so the rest of this function never has to care which it was.
+        storage_key = media_storage.storage_key_for(content.file_url)
+        organization_id = content.organization_id
+        file_path = media_storage.fetch_to(
+            content.file_url, Path(workspace) / Path(storage_key).name
+        )
         
         # A retry re-transcodes every resolution, so anything from a previous attempt is
         # stale. Without this each retry stacked another full set of renditions on the
@@ -112,7 +117,9 @@ def process_media_sync(content_id: int):
             "360p": (640, 360)
         }
         
-        output_dir = file_path.parent
+        # Scratch, not the uploads tree: nothing is published until it transcodes
+        # cleanly and is stored deliberately below.
+        output_dir = Path(workspace)
         
         # Transcode renditions
         for name, (w_max, h_max) in resolutions.items():
@@ -152,7 +159,13 @@ def process_media_sync(content_id: int):
                 codec=rend_info["codec"],
                 sha256=rend_sha,
                 file_size_bytes=rend_size,
-                file_url=public_upload_url(f"{content.organization_id}/{out_filename}")
+                # Store it back on whichever backend the original came from, so a
+                # rendition is fetched exactly like any other asset.
+                file_url=media_storage.store(
+                    out_filepath,
+                    f"{organization_id}/{out_filename}",
+                    content_type="video/mp4",
+                ),
             )
             db.add(rendition)
             
@@ -170,7 +183,11 @@ def process_media_sync(content_id: int):
             ]
             try:
                 run_command_sync(cmd)
-                content.thumbnail = public_upload_url(f"{content.organization_id}/{thumb_filename}")
+                content.thumbnail = media_storage.store(
+                    thumb_filepath,
+                    f"{organization_id}/{thumb_filename}",
+                    content_type="image/jpeg",
+                )
             except Exception:
                 # Not fatal — the asset still plays without a thumbnail — but silence here
                 # is why "thumbnail not showing" was impossible to diagnose: the item was
@@ -189,6 +206,7 @@ def process_media_sync(content_id: int):
             db.commit()
     finally:
         db.close()
+        shutil.rmtree(workspace, ignore_errors=True)
 
 
 async def process_media(ctx, content_id: int):
@@ -231,6 +249,114 @@ async def recover_stuck_processing(ctx):
         db.commit()
     finally:
         db.close()
+
+
+
+async def reconcile_alerts(ctx):
+    """Notice what is wrong with the fleet, and what has stopped being wrong.
+
+    Runs every minute. Raises an alert for each condition that is newly true, resolves the
+    ones that are no longer true, and publishes both to the tenant's dashboard channel so a
+    connected browser reacts immediately instead of waiting out its poll.
+
+    Delivery to phones and inboxes hangs off the rows this writes; it deliberately does not
+    happen here, so a failing SMTP server cannot stop the fleet being monitored.
+    """
+    from datetime import datetime, timezone
+    from . import alerting
+
+    db = SessionLocal()
+    redis = ctx.get("redis")
+    raised_total = 0
+    resolved_total = 0
+    try:
+        org_ids = [row[0] for row in db.query(models.Organization.id).all()]
+        for org_id in org_ids:
+            now = datetime.now(timezone.utc)
+            screens = db.query(models.Screen).filter(
+                models.Screen.organization_id == org_id
+            ).all()
+            contents = db.query(Content).filter(
+                Content.organization_id == org_id
+            ).all()
+
+            current = alerting.evaluate_all(screens, contents, now)
+            open_alerts = {
+                a.dedupe_key: a
+                for a in db.query(models.Alert).filter(
+                    models.Alert.organization_id == org_id,
+                    models.Alert.resolved_at.is_(None),
+                ).all()
+            }
+
+            for key, condition in current.items():
+                if key in open_alerts:
+                    continue
+                alert = models.Alert(
+                    organization_id=org_id,
+                    kind=condition.kind,
+                    severity=condition.severity,
+                    screen_id=condition.screen_id,
+                    content_id=condition.content_id,
+                    title=condition.title,
+                    detail=condition.detail,
+                    dedupe_key=key,
+                    notified=[],
+                )
+                db.add(alert)
+                try:
+                    # Committed one at a time so a collision with a concurrent sweep loses
+                    # only that alert to the partial unique index, rather than rolling back
+                    # every other alert raised in this pass.
+                    db.commit()
+                except IntegrityError:
+                    db.rollback()
+                    continue
+                db.refresh(alert)
+                raised_total += 1
+                await _publish_alert(redis, org_id, "alert_raised", alert)
+
+            for key, alert in open_alerts.items():
+                if key in current:
+                    continue
+                alert.resolved_at = models.utcnow()
+                db.commit()
+                resolved_total += 1
+                await _publish_alert(redis, org_id, "alert_resolved", alert)
+
+        if raised_total or resolved_total:
+            print(f"Alerts: raised {raised_total}, resolved {resolved_total}")
+    except Exception as e:
+        db.rollback()
+        print(f"Error reconciling alerts: {e}")
+    finally:
+        db.close()
+
+
+async def _publish_alert(redis, organization_id: int, event: str, alert) -> None:
+    """Tell any connected dashboard, best effort.
+
+    Wrapped: Redis being unavailable must not stop alerts being recorded. The row is the
+    source of truth and the dashboard falls back to fetching it.
+    """
+    if not redis:
+        return
+    try:
+        await redis.publish(f"dashboard:{organization_id}", json.dumps({
+            "type": event,
+            "alert": {
+                "id": alert.id,
+                "kind": alert.kind,
+                "severity": alert.severity,
+                "title": alert.title,
+                "detail": alert.detail,
+                "screen_id": alert.screen_id,
+                "content_id": alert.content_id,
+                "raised_at": alert.raised_at.isoformat() if alert.raised_at else None,
+            },
+        }))
+    except Exception as e:
+        print(f"Failed to publish alert to redis: {e}")
 
 
 async def aggregate_play_logs(ctx):
@@ -345,7 +471,11 @@ async def prune_screenshots(ctx):
             for shot in stale:
                 # File first: if the row goes and the unlink fails we lose the only
                 # pointer to it and it becomes an orphan.
-                delete_stored_file(shot.file_url, UPLOAD_DIR)
+                #
+                # Via media_storage rather than delete_stored_file: the latter only
+                # understands "/uploads/", so with R2 configured every pruned screenshot
+                # dropped its row and left the object in the bucket permanently.
+                media_storage.delete(shot.file_url)
                 db.delete(shot)
                 removed += 1
         db.commit()
@@ -363,6 +493,9 @@ class WorkerSettings:
     cron_jobs = [
         cron(recover_stuck_processing, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
         cron(aggregate_play_logs, minute={0, 15, 30, 45}),
+        # Every minute: an operator should hear about a dead screen in about the
+        # time it takes to notice one in the room.
+        cron(reconcile_alerts, minute=set(range(60))),
         cron(prune_play_logs, hour=3, minute=0),
         cron(prune_screenshots, hour=3, minute=30),
     ]

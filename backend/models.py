@@ -243,7 +243,12 @@ class Screen(Base):
     assignment_updated_at = Column(UtcDateTime, nullable=False, default=utcnow)
     
     target_version_code = Column(Integer, ForeignKey("app_releases.version_code", ondelete="SET NULL"), nullable=True)
-    update_status = Column(String, nullable=True) # pending, downloading, installing, success, failed
+    update_status = Column(String, nullable=True) # pending, downloading, installing, success, failed, rolled_back
+    # Consecutive failed install attempts of target_version_code. Reset on success and on
+    # every re-pin. Once it reaches rollout.ROLLBACK_THRESHOLD the pin is dropped, which
+    # is the automatic rollback the fleet-operations spec asks for: without this a screen
+    # retried a build that could never install, forever, on every heartbeat.
+    update_failure_count = Column(Integer, nullable=False, default=0)
 
     playlist = relationship("Playlist", back_populates="screens")
     group = relationship("ScreenGroup", back_populates="screens")
@@ -264,7 +269,25 @@ class AppRelease(Base):
     apk_url = Column(String(2048), nullable=False)
     sha256 = Column(String(64), nullable=True)
     mandatory = Column(Boolean, nullable=False, default=False)
+    # "draft" | "canary" | "released". This is what makes a staged rollout possible.
+    #
+    # The global fallback in current_app_version hands every unpinned screen the highest
+    # version_code it can find. While every release was implicitly live, publishing one
+    # *was* shipping it to the entire fleet, so a canary ring could not exist: the 5 test
+    # TVs and the other 495 were offered the same build the moment it was created.
+    #
+    # Only "released" rows are eligible for that fallback. A draft or canary build reaches
+    # a screen solely through an explicit target_version_code pin, which is how a ring is
+    # built -- 5 screens, then 20, then promote to "released" for the rest.
+    rollout_state = Column(String, nullable=False, default="draft", index=True)
     created_at = Column(UtcDateTime, nullable=False, default=utcnow)
+
+    __table_args__ = (
+        CheckConstraint(
+            "rollout_state IN ('draft', 'canary', 'released')",
+            name="ck_app_releases_rollout_state",
+        ),
+    )
 
 
 class Campaign(Base):
@@ -525,9 +548,64 @@ class PlayLog(Base):
     received_at = Column(UtcDateTime, nullable=False, default=utcnow)
     aggregated = Column(Boolean, nullable=False, default=False, index=True)
 
-from sqlalchemy import Index
+from sqlalchemy import Index, func
 Index("ix_play_logs_org_started_at", PlayLog.organization_id, PlayLog.corrected_started_at)
 Index("ix_play_logs_media_started_at", PlayLog.media_id, PlayLog.corrected_started_at)
+
+
+class Alert(Base):
+    """Something wrong with the fleet, recorded so it can be delivered and reviewed.
+
+    Persisted rather than derived on demand because an alert has a life beyond the moment
+    it is true: it has to be deliverable to a phone, acknowledgeable by whoever picked it
+    up, and answerable afterwards ("when did that screen actually drop?"). The dashboard
+    computed all of this in the browser, so none of that was possible.
+    """
+
+    __tablename__ = "alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=False, index=True)
+
+    kind = Column(String(40), nullable=False, index=True)
+    severity = Column(String(10), nullable=False)
+
+    # No foreign keys, for the same reason PlayLog carries none: an alert outlives the row
+    # it describes. Deleting the screen that failed must not delete the record that it did.
+    screen_id = Column(Integer, nullable=True, index=True)
+    content_id = Column(Integer, nullable=True, index=True)
+
+    title = Column(String(300), nullable=False)
+    detail = Column(Text, nullable=True)
+
+    # Identity of the situation ("screen_offline:42"), not of one observation. The partial
+    # unique index below uses it to make re-raising an already-open alert impossible at the
+    # database level, rather than relying on the reconciler to check first -- which would
+    # be a race every time two workers swept at once.
+    dedupe_key = Column(String(80), nullable=False)
+
+    raised_at = Column(UtcDateTime, nullable=False, default=utcnow, index=True)
+    # Set when the condition stops being true. Null means "still wrong right now".
+    resolved_at = Column(UtcDateTime, nullable=True, index=True)
+    acknowledged_at = Column(UtcDateTime, nullable=True)
+    acknowledged_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    # Channels this alert has already been delivered through, so a retry or a second worker
+    # cannot send the same message to a phone twice.
+    notified = Column(JSON, nullable=False, default=list)
+
+
+# Partial, so the constraint applies only to alerts that are still open. Without the WHERE
+# clause a screen that goes offline, recovers, and goes offline again could never raise a
+# second alert -- the resolved one from last week would block it forever.
+Index(
+    "ix_alerts_open_unique",
+    Alert.organization_id,
+    Alert.dedupe_key,
+    unique=True,
+    postgresql_where=Alert.resolved_at.is_(None),
+    sqlite_where=Alert.resolved_at.is_(None),
+)
 
 
 class PlayLogHourlyRollup(Base):
@@ -551,12 +629,18 @@ class PlayLogHourlyRollup(Base):
     error_plays = Column(Integer, nullable=False, default=0)
     duration_ms = Column(BigInteger, nullable=False, default=0)
 
+# COALESCE, not the bare columns. campaign_id and media_id are both nullable, and Postgres
+# treats NULLs as distinct in a unique index -- so on the bare columns this index enforced
+# nothing at all for the rows most likely to collide: plays from a playlist with no campaign.
+# The aggregation query is written NULL-safely (IS NOT DISTINCT FROM), so nothing has gone
+# wrong in practice, but the constraint that was supposed to be the backstop was not one.
+# -1 is safe as the sentinel because both columns are positive primary keys.
 Index(
     "ix_play_log_hourly_rollups_unique",
     PlayLogHourlyRollup.organization_id,
-    PlayLogHourlyRollup.campaign_id,
+    func.coalesce(PlayLogHourlyRollup.campaign_id, -1),
     PlayLogHourlyRollup.screen_id,
-    PlayLogHourlyRollup.media_id,
+    func.coalesce(PlayLogHourlyRollup.media_id, -1),
     PlayLogHourlyRollup.date_hour,
     unique=True
 )

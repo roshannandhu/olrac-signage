@@ -2,6 +2,7 @@
 
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -31,6 +32,23 @@ except Exception as e:
 
 # We must force a new engine for this test so it doesn't share state with other tests
 os.environ["DATABASE_URL"] = f"postgresql://olrac:olrac_password@localhost:5432/{test_db_name}"
+
+# `backend.main` runs Base.metadata.create_all at import time, so importing the app needs
+# a live database. Without this probe an unreachable Postgres raised OperationalError
+# during *collection*, which aborted the entire run -- every other test in the suite went
+# unreported because this one file could not be imported. Skipping at module level keeps
+# the failure local and honest: this file is skipped, the rest still run.
+_probe = socket.socket()
+_probe.settimeout(3)
+try:
+    _probe.connect(("127.0.0.1", 5432))
+except OSError:
+    pytest.skip(
+        "PostgreSQL is not reachable on localhost:5432; the media pipeline tests need it",
+        allow_module_level=True,
+    )
+finally:
+    _probe.close()
 
 from backend import database, models
 from backend.main import app
@@ -138,3 +156,85 @@ def test_media_pipeline():
     app.dependency_overrides.clear()
     db.close()
     test_engine.dispose()
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg is required for pipeline test")
+def test_media_pipeline_on_object_storage():
+    """The same pipeline, with the media in a bucket rather than on local disk.
+
+    This is the path that did not exist. `process_media_sync` raised
+    NotImplementedError on any `s3://` URL, so with R2 configured -- the deployment the
+    README documents -- every video upload finished `status="failed"` with no renditions,
+    and capability-based rendition selection had nothing to choose from.
+    """
+    moto = pytest.importorskip("moto", reason="moto is required for the object-storage pipeline test")
+    import boto3
+
+    from backend import media_storage
+
+    user, db, test_engine, test_session_local = setup_db()
+    bucket = "olrac-worker-test"
+
+    source = Path(TEMP_DIR.name) / "cloud_source.mp4"
+    synthesize_video(source, width=400, height=800)
+
+    previous_key = os.environ.get("AWS_ACCESS_KEY_ID")
+    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+    os.environ["AWS_REGION"] = "us-east-1"
+    os.environ["S3_ENDPOINT_URL"] = ""
+    os.environ["S3_BUCKET_NAME"] = bucket
+    media_storage.S3_BUCKET = bucket
+
+    import backend.worker
+    original_session_local = backend.worker.SessionLocal
+    backend.worker.SessionLocal = test_session_local
+    try:
+        with moto.mock_aws():
+            s3 = boto3.client("s3", region_name="us-east-1")
+            s3.create_bucket(Bucket=bucket)
+            key = f"{user.organization_id}/cloud_source.mp4"
+            s3.upload_file(str(source), bucket, key)
+
+            content = models.Content(
+                organization_id=user.organization_id,
+                name="Cloud Video",
+                type="video",
+                status="processing",
+                file_url=f"s3://{key}",
+                file_size_bytes=source.stat().st_size,
+            )
+            db.add(content)
+            db.commit()
+            db.refresh(content)
+            content_id = content.id
+
+            process_media_sync(content_id)
+
+            db.expire_all()
+            c = db.query(models.Content).filter(models.Content.id == content_id).first()
+            assert c.status == "ready", f"transcode failed: {c.failed_reason}"
+            assert c.failed_reason is None
+            assert len(c.renditions) == 4, "every rendition must be produced from a bucket source"
+
+            stored = {o["Key"] for o in s3.list_objects_v2(Bucket=bucket).get("Contents", [])}
+            for rendition in c.renditions:
+                assert rendition.file_url.startswith("s3://"), (
+                    "a rendition of an s3 original must be stored back in the bucket, or "
+                    "the player is handed a path that does not exist on this host"
+                )
+                assert media_storage.storage_key_for(rendition.file_url) in stored
+                assert rendition.sha256 and rendition.file_size_bytes > 0, (
+                    "the player verifies the file it downloads against these"
+                )
+
+            assert c.thumbnail and c.thumbnail.startswith("s3://")
+            assert media_storage.storage_key_for(c.thumbnail) in stored
+    finally:
+        backend.worker.SessionLocal = original_session_local
+        if previous_key is None:
+            os.environ.pop("AWS_ACCESS_KEY_ID", None)
+        else:
+            os.environ["AWS_ACCESS_KEY_ID"] = previous_key
+        db.close()
+        test_engine.dispose()

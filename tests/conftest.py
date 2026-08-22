@@ -11,6 +11,8 @@ script, one engine per database, and no import-order coupling. It also keeps
 each file directly runnable (`python tests/test_quotas.py`).
 """
 
+import pathlib
+import socket
 import subprocess
 import sys
 
@@ -28,7 +30,57 @@ ISOLATED_SCRIPTS = {
     "test_analytics.py",
     "test_p6_websockets.py",
     "test_media_selection.py",
+    # These six were written, committed, and then never run: they were absent from this
+    # set and from python_files in pytest.ini, so pytest collected neither. The suite
+    # reported success while six files' worth of assertions sat untouched. The guard in
+    # `pytest_collection_finish` below now makes that state impossible to reach again.
+    "test_ad_placements.py",
+    "test_booking_report.py",
+    "test_media_report.py",
+    "test_reinstall_dedup.py",
+    "test_storage_cleanup.py",
+    "test_sync_invalidation.py",
+    "test_release_rollout.py",
 }
+
+# Pure-logic tests: no database, no import-time engine, safe to run in-process.
+# Listed here only so the orphan guard knows they are accounted for; pytest.ini's
+# python_files is what actually collects them.
+PURE_MODULES = {
+    "test_media_worker.py",
+    "test_rotation.py",
+    "test_rollout_policy.py",
+    "test_media_storage.py",
+    "test_alerting.py",
+}
+
+
+def _postgres_reachable() -> bool:
+    """Whether a server is listening on the port the scripts create their databases on.
+
+    Cached for the run: 16 scripts would otherwise each pay the connect timeout.
+    """
+    global _PG_REACHABLE
+    if _PG_REACHABLE is None:
+        probe = socket.socket()
+        probe.settimeout(3)
+        try:
+            probe.connect(("127.0.0.1", 5432))
+            _PG_REACHABLE = True
+        except OSError:
+            _PG_REACHABLE = False
+        finally:
+            probe.close()
+    return _PG_REACHABLE
+
+
+_PG_REACHABLE = None
+
+# Scripts that build their own throwaway Postgres database and cannot run without a
+# server. Distinguished from the rest so that a machine with no database reports "these
+# were skipped, and why" rather than sixteen identical connection tracebacks that bury
+# whatever else went wrong in the run.
+NEEDS_POSTGRES = ISOLATED_SCRIPTS - {"test_sqlite_utc.py", "test_release_rollout.py"}
 
 
 def pytest_collect_file(parent, file_path):
@@ -64,6 +116,11 @@ class ScriptFile(pytest.File):
 
 class ScriptItem(pytest.Item):
     def runtest(self):
+        if self.path.name in NEEDS_POSTGRES and not _postgres_reachable():
+            pytest.skip(
+                "PostgreSQL is not reachable on localhost:5432; this script creates its "
+                "own throwaway database and cannot run without a server"
+            )
         result = subprocess.run(
             [sys.executable, str(self.path)],
             capture_output=True,
@@ -81,3 +138,27 @@ class ScriptItem(pytest.Item):
 
     def reportinfo(self):
         return self.path, 0, f"script: {self.path.name}"
+
+
+def pytest_collection_finish(session):
+    """Fail if any tests/test_*.py is collected by neither mechanism.
+
+    A file that is in neither ISOLATED_SCRIPTS nor python_files is simply not run, and
+    nothing says so -- the suite still exits 0. Six files sat in that state. Checking the
+    directory against both registries turns a silent omission into a failed run.
+    """
+    directory = pathlib.Path(__file__).parent
+    on_disk = {p.name for p in directory.glob("test_*.py")}
+    registered = ISOLATED_SCRIPTS | PURE_MODULES
+    orphans = sorted(on_disk - registered)
+    if orphans:
+        raise pytest.UsageError(
+            "These test files are not collected by anything and never ran: "
+            f"{orphans}. Add each to ISOLATED_SCRIPTS in tests/conftest.py (if it owns "
+            "a database) or to python_files in pytest.ini (if it is pure logic)."
+        )
+    missing = sorted(registered - on_disk)
+    if missing:
+        raise pytest.UsageError(
+            f"These files are registered but do not exist: {missing}."
+        )

@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import os
 import re
 import pathlib
@@ -15,9 +17,26 @@ from sqlalchemy.orm import Session
 from . import database, models
 from .billing import ensure_billing_catalog
 from .database import Base, engine
-from .routers import analytics, auth, billing, content, enrollment_tokens, groups, placements, playlists, screens, users, websockets, emergency, screenshots, releases, provisioning
+from .routers import alerts, analytics, auth, billing, content, enrollment_tokens, groups, placements, playlists, screens, users, websockets, emergency, screenshots, releases, provisioning
+
+logger = logging.getLogger(__name__)
 
 Base.metadata.create_all(bind=engine)
+
+
+def _run_worker_in_process() -> bool:
+    """Whether this API process should also run the arq worker.
+
+    Off by default: docker-compose runs the worker as its own service, and starting a
+    second copy here would double every cron job.
+
+    On for single-process hosts (Render/Railway free tiers give you one web service and no
+    background worker). Without a worker running SOMEWHERE, `process_media` never fires --
+    so uploads never reach status="ready" and never reach a TV -- and `aggregate_play_logs`
+    never fires, so play_logs pile up correctly while every dashboard count, which reads
+    PlayLogHourlyRollup, reads zero forever.
+    """
+    return os.getenv("RUN_WORKER_IN_PROCESS", "").strip().lower() in {"1", "true", "yes"}
 
 
 @asynccontextmanager
@@ -28,7 +47,34 @@ async def lifespan(_app: FastAPI):
         ensure_billing_catalog(db)
     finally:
         db.close()
-    yield
+
+    arq_worker = None
+    worker_task = None
+    if _run_worker_in_process():
+        from arq.worker import create_worker
+
+        from .worker import WorkerSettings
+
+        # handle_signals=False because uvicorn already owns SIGINT/SIGTERM. Left at the
+        # default, arq installs its own handlers over uvicorn's and the process stops
+        # shutting down cleanly.
+        arq_worker = create_worker(WorkerSettings, handle_signals=False)
+        worker_task = asyncio.create_task(arq_worker.async_run())
+        logger.info("arq worker started in-process (RUN_WORKER_IN_PROCESS)")
+
+    try:
+        yield
+    finally:
+        if arq_worker is not None:
+            try:
+                await arq_worker.close()
+            except AttributeError:
+                # When arq did not install its own signal handlers, close() signals the
+                # run loop with SIGUSR1 -- which is POSIX-only, so this raises on a Windows
+                # dev machine and never on a deployment target. The cancel below is enough.
+                pass
+        if worker_task is not None:
+            worker_task.cancel()
 
 
 app = FastAPI(title="OLRAC Signage API", version="2.0.0", lifespan=lifespan)
@@ -118,6 +164,7 @@ app.include_router(billing.router, prefix="/api/billing", tags=["billing"])
 app.include_router(emergency.router, prefix="/api/emergency", tags=["Emergency"])
 app.include_router(screenshots.router, prefix="/api/screenshots", tags=["Screenshots"])
 app.include_router(releases.router, prefix="/api/releases", tags=["Releases"])
+app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
 app.include_router(analytics.router)
 app.include_router(enrollment_tokens.router, prefix="/api", tags=["enrollment-tokens"])
 app.include_router(provisioning.router, prefix="/api/provisioning", tags=["provisioning"])

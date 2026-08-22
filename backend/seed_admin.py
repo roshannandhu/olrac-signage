@@ -4,10 +4,27 @@ import getpass
 from . import database, models
 from .routers.auth import get_or_create_default_organization, get_password_hash
 
+# Roles this command may create. `super_admin` is the platform operator: the only role
+# permitted to publish a player release, which installs across every tenant's fleet.
+# There is deliberately no HTTP route that mints one -- the team page is capped at
+# `owner` -- so creating one requires shell access to the host running the backend.
+SEEDABLE_ROLES = ("owner", "super_admin")
+
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Create the first OLRAC owner account")
+    parser = argparse.ArgumentParser(
+        description="Create an OLRAC account that cannot be created through the API"
+    )
     parser.add_argument("username")
+    parser.add_argument(
+        "--role",
+        choices=SEEDABLE_ROLES,
+        default="owner",
+        help=(
+            "owner: the first account of a tenant organisation (default). "
+            "super_admin: the platform operator who publishes player releases."
+        ),
+    )
     args = parser.parse_args()
     password = getpass.getpass("Password (minimum 8 characters): ")
     if len(password) < 8:
@@ -23,12 +40,17 @@ def main() -> None:
             organization_id=organization.id,
             username=args.username,
             hashed_password=get_password_hash(password),
-            role="owner",
+            role=args.role,
             is_active=True,
         )
         db.add(user)
         db.commit()
-        print(f"Created owner account: {args.username}")
+        print(f"Created {args.role} account: {args.username}")
+        if args.role == "super_admin":
+            print(
+                "This account can publish player releases to every tenant's screens. "
+                "It is hidden from the team page and cannot be edited there."
+            )
     finally:
         db.close()
 

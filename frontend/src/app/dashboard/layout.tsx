@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
+import { useFleetAlerts } from '@/lib/use-fleet-alerts'
 import { cn } from '@/lib/utils'
 
 // The four things an operator touches daily. Everything else is one level down, under
@@ -62,6 +63,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const { token, user, hydrated, clearSession, setUser } = useAuthStore()
   const meQuery = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: hydrated && Boolean(token) })
+
+  // One socket for the whole dashboard, opened here so every page benefits and no page
+  // opens a second one. Alerts arrive as toasts wherever the operator happens to be, which
+  // is the point: previously they only existed on /dashboard/alerts, and only if you were
+  // looking at it.
+  useFleetAlerts()
 
   useEffect(() => {
     if (hydrated && !token) router.replace('/login')

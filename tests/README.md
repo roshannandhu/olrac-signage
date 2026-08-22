@@ -2,6 +2,24 @@
 
 Run commands from the repository root.
 
+## What the suite needs
+
+| Service | Needed by | Without it |
+|---|---|---|
+| PostgreSQL on `localhost:5432` | 16 scripts that create their own throwaway database | those scripts **skip** with a stated reason |
+| Redis on `localhost:6379` | `validation.py`, and any check whose content must reach `status="ready"` | the transcode job is never enqueued, so a playlist syncs no items |
+| `ffmpeg` on `PATH` | the two media pipeline tests | they **skip** |
+
+Nothing above is mocked away on purpose: these are the services production runs on, and a
+test that quietly passes without them proves less than one that says it did not run.
+Everything that does not need them — the storage, rotation, rollout and release checks —
+runs anywhere:
+
+```bash
+python -m pytest tests -q          # 26 pass with no services at all
+docker compose up -d db redis      # then the remaining 16 run too
+```
+
 ## Run everything
 
 ```bash
@@ -17,6 +35,15 @@ suite fails. One process per script keeps each engine bound to its own database.
 Because of that, these files must **not** define a `test_*` function; pytest would
 import them into the shared process and run them a second time. Each keeps an
 `if __name__ == "__main__"` block so it stays directly runnable.
+
+Pure-logic tests are the exception. They touch no database and bind no engine, so they are
+imported normally: list them in `python_files` in `pytest.ini` and in `PURE_MODULES` in
+`conftest.py`. Every other file goes in `ISOLATED_SCRIPTS`.
+
+**A file in neither registry is never run.** Six of them sat in that state — written,
+committed, and silently skipped while the suite reported success. `pytest_collection_finish`
+now compares the directory against both registries and fails the run if anything is
+unaccounted for, so the omission cannot recur.
 
 ## Tenant isolation probe
 

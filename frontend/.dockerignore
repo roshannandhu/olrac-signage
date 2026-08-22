@@ -1,0 +1,20 @@
+# Without this file `COPY . .` shipped the host's node_modules and .next into the build
+# context — slow, and worse, it copied .env.local (which holds the Google Maps key) into
+# the image layers where anyone who can pull the image can read it.
+
+node_modules
+.next
+out
+
+# Local secrets. Build-time values arrive as ARGs from docker-compose instead.
+.env
+.env.*
+!.env.example
+
+# Nothing the build needs
+.git
+.gitignore
+Dockerfile
+.dockerignore
+npm-debug.log*
+.DS_Store

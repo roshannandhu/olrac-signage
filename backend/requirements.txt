@@ -10,5 +10,13 @@ pydantic-settings==2.3.4
 python-dotenv==1.2.2
 boto3==1.43.36
 redis==5.0.3
+# Imported unguarded by database.py (RedisSettings) and worker.py, but never listed:
+# it had only ever been pip-installed by hand into a developer venv. Every container
+# built from this file died on import with ModuleNotFoundError, so `docker compose up`
+# could not start the backend or the worker at all.
+# Pinned to the version the suite actually runs against. The previous pin (0.26.3) was
+# never installed anywhere -- the developer venv has 0.28.0 -- so every deployment would
+# have been the first machine to run this code on 0.26.3.
+arq==0.28.0
 reportlab==5.0.0
 openpyxl==3.1.5

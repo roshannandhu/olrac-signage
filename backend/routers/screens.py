@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from .. import database, models, schemas
 from ..media_selection import select_rendition
+from .. import rollout
 from ..rotation import normalise as normalise_rotation, resolve_rotation
 from ..maps_link import MapsLinkError, parse as parse_maps_link
 from ..media_urls import is_s3_enabled, media_base_url, resolve_media_url
@@ -41,31 +42,42 @@ def as_aware_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
+def _release_response(release: models.AppRelease) -> schemas.AppVersionResponse:
+    # sha256 belongs in this payload. Without it the device has nothing to verify the
+    # downloaded APK against, so UpdateManager's integrity check silently no-ops and a
+    # device-owner TV installs whatever bytes arrived. It was omitted here while being
+    # stored on the row, which made the whole checksum path dead code.
+    return schemas.AppVersionResponse(
+        version_code=release.version_code,
+        version_name=release.version_name,
+        apk_url=release.apk_url,
+        sha256=release.sha256,
+        mandatory=release.mandatory,
+    )
+
+
 def current_app_version(db: Session, target_version_code: int = None) -> schemas.AppVersionResponse:
     if target_version_code:
         release = db.query(models.AppRelease).filter(models.AppRelease.version_code == target_version_code).first()
         if release:
-            return schemas.AppVersionResponse(
-                version_code=release.version_code,
-                version_name=release.version_name,
-                apk_url=release.apk_url,
-                mandatory=release.mandatory,
-            )
-            
-    # Fallback to latest global release
-    release = db.query(models.AppRelease).order_by(models.AppRelease.version_code.desc()).first()
+            return _release_response(release)
+
+    # Fallback to the latest *promoted* release. A draft or canary build is deliberately
+    # invisible here -- it reaches a screen only through an explicit target_version_code,
+    # which is what keeps a 5-TV ring from being the whole fleet.
+    release = (
+        rollout.eligible_for_fallback(db.query(models.AppRelease))
+        .order_by(models.AppRelease.version_code.desc())
+        .first()
+    )
     if release:
-        return schemas.AppVersionResponse(
-            version_code=release.version_code,
-            version_name=release.version_name,
-            apk_url=release.apk_url,
-            mandatory=release.mandatory,
-        )
-        
+        return _release_response(release)
+
     return schemas.AppVersionResponse(
         version_code=int(os.getenv("PLAYER_VERSION_CODE", "1")),
         version_name=os.getenv("PLAYER_VERSION_NAME", "1.0"),
         apk_url=os.getenv("PLAYER_APK_URL") or None,
+        sha256=os.getenv("PLAYER_APK_SHA256") or None,
         mandatory=os.getenv("PLAYER_UPDATE_MANDATORY", "false").lower() == "true",
     )
 
@@ -520,6 +532,11 @@ def patch_screen(
     ):
         if field in fields:
             setattr(db_screen, field, getattr(patch, field))
+    if "target_version_code" in fields:
+        # Re-pinning is a fresh attempt: carry no failure count over from the build this
+        # screen was previously chasing, or it would roll back after one failure instead
+        # of three.
+        rollout.repin(db_screen, patch.target_version_code)
     if "orientation" in fields:
         # Explicit operator choice; auto-detection must not undo it on the next heartbeat.
         db_screen.orientation_source = "manual"
@@ -568,13 +585,21 @@ async def heartbeat(
             db_screen.app_version = req.device_version
     if req.app_version is not None:
         db_screen.app_version = req.app_version
-    if hasattr(req, "update_status") and req.update_status is not None:
-        db_screen.update_status = req.update_status
-        if req.update_status == "success" and hasattr(req, "version_code") and req.version_code is not None:
-            # If successfully updated to target, we can clear the status
-            if db_screen.target_version_code == req.version_code:
-                db_screen.update_status = None
-        db_screen.device_version = req.app_version
+    if getattr(req, "update_status", None) is not None:
+        rolled_back = rollout.apply_update_status(
+            db_screen,
+            req.update_status,
+            getattr(req, "version_code", None),
+        )
+        if rolled_back:
+            logging.getLogger(__name__).warning(
+                "Screen %s %s", db_screen.id, rolled_back
+            )
+        # Only when the device actually told us its version. This used to assign
+        # unconditionally, so a heartbeat reporting an update result without app_version
+        # wiped the device_version that had been recorded earlier.
+        if req.app_version is not None:
+            db_screen.device_version = req.app_version
     if req.storage_used:
         db_screen.storage_used = req.storage_used
 
@@ -701,8 +726,11 @@ async def clear_direct_assignment(
 
 
 @router.get("/player-version", response_model=schemas.AppVersionResponse)
-def player_version():
-    return current_app_version()
+def player_version(db: Session = Depends(database.get_db)):
+    # `db` was missing, so every call raised TypeError and the endpoint answered 500.
+    # The sync path passed it correctly, which is why updates still reached devices and
+    # hid the breakage here.
+    return current_app_version(db)
 
 
 def resolve_screen_playlist(screen: models.Screen, db: Session) -> int | None:

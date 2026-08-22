@@ -21,7 +21,48 @@ from .routers import alerts, analytics, auth, billing, content, enrollment_token
 
 logger = logging.getLogger(__name__)
 
-Base.metadata.create_all(bind=engine)
+def _ensure_schema() -> None:
+    """Build the schema on a brand-new database, and stamp it so Alembic can take over.
+
+    `create_all()` used to run here unconditionally. On a database that already exists
+    that is a harmless no-op, which is why nobody noticed -- but on a NEW one it built
+    every table straight from the ORM and left no alembic_version row, so the first
+    `alembic upgrade head` died on "relation users already exists" and the database could
+    never be migrated again. Deploying to a fresh Postgres (Supabase, Neon, a new RDS) was
+    a one-way trip into that state.
+
+    Stamping closes it. The two paths were compared column by column and index by index on
+    fresh databases: 248 columns either way, and no index the migrations create that
+    create_all does not. A stamped database is the database the migrations would have
+    built, so the next migration applies cleanly on top.
+
+    ponytail: no cross-process lock. Two instances booting into the same empty database at
+    the same instant could race; take a Postgres advisory lock here if this ever runs more
+    than one replica.
+    """
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect
+
+    # Checked BEFORE create_all: its presence is what distinguishes a database Alembic
+    # already manages from one this process is about to create.
+    alembic_owns_it = inspect(engine).has_table("alembic_version")
+
+    Base.metadata.create_all(bind=engine)
+
+    if alembic_owns_it:
+        return
+
+    here = pathlib.Path(__file__).parent
+    config = Config(str(here / "alembic.ini"))
+    # Absolute, because alembic.ini's script_location is relative to the working directory
+    # and this runs from wherever the process was started.
+    config.set_main_option("script_location", str(here / "alembic"))
+    command.stamp(config, "head")
+    logger.info("new database: schema created and stamped at head")
+
+
+_ensure_schema()
 
 
 def _run_worker_in_process() -> bool:

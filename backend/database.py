@@ -7,8 +7,23 @@ from dotenv import load_dotenv
 env_path = pathlib.Path(__file__).parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
-# Fallback to local sqlite if no DATABASE_URL is provided
+# Fallback to local sqlite if no DATABASE_URL is provided.
+#
+# Convenient locally, dangerous anywhere else: a deployment that forgets DATABASE_URL does
+# not fail, it quietly writes to a file on an ephemeral container disk that is destroyed on
+# the next deploy -- and /api/health cheerfully answered "connected" the whole time. That
+# happened on the first Render deploy and cost an afternoon of "why is Supabase empty?".
+# It still falls back, because local development wants that, but it now says so.
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./olrac_signage.db")
+
+if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "DATABASE_URL is not set -- falling back to local SQLite (%s). Data written here "
+        "is LOST on restart. Set DATABASE_URL to your Postgres/Supabase connection string.",
+        SQLALCHEMY_DATABASE_URL,
+    )
 
 connect_args = {}
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):

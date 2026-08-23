@@ -186,11 +186,29 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 @app.get("/api/health")
 def health_check(db: Session = Depends(database.get_db)):
+    """Liveness, plus WHICH database is actually behind it.
+
+    This used to answer {"database": "connected"} for any working connection, which is
+    true and useless: a deployment silently using the SQLite fallback looked identical to
+    one on Postgres, so "is production really on Supabase?" could not be answered without
+    reading container logs. Credentials are never included -- host and dialect only.
+    """
     try:
         db.execute(text("SELECT 1"))
-        return {"status": "ok", "database": "connected"}
     except Exception:
         raise HTTPException(status_code=503, detail="Database connection failed")
+
+    url = database.engine.url
+    ephemeral = url.get_backend_name() == "sqlite"
+    return {
+        "status": "ok",
+        "database": "connected",
+        "backend": url.get_backend_name(),
+        "host": url.host or url.database,
+        # Loud on purpose: this is the state where everything looks fine and every write
+        # is discarded on the next deploy.
+        "warning": "using local SQLite fallback; DATABASE_URL is not set" if ephemeral else None,
+    }
 
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])

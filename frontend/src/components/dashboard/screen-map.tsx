@@ -6,11 +6,16 @@ import { useTheme } from 'next-themes'
 import { Badge } from '@/components/ui/badge'
 import { useGoogleMaps } from '@/hooks/use-google-maps'
 
-// Carto's basemaps are keyless like OSM's, but ship a matched light/dark pair. A white map
-// dropped into the dark dashboard was the one thing that made this feel bolted on.
+// Voyager, not Carto's dark_all, and not OSM's default.
+//
+// This is the map shown when no Google key is configured, so it should read as close to
+// the Google map it stands in for as a keyless basemap can: light background, coloured
+// road classes, POI labels. Matching the dark dashboard instead was the wrong instinct --
+// an operator recognises a map by looking like the map they already know, and a black
+// slab reads as broken rather than as themed.
 const TILES = {
-  dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-  light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  dark: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+  light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
 }
 const ATTRIBUTION = '&copy; OpenStreetMap &copy; CARTO'
 /** Pan beyond this and the map has stopped showing what it was opened to show. */
@@ -188,7 +193,7 @@ function LeafletMap({ points, height }: { points: MapPoint[]; height: number }) 
   return (
     <div
       ref={shell}
-      className="olrac-map border-hairline bg-muted relative overflow-hidden rounded-xl border"
+      className="olrac-map border-hairline bg-muted relative z-0 overflow-hidden rounded-xl border"
       style={{ height: fullscreen ? '100vh' : height }}
     >
       <div ref={container} className="size-full" />
@@ -220,24 +225,6 @@ function LeafletMap({ points, height }: { points: MapPoint[]; height: number }) 
   )
 }
 
-/** Google's own dark cartography, so the map matches the dashboard rather than glaring. */
-const DARK_STYLE: google.maps.MapTypeStyle[] = [
-  { elementType: 'geometry', stylers: [{ color: '#212121' }] },
-  { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
-  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#757575' }] },
-  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#181818' }] },
-  { featureType: 'road', elementType: 'geometry.fill', stylers: [{ color: '#2c2c2c' }] },
-  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
-  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#373737' }] },
-  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3c3c3c' }] },
-  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#2f2f2f' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#000000' }] },
-  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#3d3d3d' }] },
-]
-
 /**
  * The real Google map, drawn with the Maps JavaScript SDK.
  *
@@ -251,8 +238,6 @@ function GoogleMap({ points, height }: { points: MapPoint[]; height: number }) {
   const map = useRef<google.maps.Map | null>(null)
   const home = useRef<{ centre: google.maps.LatLngLiteral; zoom: number } | null>(null)
 
-  const { resolvedTheme } = useTheme()
-  const dark = resolvedTheme !== 'light'
   const [strayed, setStrayed] = useState(false)
 
   const key = JSON.stringify(points.map((p) => [p.id, p.latitude, p.longitude, p.online, p.detail]))
@@ -268,7 +253,8 @@ function GoogleMap({ points, height }: { points: MapPoint[]; height: number }) {
       zoomControl: true,
       // Otherwise a scroll down the page is swallowed the moment the cursor crosses a map.
       gestureHandling: 'cooperative',
-      styles: dark ? DARK_STYLE : undefined,
+      // No custom styles: Google's default cartography is exactly the familiar map an
+      // operator expects, and restyling it only makes it look like something else.
     })
     map.current = created
 
@@ -346,11 +332,6 @@ function GoogleMap({ points, height }: { points: MapPoint[]; height: number }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on values, not reference
   }, [key])
 
-  // Restyle in place when the dashboard theme flips; rebuilding would lose the operator's pan.
-  useEffect(() => {
-    map.current?.setOptions({ styles: dark ? DARK_STYLE : null })
-  }, [dark])
-
   const recentre = useCallback(() => {
     const anchor = home.current
     if (!anchor || !map.current) return
@@ -362,7 +343,7 @@ function GoogleMap({ points, height }: { points: MapPoint[]; height: number }) {
   return (
     <div
       ref={shell}
-      className="olrac-map border-hairline bg-muted relative overflow-hidden rounded-xl border"
+      className="olrac-map border-hairline bg-muted relative z-0 overflow-hidden rounded-xl border"
       style={{ height }}
     >
       <div ref={container} className="size-full" />

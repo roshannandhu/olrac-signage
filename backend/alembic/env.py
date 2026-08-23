@@ -23,8 +23,15 @@ import backend.models
 
 target_metadata = Base.metadata
 
-# Set url in config so Alembic can use it
-config.set_main_option("sqlalchemy.url", SQLALCHEMY_DATABASE_URL)
+# Set url in config so Alembic can use it.
+#
+# The % doubling is not cosmetic. set_main_option writes into a configparser, where % is
+# the interpolation character, so a URL containing one raises
+# "ValueError: invalid interpolation syntax" before a single migration runs. That happens
+# for any password with a character needing percent-encoding -- an "@" arrives as %40 --
+# which is most managed-Postgres passwords. Doubling escapes it; configparser reads %% and
+# hands SQLAlchemy back a single %.
+config.set_main_option("sqlalchemy.url", SQLALCHEMY_DATABASE_URL.replace("%", "%%"))
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

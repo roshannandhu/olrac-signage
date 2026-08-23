@@ -16,36 +16,6 @@ export type MapPoint = {
 }
 
 /**
- * A real Google map for a single place, with no API key.
- *
- * Google's embed endpoint serves an ordinary interactive map to an iframe without a key or
- * a billing account, which is what makes this work on day one. It takes exactly one place,
- * so anything with several pins uses the Leaflet map below instead.
- */
-function GoogleEmbed({ point, height }: { point: MapPoint; height: number }) {
-  const query = `${point.latitude},${point.longitude}`
-  return (
-    <div className="border-hairline relative overflow-hidden rounded-xl border" style={{ height }}>
-      <iframe
-        title={`Map of ${point.name}`}
-        src={`https://maps.google.com/maps?q=${encodeURIComponent(query)}&z=16&output=embed`}
-        className="size-full border-0"
-        loading="lazy"
-        referrerPolicy="no-referrer-when-downgrade"
-      />
-      <a
-        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`}
-        target="_blank"
-        rel="noreferrer"
-        className="bg-background/90 text-foreground ring-hairline absolute right-2 bottom-2 rounded-lg px-2.5 py-1 text-xs font-medium shadow-sm ring-1 hover:underline"
-      >
-        Open in Google Maps
-      </a>
-    </div>
-  )
-}
-
-/**
  * Several places on one map, drawn with Leaflet over OpenStreetMap tiles.
  *
  * Google's keyless embed can only ever show one pin, and a campaign map has to show every
@@ -156,8 +126,13 @@ export function ScreenMap({ points, height = 320 }: { points: MapPoint[]; height
   )
 
   if (!located.length) return <NoLocations points={points} />
-  // One place gets the real Google map; several need multi-pin, which only Leaflet can do
-  // without a paid key.
-  if (located.length === 1) return <GoogleEmbed point={located[0]} height={height} />
+  // Every case goes through Leaflet, including a single pin -- LeafletMap already handles
+  // that with setView.
+  //
+  // A single place used to render Google's keyless embed
+  // (maps.google.com/maps?q=..&output=embed). Google now 301s that to
+  // /maps/embed?origin=mfe&pb=.. which answers 404 AND sets X-Frame-Options: SAMEORIGIN,
+  // so the iframe was a permanently grey box -- and only ever on the one-pin path, which
+  // is exactly what an operator sees with their first screen.
   return <LeafletMap points={located} height={height} />
 }

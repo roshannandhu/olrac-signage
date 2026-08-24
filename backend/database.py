@@ -29,7 +29,24 @@ connect_args = {}
 if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
     connect_args["check_same_thread"] = False
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=connect_args)
+# pool_pre_ping is not optional against a managed Postgres.
+#
+# Supabase's pooler (and every other one) closes connections that have sat idle. SQLAlchemy
+# keeps handing those dead sockets out, so the API answers "Database connection failed" on
+# every request while the database itself is perfectly healthy -- and stays broken until
+# the process is restarted. Seen exactly that: /api/health failing while a fresh psycopg2
+# connection to the same URL read 1,520 rows.
+#
+# pre_ping costs one round trip per checkout and turns a dead connection into a silent
+# reconnect. pool_recycle retires sockets before the pooler's own idle timeout can.
+#
+# Both are Postgres-only: SQLite has no server to drop the connection.
+_pool_options = {} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {
+    "pool_pre_ping": True,
+    "pool_recycle": 280,
+}
+
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=connect_args, **_pool_options)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 Base = declarative_base()

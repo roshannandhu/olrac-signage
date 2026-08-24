@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -51,6 +52,9 @@ import com.olrac.signage.data.MaintenanceGesture
 import com.olrac.signage.data.RegistrationSnapshot
 import com.olrac.signage.network.ApiClient
 import com.olrac.signage.network.RegisterRequest
+import com.olrac.signage.network.GooglePollRequest
+import com.olrac.signage.network.GoogleStartRequest
+import com.olrac.signage.network.GoogleStartResponse
 import com.olrac.signage.network.SignInRequest
 import com.olrac.signage.service.PlaybackService
 import com.olrac.signage.ui.PlayerScreen
@@ -137,6 +141,12 @@ class MainActivity : ComponentActivity() {
                     is LaunchState.Playing -> PlayerScreen()
                     is LaunchState.SignIn -> {
                         val scope = rememberCoroutineScope()
+                        // Ask once per visit which routes this server offers. Keyed on the
+                        // base URL so pointing the TV at a different server re-asks rather
+                        // than keeping the previous server's answer.
+                        LaunchedEffect(ApiClient.effectiveBaseUrl(this@MainActivity)) {
+                            refreshAuthMethods()
+                        }
                         SignInScreen(
                             state = state,
                             serverUrl = ApiClient.effectiveBaseUrl(this),
@@ -146,10 +156,23 @@ class MainActivity : ComponentActivity() {
                                 scope.launch { submitSignIn(deviceId, username, password, screenName) }
                             },
                             onUsePairingCode = { scope.launch { usePairingCode(deviceId) } },
+                            onUseGoogle = { screenName ->
+                                scope.launch { startGoogleSignIn(deviceId, screenName) }
+                            },
                             onSaveServer = ::saveServerUrl,
                             onChooseHome = ::requestHomeRole
                         )
                     }
+
+                    is LaunchState.GoogleSignIn -> GoogleSignInScreen(
+                        state = state,
+                        serverUrl = ApiClient.effectiveBaseUrl(this),
+                        serverError = serverError,
+                        defaultHome = defaultHome,
+                        onCancel = { launchState = LaunchState.SignIn() },
+                        onSaveServer = ::saveServerUrl,
+                        onChooseHome = ::requestHomeRole
+                    )
 
                     is LaunchState.Pairing -> PairingScreen(
                         state = state,
@@ -176,6 +199,29 @@ class MainActivity : ComponentActivity() {
     }
 
     private val maintenanceGesture = MaintenanceGesture()
+    private val homePressTimes = ArrayDeque<Long>()
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        // If the user presses the HOME button and this app is the default launcher, 
+        // the OS routes the intent here instead of onKeyDown. 
+        // We detect 3 presses within 3 seconds to trigger the PIN prompt.
+        if (intent?.hasCategory(Intent.CATEGORY_HOME) == true) {
+            val now = System.currentTimeMillis()
+            homePressTimes.addLast(now)
+            while (homePressTimes.isNotEmpty() && now - homePressTimes.first() > 3000L) {
+                homePressTimes.removeFirst()
+            }
+            if (homePressTimes.size >= 3) {
+                homePressTimes.clear()
+                // Stop LockTask mode if it was active, so the user can interact with system dialogs
+                if (DeviceOwnerManager.isDeviceOwner(this)) {
+                    try { stopLockTask() } catch (e: Exception) {}
+                }
+                showPinPrompt = true
+            }
+        }
+    }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         // Only while the player is on screen: inside the setup surfaces these keys are
@@ -184,6 +230,9 @@ class MainActivity : ComponentActivity() {
         if (!showPinPrompt && !showServerSetup && (event == null || event.repeatCount == 0)) {
             if (maintenanceGesture.record(keyCode, System.currentTimeMillis())) {
                 // The gesture only asks the question; DeviceState's pin answers it.
+                if (DeviceOwnerManager.isDeviceOwner(this)) {
+                    try { stopLockTask() } catch (e: Exception) {}
+                }
                 showPinPrompt = true
                 return true
             }
@@ -265,6 +314,131 @@ class MainActivity : ComponentActivity() {
                 else -> "Sign in failed (error ${response.code()}). Please try again."
             }
         )
+    }
+
+    /**
+     * Learn which sign-in routes this deployment offers, and hide the ones it does not.
+     *
+     * Failure is deliberately silent and leaves googleEnabled false: this runs on a TV that
+     * may have no network yet, and an error toast about an optional button would be noise
+     * on top of the connection problem the installer is already looking at.
+     */
+    private suspend fun refreshAuthMethods() {
+        val enabled = try {
+            ApiClient.service(this).authMethods().body()?.google ?: false
+        } catch (_: Exception) {
+            false
+        }
+        (launchState as? LaunchState.SignIn)?.let { current ->
+            if (current.googleEnabled != enabled) {
+                launchState = current.copy(googleEnabled = enabled)
+            }
+        }
+    }
+
+    /**
+     * Bind this screen from a Google account, via the device authorisation grant.
+     *
+     * The TV shows a code and polls; the installer approves on their own phone. No OAuth
+     * secret and no Google SDK live here -- the server does both halves of the exchange,
+     * which is what lets this work on the AOSP boxes that have no Play Services at all.
+     */
+    private suspend fun startGoogleSignIn(deviceId: String, screenName: String) {
+        launchState = LaunchState.SignIn(busy = true)
+
+        val started = try {
+            ApiClient.service(this).googleStart(
+                GoogleStartRequest(
+                    device_id = deviceId,
+                    name = screenName.trim().ifBlank { null }
+                )
+            )
+        } catch (_: Exception) {
+            launchState = LaunchState.SignIn(
+                error = "No connection. Check the server address and try again."
+            )
+            return
+        }
+
+        val body = started.body()
+        if (!started.isSuccessful || body == null) {
+            launchState = LaunchState.SignIn(
+                error = when (started.code()) {
+                    // Not a fault: this deployment simply has no Google credentials, and
+                    // the password route above still works.
+                    503 -> "Google sign-in is not enabled on this server. Use your OLRAC account."
+                    502 -> "Could not reach Google. Check the connection and try again."
+                    else -> "Could not start Google sign-in (error ${started.code()})."
+                }
+            )
+            return
+        }
+
+        launchState = LaunchState.GoogleSignIn(
+            userCode = body.user_code,
+            verificationUrl = body.verification_url
+        )
+        pollGoogleSignIn(body)
+    }
+
+    /** Ask the server whether the phone half has finished, until it has or time runs out. */
+    private suspend fun pollGoogleSignIn(started: GoogleStartResponse) {
+        // Googles own floor, echoed back by the server. Polling faster earns `slow_down`,
+        // not a token, so the interval is widened rather than ignored when that arrives.
+        var intervalMs = started.interval.coerceAtLeast(5) * 1_000L
+        val deadline = System.currentTimeMillis() + started.expires_in * 1_000L
+
+        while (System.currentTimeMillis() < deadline) {
+            delay(intervalMs)
+            // The installer backed out to the sign-in form; stop polling with them.
+            val showing = launchState as? LaunchState.GoogleSignIn ?: return
+
+            val response = try {
+                ApiClient.service(this).googlePoll(GooglePollRequest(started.poll_token))
+            } catch (_: Exception) {
+                // A dropped connection mid-approval is not a refusal. Keep waiting: the
+                // code on screen is still valid and the installer still holds a phone.
+                continue
+            }
+
+            if (!response.isSuccessful) {
+                launchState = showing.copy(
+                    error = when (response.code()) {
+                        403 -> "That Google account cannot add screens here. " +
+                            "Check it is on your OLRAC profile, with an owner or editor role."
+                        401 -> "This sign-in expired. Go back and start again."
+                        409 -> "This workspace has reached its screen limit."
+                        else -> "Sign in failed (error ${response.code()})."
+                    }
+                )
+                return
+            }
+
+            when (val status = response.body()?.status) {
+                "bound" -> {
+                    completePairing(response.body()?.screen?.name, pairCode = null)
+                    return
+                }
+                "pending" -> Unit
+                "slow_down" -> intervalMs += 5_000L
+                "denied" -> {
+                    launchState = showing.copy(error = "That request was declined on the phone.")
+                    return
+                }
+                "expired" -> {
+                    launchState = showing.copy(error = "This code expired. Go back and start again.")
+                    return
+                }
+                else -> {
+                    launchState = showing.copy(error = "Unexpected reply from the server ($status).")
+                    return
+                }
+            }
+        }
+
+        (launchState as? LaunchState.GoogleSignIn)?.let {
+            launchState = it.copy(error = "This code expired. Go back and start again.")
+        }
     }
 
     /** Fallback route: mint a code here and let a dashboard user claim it, as before. */
@@ -408,6 +582,7 @@ private fun SignInScreen(
     defaultHome: Boolean,
     onSignIn: (String, String, String) -> Unit,
     onUsePairingCode: () -> Unit,
+    onUseGoogle: (String) -> Unit,
     onSaveServer: (String) -> Unit,
     onChooseHome: () -> Unit
 ) {
@@ -474,9 +649,78 @@ private fun SignInScreen(
             Text(if (state.busy) "Signing in..." else "Sign in")
         }
 
+        if (state.googleEnabled) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = { onUseGoogle(screenName) },
+                enabled = !state.busy,
+                modifier = Modifier.fillMaxWidth(),
+                colors = secondaryButtonColors()
+            ) {
+                Text("Sign in with Google")
+            }
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
         TextButton(onClick = onUsePairingCode, enabled = !state.busy) {
             Text("Use a pairing code instead", color = Color.LightGray)
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+        ServerControls(
+            serverUrl = serverUrl,
+            serverError = serverError,
+            defaultHome = defaultHome,
+            onSave = onSaveServer,
+            onChooseHome = onChooseHome
+        )
+    }
+}
+
+/**
+ * The Google half of the flow, waiting on a phone.
+ *
+ * Shows the code large enough to read from across a room -- an installer is standing at
+ * the TV holding a phone, not sitting in front of it. The URL is spelled out in full
+ * because there is nothing on a TV to click.
+ */
+@Composable
+private fun GoogleSignInScreen(
+    state: LaunchState.GoogleSignIn,
+    serverUrl: String,
+    serverError: String?,
+    defaultHome: Boolean,
+    onCancel: () -> Unit,
+    onSaveServer: (String) -> Unit,
+    onChooseHome: () -> Unit
+) {
+    SetupSurface {
+        Text(text = "Sign in with Google", color = Color.White, textAlign = TextAlign.Center)
+        Text(
+            text = "On your phone, open ${state.verificationUrl} and enter this code.",
+            color = Color.LightGray,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(
+            text = state.userCode,
+            color = AccentGreen,
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.displaySmall
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+        Text(
+            text = state.error
+                ?: "Waiting for approval... this screen joins the workspace of whoever approves.",
+            color = if (state.error != null) Color(0xFFFF8A80) else Color.LightGray,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+        TextButton(onClick = onCancel) {
+            Text("Back to sign in", color = Color.LightGray)
         }
 
         Spacer(modifier = Modifier.height(20.dp))
@@ -658,6 +902,19 @@ private fun ServerControls(
         Button(onClick = onChooseHome, colors = secondaryButtonColors()) {
             Text("Choose OLRAC as TV launcher")
         }
+    }
+    
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Spacer(modifier = Modifier.height(18.dp))
+    Button(
+        onClick = { 
+            val intent = Intent(Settings.ACTION_SETTINGS)
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try { context.startActivity(intent) } catch (e: Exception) {}
+        }, 
+        colors = secondaryButtonColors()
+    ) {
+        Text("Open Android System Settings")
     }
 }
 

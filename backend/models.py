@@ -205,6 +205,17 @@ class Screen(Base):
     sync_playback = Column(Boolean, nullable=False, default=False)
     sync_role = Column(String, nullable=False, default="leader")
     leader_screen_id = Column(Integer, ForeignKey("screens.id", ondelete="SET NULL"), nullable=True)
+    # When an operator let this screen into the fleet. NULL means it has claimed an
+    # organisation but nobody has confirmed it yet, so it syncs nothing.
+    #
+    # Its own column rather than a `status` value: status is rewritten to "online" by
+    # every heartbeat (see the heartbeat route), so an approval state parked there would
+    # be erased within a minute of the screen powering on.
+    #
+    # Only the self-service routes leave this NULL. /pair and /enroll already prove intent
+    # -- one needs an operator at the dashboard, the other a token an operator issued --
+    # so re-confirming them would be a second lock on the same door.
+    approved_at = Column(UtcDateTime, nullable=True)
     # Mon..Sun operating windows as {"mon": ["00:00", "23:59"], ...}; null means always on.
     operating_hours = Column(JSON, nullable=True)
     # "always" | "hours" | "never" — kept separate so clearing the schedule does not

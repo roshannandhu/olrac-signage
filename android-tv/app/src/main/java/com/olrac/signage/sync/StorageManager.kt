@@ -9,7 +9,6 @@ import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
-import java.util.UUID
 
 class StorageManager(private val context: Context) {
 
@@ -21,46 +20,75 @@ class StorageManager(private val context: Context) {
         expectedSizeBytes: Long?,
         protectedNames: Set<String> = emptySet()
     ): File? = withContext(Dispatchers.IO) {
-        // Enforce quota before downloading
         val requiredSpace = expectedSizeBytes ?: DEFAULT_ASSUMED_SIZE_BYTES
-        ensureQuota(requiredSpace, protectedNames + finalFile.name)
 
-        val temporaryFile = File(
-            context.filesDir,
-            ".olrac-download-${UUID.randomUUID()}-${finalFile.name}"
-        )
+        // Fixed temporary file name so retries target the same file for resuming
+        val temporaryFile = File(context.filesDir, "$PART_PREFIX${finalFile.name}.part")
+        // Named before the sweep, and protected during it: partial downloads are now
+        // evictable (see ensureQuota), and the one we are about to resume must not be the
+        // file we free space by deleting.
+        ensureQuota(requiredSpace, protectedNames + finalFile.name + temporaryFile.name)
+        var downloadedBytes = 0L
+        var append = false
+        
+        if (temporaryFile.exists()) {
+            downloadedBytes = temporaryFile.length()
+            if (expectedSizeBytes != null && expectedSizeBytes > 0 && downloadedBytes >= expectedSizeBytes) {
+                // Stale or exceeded part file; start fresh
+                temporaryFile.delete()
+                downloadedBytes = 0L
+            } else if (downloadedBytes > 0) {
+                append = true
+            }
+        }
+
         try {
-            val request = Request.Builder().url(url).build()
-            client.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) {
-                    temporaryFile.delete()
+            val requestBuilder = Request.Builder().url(url)
+            if (append) {
+                requestBuilder.header("Range", "bytes=$downloadedBytes-")
+            }
+            
+            client.newCall(requestBuilder.build()).execute().use { response ->
+                if (!response.isSuccessful && response.code != 206) {
+                    if (response.code == 416) temporaryFile.delete() // Range Not Satisfiable
                     return@withContext null
                 }
-                val body = response.body ?: run {
+                val body = response.body ?: return@withContext null
+
+                // If the server ignored the Range header (returned 200 instead of 206), we must overwrite
+                if (append && response.code != 206) {
+                    append = false
+                    downloadedBytes = 0L
                     temporaryFile.delete()
-                    return@withContext null
                 }
-                
-                val md = MessageDigest.getInstance("SHA-256")
-                var downloadedBytes = 0L
-                
-                FileOutputStream(temporaryFile).use { output ->
+
+                FileOutputStream(temporaryFile, append).use { output ->
                     body.byteStream().use { input -> 
                         val buffer = ByteArray(8192)
                         var bytesRead: Int
                         while (input.read(buffer).also { bytesRead = it } != -1) {
                             output.write(buffer, 0, bytesRead)
-                            md.update(buffer, 0, bytesRead)
                             downloadedBytes += bytesRead
                         }
                     }
                     output.fd.sync()
                 }
-                
+
                 if (expectedSizeBytes != null && expectedSizeBytes > 0 && downloadedBytes != expectedSizeBytes) {
                     Log.e(TAG, "Size mismatch for ${finalFile.name}: expected $expectedSizeBytes, got $downloadedBytes")
-                    temporaryFile.delete()
+                    // Do NOT delete the temporary file if it's truncated, allow it to resume next sync
+                    if (downloadedBytes > expectedSizeBytes) temporaryFile.delete()
                     return@withContext null
+                }
+
+                // Do a single SHA-256 pass over the completed file
+                val md = MessageDigest.getInstance("SHA-256")
+                temporaryFile.inputStream().use { input ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        md.update(buffer, 0, bytesRead)
+                    }
                 }
                 
                 val actualSha256 = md.digest().joinToString("") { "%02x".format(it) }
@@ -70,15 +98,9 @@ class StorageManager(private val context: Context) {
                     return@withContext null
                 }
             }
-            if (temporaryFile.length() == 0L) {
-                temporaryFile.delete()
-                null
-            } else {
-                temporaryFile
-            }
+            temporaryFile
         } catch (e: Exception) {
             Log.e(TAG, "Download failed for ${finalFile.name}", e)
-            temporaryFile.delete()
             null
         }
     }
@@ -96,8 +118,14 @@ class StorageManager(private val context: Context) {
      */
     private fun ensureQuota(requiredSpace: Long, protectedNames: Set<String>) {
         val filesDir = context.filesDir
+        // Partial downloads are counted and evicted alongside finished media. They used to
+        // be deleted on every failure path, so they never accumulated; now they are kept
+        // deliberately so a download can resume, and a flaky link can leave a day's worth of
+        // them on disk. Counting only "content-" files made that storage invisible here:
+        // usableSpace kept shrinking, nothing in the list was evictable, and every further
+        // download failed until the 24h sweep — with the screen unable to free itself.
         val cacheFiles = filesDir.listFiles()
-            ?.filter { it.isFile && it.name.startsWith(CACHE_PREFIX) }
+            ?.filter { it.isFile && (it.name.startsWith(CACHE_PREFIX) || it.name.startsWith(PART_PREFIX)) }
             ?: emptyList()
         var totalUsed = cacheFiles.sumOf { it.length() }
 
@@ -136,6 +164,7 @@ class StorageManager(private val context: Context) {
     companion object {
         private const val TAG = "StorageManager"
         private const val CACHE_PREFIX = "content-"
+        const val PART_PREFIX = ".olrac-download-"
         private const val QUOTA_BYTES = 10L * 1024 * 1024 * 1024
         /** Never fill the partition completely; Android misbehaves near zero. */
         private const val DEVICE_RESERVE_BYTES = 300L * 1024 * 1024

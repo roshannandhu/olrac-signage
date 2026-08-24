@@ -13,6 +13,9 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from .limiter import limiter
 
 from . import database, models
 from .billing import ensure_billing_catalog
@@ -119,6 +122,8 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="OLRAC Signage API", version="2.0.0", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 allowed_origins = [
     origin.strip()

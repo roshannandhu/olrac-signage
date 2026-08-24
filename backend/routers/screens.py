@@ -5,12 +5,14 @@ import string
 from datetime import datetime, timedelta, timezone
 
 import boto3
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import database, models, schemas
+from ..limiter import limiter
+from .. import google_device
 from ..media_selection import select_rendition
 from .. import rollout
 from ..rotation import normalise as normalise_rotation, resolve_rotation
@@ -119,6 +121,29 @@ def verify_device_auth(device_id: str, credentials: HTTPAuthorizationCredentials
     return screen
 
 
+@router.get("/auth-methods")
+def auth_methods():
+    """Which sign-in routes this deployment actually offers.
+
+    google_device.is_configured() existed from the start and was read in exactly one
+    place -- to answer /google/start with a 503. Nothing ever told the TV, so the player
+    always drew a "Sign in with Google" button, and on a deployment with no Google
+    credentials pressing it could only ever produce an error. The intent to gate it was
+    written down in google_device's docstring and never implemented; this is that missing
+    half.
+
+    Unauthenticated on purpose: it is read by a TV that has no credential yet, and it
+    discloses nothing but which buttons to draw.
+    """
+    return {
+        "google": google_device.is_configured(),
+        # Always available. Listed rather than assumed so the player renders from one
+        # answer instead of hard-coding two of the three.
+        "password": True,
+        "pair_code": True,
+    }
+
+
 @router.post("/register", response_model=schemas.RegisterResponse)
 def register_tv(req: schemas.RegisterRequest, db: Session = Depends(database.get_db)):
     db_screen = db.query(models.Screen).filter(models.Screen.device_id == req.device_id).first()
@@ -181,6 +206,9 @@ def pair_screen(
 
     db_screen.status = "offline"
     db_screen.organization_id = scope.organization_id
+    # Approved on the spot: redeeming a code requires an authenticated operator at the
+    # dashboard, which is the same confirmation the approval queue exists to collect.
+    db_screen.approved_at = models.utcnow()
     db_screen.name = f"Screen {db_screen.pair_code}"
     db_screen.assignment_updated_at = models.utcnow()
     scope.db.commit()
@@ -188,8 +216,84 @@ def pair_screen(
     return db_screen
 
 
+def bind_screen_to_org(
+    db: Session,
+    *,
+    device_id: str,
+    user: models.User,
+    name: str | None,
+    conflict_error: HTTPException,
+    how: str,
+) -> models.Screen:
+    """Claim `device_id` for `user`'s organisation, applying every guard /pair gets free.
+
+    Shared by the two routes that bind a screen from a credential presented on the TV
+    itself -- the password sign-in and the Google device flow. It lives here rather than
+    being repeated in each because the checks below are the entire security boundary for
+    an endpoint the device reaches with no prior credential: a guard added to one caller
+    and forgotten in the other is a tenant leak, not a cosmetic inconsistency.
+
+    `conflict_error` is supplied by the caller so each route can answer a cross-tenant
+    attempt with the same generic message it uses for a bad credential, rather than
+    confirming that a device id exists.
+    """
+    if user.role not in ("owner", "editor"):
+        raise HTTPException(status_code=403, detail="This account cannot add screens")
+    if not user.organization_id:
+        raise HTTPException(status_code=403, detail="This account has no workspace")
+
+    screen = db.query(models.Screen).filter(models.Screen.device_id == device_id).first()
+
+    if screen and screen.organization_id not in (None, user.organization_id):
+        # A device already belonging to another organisation must never be re-homed by
+        # signing in with a different organisation's account: the screen would move
+        # tenants and go dark for its rightful owner. These routes are reachable without
+        # any prior device credential, so this is the only place the boundary holds.
+        logger.warning(
+            "Rejected cross-tenant claim for device %s: owned by org %s, user belongs to org %s",
+            device_id, screen.organization_id, user.organization_id,
+        )
+        raise conflict_error
+
+    # A screen that is new or still waiting to be paired is not yet counted against the
+    # plan. Re-claiming a device this organisation already owns is not a new screen.
+    if not screen or screen.status == "waiting_pairing":
+        ensure_screen_quota(db, user.organization_id, "add another screen")
+
+    if not screen:
+        screen = models.Screen(device_id=device_id)
+        db.add(screen)
+
+    screen.organization_id = user.organization_id
+    screen.status = "offline"
+    # approved_at is deliberately NOT set here. This is the self-service path: somebody
+    # standing at the TV claimed the organisation on their own, so an operator confirms it
+    # from the dashboard before it plays anything. Re-claiming a screen that is already
+    # approved leaves the existing timestamp alone, so a factory reset or a re-sign-in does
+    # not knock a working screen back into the queue.
+    screen.name = (name or "").strip() or screen.name or f"Screen {device_id[:6]}"
+    # Drop any code minted by an earlier /register: the screen is claimed now, and a stale
+    # code left in place could still be redeemed by somebody else.
+    screen.pair_code = None
+    screen.pair_code_expires_at = None
+    screen.assignment_updated_at = models.utcnow()
+
+    db.commit()
+    db.refresh(screen)
+    logger.info("Device %s %s to org %s by %s", device_id, how, user.organization_id, user.username)
+    return screen
+
 @router.post("/sign-in", response_model=schemas.ScreenResponse)
-def sign_in_screen(req: schemas.ScreenSignInRequest, db: Session = Depends(database.get_db)):
+# Matches the reasoning on google/start below: an installer bringing up a room of twenty
+# screens is one IP making twenty legitimate attempts in a few minutes, and a five-per-
+# minute cap fails exactly the install it is meant to protect. Still tight enough to make
+# password guessing through this route pointless.
+@limiter.limit("30/minute")
+def sign_in_screen(
+    request: Request,
+    req: schemas.ScreenSignInRequest, 
+    db: Session = Depends(database.get_db)
+):
     """Bind this device to the organisation of whoever signs in on the TV.
 
     The pairing-code flow needs a second person at a dashboard within five minutes. If the
@@ -210,48 +314,154 @@ def sign_in_screen(req: schemas.ScreenSignInRequest, db: Session = Depends(datab
     user = db.query(models.User).filter(models.User.username == req.username).first()
     if not user or not user.is_active or not verify_password(req.password, user.hashed_password):
         raise CREDENTIALS_ERROR
-    if user.role not in ("owner", "editor"):
-        raise HTTPException(status_code=403, detail="This account cannot add screens")
-    if not user.organization_id:
-        raise HTTPException(status_code=403, detail="This account has no workspace")
 
-    screen = db.query(models.Screen).filter(models.Screen.device_id == req.device_id).first()
+    return bind_screen_to_org(
+        db,
+        device_id=req.device_id,
+        user=user,
+        name=req.name,
+        conflict_error=CREDENTIALS_ERROR,
+        how="signed in",
+    )
 
-    if screen and screen.organization_id not in (None, user.organization_id):
-        # A device already belonging to another organisation must never be re-homed by
-        # signing in with a different organisation's account: the screen would move
-        # tenants and go dark for its rightful owner. This endpoint is reachable without
-        # any prior device credential, so this is the only place the boundary holds.
-        # Same generic error as bad credentials, so device ids cannot be probed.
-        logger.warning(
-            "Rejected cross-tenant sign-in for device %s: owned by org %s, user belongs to org %s",
-            req.device_id, screen.organization_id, user.organization_id,
+
+# The poll token is minted and read only here, so the marker is local rather than shared.
+GOOGLE_POLL_TYPE = "google_poll"
+
+
+@router.post("/google/start", response_model=schemas.GoogleDeviceStartResponse)
+# Loose on purpose. Each call spends a Google device-code quota unit, so it cannot be
+# unlimited -- but a whole site sits behind one NAT address, and an installer bringing up
+# a room of twenty screens is one IP making twenty legitimate calls in a few minutes. A
+# tight per-IP cap here would fail exactly the install it is meant to protect.
+@limiter.limit("30/minute")
+def google_device_start(
+    request: Request,
+    req: schemas.GoogleDeviceStartRequest,
+):
+    """Begin a Google sign-in for this TV and hand back the code to put on screen.
+
+    The TV never sees the client secret or the device_code: it gets a user_code to display
+    and an opaque poll token. Signage APKs are sideloaded and unpacked as a matter of
+    routine, so anything in the APK is public.
+    """
+    from .auth import create_access_token
+
+    if not google_device.is_configured():
+        # Not an error state for the product -- the password and pairing-code routes still
+        # work -- so the player shows this as a plain message pointing at them, rather
+        # than as a failure worth retrying.
+        raise HTTPException(status_code=503, detail="Google sign-in is not enabled on this server")
+
+    try:
+        started = google_device.start()
+    except google_device.GoogleError as error:
+        logger.warning("Google device-code request failed for %s: %s", req.device_id, error)
+        raise HTTPException(status_code=502, detail="Could not reach Google. Try again.")
+
+    poll_token = create_access_token(
+        {
+            "sub": f"device:{req.device_id}",
+            "typ": GOOGLE_POLL_TYPE,
+            "dc": started["device_code"],
+            "nm": req.name,
+        },
+        # Dies exactly when Google's own code does, so an abandoned attempt cannot be
+        # resumed later against a code that has since been reissued to another screen.
+        expires_delta=timedelta(seconds=started["expires_in"]),
+    )
+
+    logger.info("Started Google sign-in for device %s", req.device_id)
+    return schemas.GoogleDeviceStartResponse(
+        user_code=started["user_code"],
+        verification_url=started["verification_url"],
+        interval=started["interval"],
+        expires_in=started["expires_in"],
+        poll_token=poll_token,
+    )
+
+
+@router.post("/google/poll", response_model=schemas.GoogleDevicePollResponse)
+def google_device_poll(
+    req: schemas.GoogleDevicePollRequest,
+    db: Session = Depends(database.get_db),
+):
+    """Has the installer approved on their phone yet? If so, bind the screen.
+
+    Deliberately not rate limited. A TV is *supposed* to call this every few seconds for
+    up to fifteen minutes -- that is what the grant specifies -- so a per-minute cap here
+    would break the only flow it guards.
+    """
+    from jose import JWTError, jwt
+
+    from .auth import ALGORITHM, get_secret_key
+
+    INVALID = HTTPException(status_code=401, detail="This sign-in has expired. Start again on the TV.")
+
+    try:
+        claims = jwt.decode(req.poll_token, get_secret_key(), algorithms=[ALGORITHM])
+    except JWTError:
+        raise INVALID
+    # A session token is also signed with this key and would otherwise decode cleanly
+    # here; the type marker is what stops one being replayed as the other.
+    if claims.get("typ") != GOOGLE_POLL_TYPE:
+        raise INVALID
+
+    device_id = str(claims.get("sub") or "").removeprefix("device:")
+    device_code = claims.get("dc")
+    if not device_id or not device_code:
+        raise INVALID
+
+    try:
+        result = google_device.poll(device_code)
+    except google_device.GoogleError as error:
+        logger.warning("Google poll failed for device %s: %s", device_id, error)
+        raise HTTPException(status_code=502, detail="Could not reach Google. Try again.")
+
+    if result["status"] != "ok":
+        # pending / slow_down / denied / expired all pass straight through to the player,
+        # which is the only party that can act on them.
+        return schemas.GoogleDevicePollResponse(status=result["status"])
+
+    email = result.get("email") or ""
+    if not email or not result.get("email_verified"):
+        # An unverified address proves nothing about who owns it, so it must never be
+        # allowed to match an account.
+        raise HTTPException(
+            status_code=403,
+            detail="That Google account has no verified email address.",
         )
-        raise CREDENTIALS_ERROR
 
-    # A screen that is new or still waiting to be paired is not yet counted against the
-    # plan. Re-signing in on a device this organisation already owns is not a new screen.
-    if not screen or screen.status == "waiting_pairing":
-        ensure_screen_quota(db, user.organization_id, "add another screen")
+    # Google authenticates a person; it does not authorise them. The account must already
+    # exist in this workspace -- otherwise any Google address on earth could bind a screen
+    # into somebody's tenant. Matched case-insensitively because Google lowercases what it
+    # returns and the profile field does not.
+    user = db.query(models.User).filter(func.lower(models.User.email) == email).first()
+    if not user or not user.is_active:
+        logger.warning("Google sign-in for device %s: no active account for that address", device_id)
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "No OLRAC account uses that Google address. Add it to your profile in the "
+                "dashboard under Account, then try again."
+            ),
+        )
 
-    if not screen:
-        screen = models.Screen(device_id=req.device_id)
-        db.add(screen)
-
-    screen.organization_id = user.organization_id
-    screen.status = "offline"
-    screen.name = (req.name or "").strip() or screen.name or f"Screen {req.device_id[:6]}"
-    # Drop any code minted by an earlier /register: the screen is claimed now, and a stale
-    # code left in place could still be redeemed by somebody else.
-    screen.pair_code = None
-    screen.pair_code_expires_at = None
-    screen.assignment_updated_at = models.utcnow()
-
-    db.commit()
-    db.refresh(screen)
-    logger.info("Device %s signed in to org %s by %s", req.device_id, user.organization_id, user.username)
-    return screen
-
+    screen = bind_screen_to_org(
+        db,
+        device_id=device_id,
+        user=user,
+        name=claims.get("nm"),
+        conflict_error=HTTPException(
+            status_code=403,
+            detail="This screen belongs to another workspace.",
+        ),
+        how="signed in with Google",
+    )
+    return schemas.GoogleDevicePollResponse(
+        status="bound",
+        screen=schemas.ScreenResponse.model_validate(screen),
+    )
 
 @router.post("/enroll", response_model=schemas.EnrollResponse)
 def enroll_device(req: schemas.EnrollRequest, db: Session = Depends(database.get_db)):
@@ -327,6 +537,9 @@ def enroll_device(req: schemas.EnrollRequest, db: Session = Depends(database.get
     screen.device_secret_hash = get_password_hash(device_secret)
     screen.organization_id = token.organization_id
     screen.status = "offline"
+    # The enrollment token was minted by an owner for exactly this, so the screen is
+    # already authorised; making it queue for approval would gate zero-touch on a human.
+    screen.approved_at = models.utcnow()
     screen.installation_id = req.installation_id
     if not screen.name:
         screen.name = f"Screen {req.device_id[:6]}"
@@ -346,7 +559,17 @@ def enroll_device(req: schemas.EnrollRequest, db: Session = Depends(database.get
 
 
 @router.post("/auth", response_model=schemas.DeviceTokenResponse)
-def auth_device(req: schemas.DeviceAuthRequest, db: Session = Depends(database.get_db)):
+# Sized for a site reconnecting, not for a single device. Fifty screens in one mall leave
+# through one public IP and all re-authenticate at once after a power cut -- the moment a
+# tight cap does the most damage. The credential here is a 32-byte secret, so brute force
+# is infeasible at any rate this would permit; the cap exists to bound abuse, not to be the
+# thing standing between an attacker and the fleet.
+@limiter.limit("120/minute")
+def auth_device(
+    request: Request,
+    req: schemas.DeviceAuthRequest, 
+    db: Session = Depends(database.get_db)
+):
     screen = db.query(models.Screen).filter(models.Screen.device_id == req.device_id).first()
     if not screen or not screen.device_secret_hash:
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -672,6 +895,52 @@ async def heartbeat(
     }
 
 
+@router.post("/{screen_id}/approve", response_model=schemas.ScreenResponse)
+def approve_screen(
+    screen_id: int,
+    scope: TenantScope = Depends(require_tenant_roles("owner")),
+):
+    """Let a self-enrolled screen into the fleet.
+
+    Owner-only rather than owner-or-editor: this is the step that decides a device is
+    genuinely ours, and it is the only thing standing between a Google account that can
+    sign in and a screen that plays our content.
+    """
+    screen = scope.get(models.Screen, screen_id)
+    if not screen:
+        raise HTTPException(status_code=404, detail="Screen not found")
+    if screen.approved_at is None:
+        screen.approved_at = models.utcnow()
+        # The player polls with `since`; without a fresh marker an approved screen would
+        # keep getting 204 and stay dark until something else touched the row.
+        screen.assignment_updated_at = models.utcnow()
+        scope.db.commit()
+        scope.db.refresh(screen)
+        logger.info("Screen %s approved by %s", screen_id, scope.user.username)
+    return screen
+
+
+@router.post("/{screen_id}/revoke-approval", response_model=schemas.ScreenResponse)
+def revoke_screen_approval(
+    screen_id: int,
+    scope: TenantScope = Depends(require_tenant_roles("owner")),
+):
+    """Put a screen back in the queue, e.g. a device that left the estate.
+
+    Kept rather than only offering delete: deleting loses the play history that billing
+    and the client reports are built from.
+    """
+    screen = scope.get(models.Screen, screen_id)
+    if not screen:
+        raise HTTPException(status_code=404, detail="Screen not found")
+    screen.approved_at = None
+    screen.assignment_updated_at = models.utcnow()
+    scope.db.commit()
+    scope.db.refresh(screen)
+    logger.info("Screen %s approval revoked by %s", screen_id, scope.user.username)
+    return screen
+
+
 @router.post("/{screen_id}/assign/{playlist_id}")
 async def assign_playlist(
     screen_id: int,
@@ -803,6 +1072,24 @@ def sync_tv(
 ):
     screen = verify_device_auth(device_id, credentials, db)
 
+    # Not yet let into the fleet: answer with the state and nothing else. Deliberately
+    # ahead of the 204 short-circuit below -- a screen that was playing before it was
+    # un-approved must be told now, not left running a cached playlist until something
+    # else happens to change its marker.
+    #
+    # organization_id guards the condition: a screen that has not been claimed at all also
+    # has no approved_at, and answering "pending_approval" for it would hide the
+    # waiting_pairing state the player uses to decide to show its pairing code -- a brand
+    # new TV would sit blank instead, and could never be paired.
+    if screen.organization_id is not None and screen.approved_at is None:
+        return schemas.SyncResponse(
+            status="pending_approval",
+            playlist=None,
+            fit_mode=screen.fit_mode or "contain",
+            maintenance_pin=screen.maintenance_pin,
+            sync_interval_seconds=player_sync_interval_seconds(),
+        )
+
     playlist_id = resolve_screen_playlist(screen, db)
     playlist = (
         db.query(models.Playlist)
@@ -852,6 +1139,8 @@ def sync_tv(
     return schemas.SyncResponse(
         fit_mode=screen.fit_mode or "contain",
         maintenance_pin=screen.maintenance_pin,
+        operating_mode=screen.operating_mode or "always",
+        operating_hours=screen.operating_hours,
         playlist=playlist_payload,
         playlist_updated_at=marker,
         status=screen.status,

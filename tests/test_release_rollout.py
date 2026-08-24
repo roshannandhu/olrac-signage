@@ -65,7 +65,7 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 from backend import rollout  # noqa: E402
 from backend.database import Base, get_db  # noqa: E402
 from backend.main import app  # noqa: E402
-from backend.models import AppRelease, Organization, Screen, User  # noqa: E402
+from backend.models import AppRelease, Organization, Screen, User, utcnow  # noqa: E402
 from backend.routers.auth import get_password_hash  # noqa: E402
 
 engine = create_engine(os.environ["DATABASE_URL"])
@@ -103,8 +103,10 @@ def setup_db():
         User(organization_id=org.id, username="root", role="super_admin",
              hashed_password=get_password_hash("password123"), is_active=True),
     ])
+    # Already live in the field; screens default to pending. See test_screen_approval.py.
     screen = Screen(name="Panel", organization_id=org.id,
-                    device_id="testdev", device_secret_hash="hash", status="online")
+                    device_id="testdev", device_secret_hash="hash", status="online",
+                    approved_at=utcnow())
     db.add(screen)
     db.commit()
     db.refresh(screen)

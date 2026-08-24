@@ -32,7 +32,7 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.database import Base, get_db
 from backend.main import app
-from backend.models import User, Organization, Screen, Playlist, PlaylistItem, Content, MediaRendition
+from backend.models import User, Organization, Screen, Playlist, PlaylistItem, Content, MediaRendition, utcnow
 from backend.routers.auth import get_password_hash
 from backend.routers.screens import verify_device_auth
 
@@ -115,7 +115,9 @@ def setup_db():
     db.commit()
     
     # Create a screen
-    screen = Screen(name="Test Screen", organization_id=org.id, playlist_id=playlist.id, device_id="testdev", device_secret_hash="hash")
+    # approved_at: a fixture stands for a screen already live in the field. Screens
+    # default to pending, so without this the sync gate correctly returns no playlist.
+    screen = Screen(name="Test Screen", organization_id=org.id, playlist_id=playlist.id, device_id="testdev", device_secret_hash="hash", approved_at=utcnow())
     db.add(screen)
     db.commit()
     db.refresh(screen)

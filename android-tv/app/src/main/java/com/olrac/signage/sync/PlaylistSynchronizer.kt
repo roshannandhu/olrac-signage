@@ -264,8 +264,11 @@ class PlaylistSynchronizer(context: Context) {
     }
 
     private fun cleanupStaleDownloads() {
+        val yesterday = System.currentTimeMillis() - 24 * 60 * 60 * 1000L
         appContext.filesDir.listFiles()?.forEach { file ->
-            if (file.name.startsWith(".olrac-download-")) file.delete()
+            if (file.name.startsWith(StorageManager.PART_PREFIX) && file.lastModified() < yesterday) {
+                file.delete()
+            }
         }
     }
 

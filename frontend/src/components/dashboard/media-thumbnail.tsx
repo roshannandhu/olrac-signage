@@ -4,8 +4,11 @@ import Image from 'next/image'
 import { ImageIcon } from 'lucide-react'
 import type { ContentItem } from '@/lib/types'
 
+import { resolveMediaUrl } from '@/lib/api'
+
 export function MediaThumbnail({ item, className = '' }: { item: ContentItem; className?: string }) {
-  const imageSource = item.thumbnail || (item.type === 'image' ? item.file_url : null)
+  const imageSource = resolveMediaUrl(item.thumbnail || (item.type === 'image' ? item.file_url : null))
+  const videoSource = resolveMediaUrl(item.file_url)
   return (
     <div className={`bg-muted relative overflow-hidden ${className}`}>
       {imageSource ? (
@@ -18,7 +21,7 @@ export function MediaThumbnail({ item, className = '' }: { item: ContentItem; cl
           className="object-cover transition-transform duration-500 group-hover/card:scale-[1.03] motion-reduce:transition-none"
         />
       ) : item.type === 'video' ? (
-        <video src={item.file_url} muted preload="metadata" className="size-full object-cover" aria-label={`${item.name} preview`} />
+        <video src={videoSource} muted preload="metadata" className="size-full object-cover" aria-label={`${item.name} preview`} />
       ) : (
         <div className="text-muted-foreground grid size-full place-items-center">
           <ImageIcon className="size-7" />

@@ -138,6 +138,54 @@ class ScreenSignInRequest(BaseModel):
     name: Optional[str] = Field(default=None, max_length=120)
 
 
+class GoogleWebSignInRequest(BaseModel):
+    """The authorization code a browser just came back from Google holding."""
+
+    code: str
+    # Echoed back to Google, which requires it to match the one used to obtain the code.
+    redirect_uri: str
+
+
+class GoogleDeviceStartRequest(BaseModel):
+    """A TV asking for a Google code to put on screen."""
+
+    device_id: str
+    name: Optional[str] = Field(default=None, max_length=120)
+
+
+class GoogleDeviceStartResponse(BaseModel):
+    """What the TV displays, plus the handle it polls with.
+
+    `poll_token` is a short-lived JWT holding the device_code and the device_id it was
+    issued for. Google's device_code is meant to live on the device, but on its own it
+    says nothing about *which* screen is being claimed -- wrapping the pair means a code
+    lifted off one TV cannot be redeemed to bind a different one.
+    """
+
+    user_code: str
+    verification_url: str
+    interval: int
+    expires_in: int
+    poll_token: str
+
+
+class GoogleDevicePollRequest(BaseModel):
+    poll_token: str
+
+
+class GoogleDevicePollResponse(BaseModel):
+    """Where the approval has got to.
+
+    `slow_down` is passed through rather than swallowed: Google returns it when the TV is
+    polling too fast, and the player has to widen its own interval or it will simply keep
+    earning the same answer.
+    """
+
+    status: Literal["pending", "slow_down", "denied", "expired", "bound"]
+    screen: Optional["ScreenResponse"] = None
+    detail: Optional[str] = None
+
+
 class ScreenPatch(BaseModel):
     """Partial screen update: only the fields actually present are written.
 
@@ -223,6 +271,9 @@ class ScreenResponse(ScreenBase):
     leader_screen_id: Optional[int] = None
     operating_mode: OperatingMode = "always"
     operating_hours: Optional[dict[str, list[str]]] = None
+    # NULL means the screen claimed this organisation from the TV and is waiting for an
+    # operator to let it in. The dashboard reads this to build the approval queue.
+    approved_at: Optional[datetime] = None
     installation_id: Optional[str] = None
     last_seen: datetime
     playlist_id: Optional[int]
@@ -628,6 +679,12 @@ class SyncResponse(BaseModel):
     fit_mode: FitMode = "contain"
     # Cached by the player so the maintenance screen still opens with no network.
     maintenance_pin: Optional[str] = None
+    # The player blanks itself outside these, using its own clock, so a shop TV goes dark
+    # at closing time even when the network does not. Sent on every sync because the
+    # player evaluates them locally -- it must keep working through an outage, which is
+    # the whole point of the offline cache.
+    operating_mode: OperatingMode = "always"
+    operating_hours: Optional[dict[str, list[str]]] = None
 
 
 class PlanResponse(BaseModel):
@@ -820,3 +877,8 @@ class AlertSummaryResponse(BaseModel):
     critical: int
     warning: int
     unacknowledged: int
+
+
+# ScreenResponse is defined below the Google models that reference it, so the forward
+# reference is resolved here rather than left to be resolved on first use.
+GoogleDevicePollResponse.model_rebuild()

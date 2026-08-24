@@ -202,6 +202,15 @@ private fun DualSurfacePlayer(
             !PlayCompletion.isPlausible(startedAtMs, finishedAtMs)
         ) PlayEndReason.INTERRUPTED else reason
 
+        // 1970 Clock Drift Edge Case: If the TV lost power offline and has no RTC battery, 
+        // it resets to Jan 1 1970. Day-parting is broken and we cannot mathematically prove 
+        // when this ad played if NTP syncs before the next heartbeat. Flag it so it isn't billed.
+        val isTimeValid = startedAtMs > 1704067200000L // Jan 1, 2024
+        val finalError = if (!isTimeValid && error == null) "time_invalid_rtc_reset" else error
+        
+        // Also discard any stale offset from a previous timeline if the clock reset.
+        val effectiveOffset = if (isTimeValid) offset else null
+
         // Same id the checkpoint minted for this play, so a crash between this insert and
         // the checkpoint being cleared cannot produce a second record for it.
         val eventId = prefs.getString(CHECKPOINT_EVENT_ID, null)
@@ -215,12 +224,12 @@ private fun DualSurfacePlayer(
             campaignId = null, // Derived server side from the playlist; see routers/screens.py
             deviceStartedAt = formatter.format(java.util.Date(startedAtMs)),
             deviceFinishedAt = formatter.format(java.util.Date(finishedAtMs)),
-            correctedStartedAt = formatter.format(java.util.Date(startedAtMs + (offset ?: 0L))),
-            correctedFinishedAt = formatter.format(java.util.Date(finishedAtMs + (offset ?: 0L))),
+            correctedStartedAt = formatter.format(java.util.Date(startedAtMs + (effectiveOffset ?: 0L))),
+            correctedFinishedAt = formatter.format(java.util.Date(finishedAtMs + (effectiveOffset ?: 0L))),
             durationMs = durationMs,
-            status = PlayCompletion.status(effectiveReason, error),
-            errorMessage = error,
-            clockOffsetMs = offset
+            status = PlayCompletion.status(effectiveReason, finalError),
+            errorMessage = finalError,
+            clockOffsetMs = effectiveOffset
         )
 
         val dao = com.olrac.signage.data.AppDatabase.getDatabase(context).playEventDao()
@@ -589,6 +598,11 @@ private suspend fun recoverInterruptedPlay(context: android.content.Context) {
     val formatter = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply {
         timeZone = java.util.TimeZone.getTimeZone("UTC")
     }
+    
+    val isTimeValid = startedAt > 1704067200000L // Jan 1, 2024
+    val finalError = if (!isTimeValid) "time_invalid_rtc_reset" else null
+    val effectiveOffset = if (isTimeValid) offset else null
+
     val event = com.olrac.signage.data.PlayEventEntity(
         eventId = eventId,
         mediaId = contentId.takeIf { it > 0 },
@@ -596,12 +610,12 @@ private suspend fun recoverInterruptedPlay(context: android.content.Context) {
         campaignId = null,
         deviceStartedAt = formatter.format(java.util.Date(startedAt)),
         deviceFinishedAt = formatter.format(java.util.Date(lastAlive)),
-        correctedStartedAt = formatter.format(java.util.Date(startedAt + (offset ?: 0L))),
-        correctedFinishedAt = formatter.format(java.util.Date(lastAlive + (offset ?: 0L))),
+        correctedStartedAt = formatter.format(java.util.Date(startedAt + (effectiveOffset ?: 0L))),
+        correctedFinishedAt = formatter.format(java.util.Date(lastAlive + (effectiveOffset ?: 0L))),
         durationMs = PlayCompletion.durationMs(startedAt, lastAlive),
-        status = PlayCompletion.status(PlayEndReason.INTERRUPTED, null),
-        errorMessage = null,
-        clockOffsetMs = offset
+        status = PlayCompletion.status(PlayEndReason.INTERRUPTED, finalError),
+        errorMessage = finalError,
+        clockOffsetMs = effectiveOffset
     )
     com.olrac.signage.data.AppDatabase.getDatabase(context).playEventDao().insert(event)
     Log.i(TAG, "Recovered interrupted play for item $itemId (${event.durationMs}ms)")

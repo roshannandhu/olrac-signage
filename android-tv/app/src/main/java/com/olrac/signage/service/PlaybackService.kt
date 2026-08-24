@@ -169,7 +169,7 @@ class PlaybackService : Service() {
                 } catch (exception: Exception) {
                     Log.d(TAG, "Telemetry heartbeat unavailable", exception)
                 }
-                val nextDelaySeconds = if (outcome.successful) {
+                val baseDelaySeconds = if (outcome.successful) {
                     consecutiveFailures = 0
                     outcome.intervalSeconds
                 } else {
@@ -177,6 +177,12 @@ class PlaybackService : Service() {
                     consecutiveFailures++
                     delay
                 }
+
+                // Smear polling and reconnect requests across a ±25% randomized window.
+                // Without this, 500 TVs turning on at the same time (e.g. mall power restored)
+                // would stay perfectly synced and execute a thundering herd every 60 seconds.
+                val jitterMultiplier = kotlin.random.Random.nextDouble(0.75, 1.25)
+                val nextDelaySeconds = (baseDelaySeconds * jitterMultiplier).toLong().coerceAtLeast(1L)
 
                 val networkOrManualSignal = withTimeoutOrNull(nextDelaySeconds * 1_000L) {
                     immediateSyncSignals.receive()

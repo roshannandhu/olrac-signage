@@ -49,14 +49,14 @@ def run() -> None:
 
     with TestClient(app) as client:
         headers = owner_headers(client)
-        video_path = Path(TEMP_DIR.name) / "test-video.mp4"
-        video_path.write_bytes(b"mock video data")
-        with video_path.open("rb") as video:
+        image_path = Path(TEMP_DIR.name) / "test-image.png"
+        image_path.write_bytes(b"mock image data")
+        with image_path.open("rb") as image:
             upload = client.post(
                 "/api/content/upload",
                 headers=headers,
-                data={"name": "Mock Video", "tags": "test"},
-                files={"file": ("test-video.mp4", video, "video/mp4")},
+                data={"name": "Mock Image", "tags": "test"},
+                files={"file": ("test-image.png", image, "image/png")},
             )
         assert upload.status_code == 201, upload.text
         upload_data = upload.json()
@@ -69,7 +69,7 @@ def run() -> None:
         s3_key = stored.file_url.removeprefix("s3://")
         storage_db.close()
         s3_object = content_router.s3_client.get_object(Bucket="olrac-media", Key=s3_key)
-        assert s3_object["Body"].read() == b"mock video data"
+        assert s3_object["Body"].read() == b"mock image data"
 
         registration = client.post("/api/screens/register", json={"device_id": "r2-test-tv"})
         screen_id = registration.json()["id"]

@@ -158,7 +158,7 @@ export default function ContentPage() {
     onError: (error: Error) => toast.error(error.message),
   })
 
-  if (contentQuery.isError) return <ErrorState message="The media library could not be loaded." onRetry={() => contentQuery.refetch()} />
+  if (contentQuery.isError) return <ErrorState message={`The media library could not be loaded. Error: ${contentQuery.error?.message}`} onRetry={() => contentQuery.refetch()} />
 
   const pending = queue.filter((entry) => entry.status !== 'done').length
 

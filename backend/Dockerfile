@@ -22,4 +22,8 @@ COPY backend/ ./backend/
 
 EXPOSE 8000
 
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --proxy-headers with a wildcard allow-list: on Render/Fly the proxy is not 127.0.0.1,
+# which is the only address uvicorn trusts by default, so X-Forwarded-For is discarded and
+# every request appears to come from the proxy. The container is only ever reachable
+# through that proxy, so trusting it is not a widening of exposure.
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000",      "--proxy-headers", "--forwarded-allow-ips", "*"]

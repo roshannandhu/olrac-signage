@@ -289,8 +289,8 @@ function ItemRow({ item, defaultTransition, defaultDurationMs, canEdit, saving, 
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_auto]">
-                  <div>
+                <div className="mt-3 flex flex-wrap gap-3 sm:gap-4">
+                  <div className="mr-2">
                     <span className="text-muted-foreground mb-2 block text-xs font-medium">Days <span className="text-muted-foreground/70 font-normal">(none = every day)</span></span>
                     <div className="flex gap-1.5">
                       {dayLabels.map((label, day) => (

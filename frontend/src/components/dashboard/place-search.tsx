@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check, Link2, Loader2, MapPin, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,17 @@ export type Place = {
   longitude: number | null
   place_id: string | null
 }
+
+/**
+ * Does this look like a link rather than the name of a place?
+ *
+ * Deliberately loose. It only decides whether to *try* resolving, and the API is what
+ * actually rules on the host — being generous here means a link still resolves when it
+ * arrives without its scheme, which is what copying from a phone produces. A place is
+ * never named like this, so nothing an operator types by hand is diverted by mistake.
+ */
+const looksLikeLink = (text: string) =>
+  /^(https?:\/\/|www\.|maps\.|share\.google|goo\.gl|g\.co)\S*$/i.test(text.trim())
 
 /**
  * Set a screen's location by pasting the Google Maps link for it.
@@ -28,10 +39,17 @@ export function PlaceSearch({ value, onChange }: { value: Place; onChange: (plac
   const [error, setError] = useState<string | null>(null)
 
   const pinned = value.latitude != null && value.longitude != null
+  // The last link handed to the API. Without it a link that fails is retried on every
+  // render, hammering the endpoint with a request already known to be refused.
+  const attempted = useRef('')
 
-  const resolve = async () => {
-    const trimmed = link.trim()
-    if (!trimmed) return
+  /**
+   * @param raw the link to resolve, when it is not yet in state.
+   */
+  const resolve = async (raw?: string) => {
+    const trimmed = (raw ?? link).trim()
+    if (!trimmed || busy) return
+    attempted.current = trimmed
     setBusy(true)
     setError(null)
     try {
@@ -53,7 +71,23 @@ export function PlaceSearch({ value, onChange }: { value: Place; onChange: (plac
     }
   }
 
+  // Anything that looks like a link resolves itself, whichever way it got into the box --
+  // pasted, typed, autofilled, or dropped in. Setting a location is done once per screen
+  // and across a whole fleet, so pressing a button afterwards is a step repeated for
+  // every TV to say something the link already said.
+  //
+  // Debounced because this also fires per keystroke while a link is being typed; the
+  // delay lets the value settle instead of resolving a dozen prefixes of it.
+  useEffect(() => {
+    const trimmed = link.trim()
+    if (!trimmed || busy || trimmed === attempted.current || !looksLikeLink(trimmed)) return
+    const timer = setTimeout(() => resolve(trimmed), 400)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [link, busy])
+
   const clear = () => {
+    attempted.current = ''
     setName('')
     setLink('')
     setError(null)
@@ -68,9 +102,18 @@ export function PlaceSearch({ value, onChange }: { value: Place; onChange: (plac
           id="screen-location"
           value={name}
           onChange={(event) => {
-            setName(event.target.value)
+            const typed = event.target.value
+            // A link dropped in the name box is still a link. Naming a screen
+            // "https://share.google/..." is never what was meant, so it is sent to the
+            // link box to resolve rather than saved as the place's name.
+            if (looksLikeLink(typed)) {
+              setLink(typed)
+              setError(null)
+              return
+            }
+            setName(typed)
             // Renaming keeps the pin; only a new link or Clear moves it.
-            onChange({ ...value, location: event.target.value })
+            onChange({ ...value, location: typed })
           }}
           placeholder="Name of this place, e.g. Lulu Mall — Main Entrance"
           className="pr-9 pl-9"
@@ -94,18 +137,28 @@ export function PlaceSearch({ value, onChange }: { value: Place; onChange: (plac
           <Input
             value={link}
             onChange={(event) => { setLink(event.target.value); setError(null) }}
+            // No paste handler: the effect above already covers pasting, and every other
+            // way a link arrives, from one code path rather than two racing each other.
             onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); resolve() } }}
             placeholder="Paste Google Maps link"
+            disabled={busy}
             className="pl-9"
             autoComplete="off"
           />
         </div>
-        <Button type="button" variant="outline" onClick={resolve} disabled={!link.trim() || busy}>
+        {/* Wrapped, not passed directly: resolve takes an optional link, and onClick would
+            hand it the mouse event to trim. */}
+        <Button type="button" variant="outline" onClick={() => resolve()} disabled={!link.trim() || busy}>
           {busy ? <Loader2 className="size-4 animate-spin" /> : 'Pin'}
         </Button>
       </div>
 
-      {error ? (
+      {busy ? (
+        <p className="text-muted-foreground flex items-center gap-1.5 text-sm">
+          <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+          Reading that link...
+        </p>
+      ) : error ? (
         <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
       ) : pinned ? (
         <p className="flex items-center gap-1.5 text-sm text-green-700 dark:text-green-400">
@@ -115,7 +168,8 @@ export function PlaceSearch({ value, onChange }: { value: Place; onChange: (plac
       ) : (
         <p className="text-muted-foreground text-xs">
           In Google Maps, find the place → <strong className="font-medium">Share</strong> →{' '}
-          <strong className="font-medium">Copy link</strong>, then paste it above. Short
+          <strong className="font-medium">Copy link</strong>, then paste it above and it pins
+          itself. Short
           share.google links work too.
         </p>
       )}

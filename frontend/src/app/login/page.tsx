@@ -16,10 +16,56 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
+  const [googleEnabled, setGoogleEnabled] = useState(false)
 
   useEffect(() => {
     if (hydrated && token) router.replace('/dashboard')
   }, [hydrated, token, router])
+
+  // Only draw the Google button if this deployment actually has the browser OAuth client.
+  // Otherwise it is a button whose one possible outcome is a 503.
+  useEffect(() => {
+    api.authMethods().then((methods) => setGoogleEnabled(methods.google))
+  }, [])
+
+  // Google sends the browser back here with ?code=. Exchange it once, server-side, then
+  // strip it from the URL so a refresh cannot replay a code that Google has already spent.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const code = params.get('code')
+    const denied = params.get('error')
+    if (denied) {
+      setError('Google sign-in was cancelled.')
+      window.history.replaceState({}, '', window.location.pathname)
+      return
+    }
+    if (!code) return
+
+    setPending(true)
+    const redirectUri = `${window.location.origin}${window.location.pathname}`
+    window.history.replaceState({}, '', window.location.pathname)
+    api
+      .loginWithGoogle(code, redirectUri)
+      .then((session) => {
+        setSession(session.access_token, session.user)
+        router.replace('/dashboard')
+      })
+      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Google sign-in failed'))
+      .finally(() => setPending(false))
+  }, [router, setSession])
+
+  const startGoogle = () => {
+    const redirectUri = `${window.location.origin}/login`
+    const query = new URLSearchParams({
+      client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'openid email profile',
+      // Identity only, so no refresh token is wanted and no consent screen is forced.
+      prompt: 'select_account',
+    })
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${query}`
+  }
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -80,6 +126,31 @@ export default function LoginPage() {
               {pending ? 'Signing in…' : <>Sign in <ArrowRight data-icon="inline-end" /></>}
             </Button>
           </form>
+          {googleEnabled && (
+            <>
+              <div className="my-6 flex items-center gap-4">
+                <span className="h-px flex-1 bg-border" />
+                <span className="text-xs text-muted-foreground">or</span>
+                <span className="h-px flex-1 bg-border" />
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="h-12 w-full"
+                onClick={startGoogle}
+                disabled={pending}
+              >
+                <svg className="size-5" viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.7v3h3.9c2.3-2.1 3.5-5.2 3.5-8.9z" />
+                  <path fill="#34A853" d="M12 24c3.2 0 5.9-1.1 7.9-2.9l-3.9-3c-1.1.7-2.4 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9H1.4v3.1A12 12 0 0 0 12 24z" />
+                  <path fill="#FBBC05" d="M5.4 14.4a7.2 7.2 0 0 1 0-4.6V6.7H1.4a12 12 0 0 0 0 10.8l4-3.1z" />
+                  <path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.4 6.7l4 3.1C6.3 6.9 8.9 4.8 12 4.8z" />
+                </svg>
+                Sign in with Google
+              </Button>
+            </>
+          )}
           <p className="mt-7 text-center text-xs leading-5 text-muted-foreground/70">No default credentials are enabled. Contact your workspace owner if you need access.</p>
         </div>
       </section>

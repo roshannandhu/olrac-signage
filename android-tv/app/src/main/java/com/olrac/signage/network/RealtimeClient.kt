@@ -107,9 +107,14 @@ class RealtimeClient(
         // Backoff, capped. A flat 5s retry means a fleet of 500 screens hammers the
         // server twice a minute each while it is down, which is exactly when it can
         // least afford it. Push is optional anyway — polling still delivers.
-        val delayMs = RECONNECT_BACKOFF_MS[
+        val baseDelayMs = RECONNECT_BACKOFF_MS[
             attempt.coerceIn(0, RECONNECT_BACKOFF_MS.size - 1)
         ]
+        
+        // Add ±25% jitter to spread out the reconnect storm across the fleet
+        val jitter = kotlin.random.Random.nextDouble(0.75, 1.25)
+        val delayMs = (baseDelayMs * jitter).toLong()
+        
         attempt++
         scope.launch {
             delay(delayMs)

@@ -44,7 +44,7 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 from backend.database import Base, get_db  # noqa: E402
 from backend.main import app
-from backend.models import User, Organization, Screen, ScreenGroup, Playlist, EmergencyBroadcast
+from backend.models import User, Organization, Screen, ScreenGroup, Playlist, EmergencyBroadcast, utcnow
 from backend.routers.auth import get_password_hash, create_access_token
 from backend.routers.screens import verify_device_auth
 
@@ -97,7 +97,8 @@ def setup_db():
     db.commit()
     
     # Screen
-    screen = Screen(name="Test Screen", organization_id=org.id, group_id=child_group.id, device_id="testdev", device_secret_hash="hash")
+    # Already live in the field; screens default to pending. See test_screen_approval.py.
+    screen = Screen(name="Test Screen", organization_id=org.id, group_id=child_group.id, device_id="testdev", device_secret_hash="hash", approved_at=utcnow())
     db.add(screen)
     db.commit()
     db.refresh(screen)

@@ -165,6 +165,93 @@ def test_a_screen_with_no_name_falls_back_to_its_location():
     assert "Screen 1" in alerting.evaluate_screen(s, NOW)[0].title
 
 
+# --- Operating hours -------------------------------------------------------------------
+# A screen scheduled off is not a broken screen. Before this, a shop TV on 09:00-21:00
+# raised a CRITICAL every night of its life.
+
+OPEN_9_TO_9 = {d: ["09:00", "21:00"] for d in
+               ("mon", "tue", "wed", "thu", "fri", "sat", "sun")}
+
+
+def test_always_on_is_never_scheduled_off():
+    assert alerting.is_scheduled_off(screen(), NOW) is False
+
+
+def test_mode_never_is_always_scheduled_off():
+    assert alerting.is_scheduled_off(screen(operating_mode="never"), NOW) is True
+
+
+def test_inside_the_window_is_open():
+    # NOW is 12:00 UTC, inside 09:00-21:00.
+    s = screen(operating_mode="hours", operating_hours=OPEN_9_TO_9)
+    assert alerting.is_scheduled_off(s, NOW) is False
+
+
+def test_outside_the_window_is_closed():
+    s = screen(operating_mode="hours", operating_hours=OPEN_9_TO_9)
+    assert alerting.is_scheduled_off(s, NOW.replace(hour=23)) is True
+
+
+def test_hours_mode_with_no_windows_stays_open():
+    # "hours" selected but nothing filled in must not silence the screen forever.
+    s = screen(operating_mode="hours", operating_hours=None)
+    assert alerting.is_scheduled_off(s, NOW) is False
+
+
+def test_an_overnight_window_wraps_midnight():
+    # A bar open 22:00-02:00 is open at 01:00 and shut at 12:00.
+    s = screen(operating_mode="hours",
+               operating_hours={d: ["22:00", "02:00"] for d in
+                                ("mon", "tue", "wed", "thu", "fri", "sat", "sun")})
+    assert alerting.is_scheduled_off(s, NOW.replace(hour=1)) is False
+    assert alerting.is_scheduled_off(s, NOW) is True
+
+
+def test_a_day_with_no_window_is_closed_all_day():
+    # NOW is a Saturday; only weekdays are configured.
+    s = screen(operating_mode="hours",
+               operating_hours={"mon": ["09:00", "21:00"]})
+    assert alerting.is_scheduled_off(s, NOW) is True
+
+
+def test_hours_are_read_in_the_screens_own_timezone():
+    # 23:00 UTC is 04:30 next day in Kolkata, which is outside 09:00-21:00 either way;
+    # 05:00 UTC is 10:30 there, inside the window but outside it in UTC.
+    s = screen(operating_mode="hours", operating_hours=OPEN_9_TO_9,
+               timezone="Asia/Kolkata")
+    assert alerting.is_scheduled_off(s, NOW.replace(hour=5)) is False
+    assert alerting.is_scheduled_off(screen(operating_mode="hours",
+                                            operating_hours=OPEN_9_TO_9),
+                                     NOW.replace(hour=5)) is True
+
+
+def test_an_unknown_timezone_falls_back_instead_of_raising():
+    # One bad row must not abort the reconciler's sweep over the whole fleet.
+    s = screen(operating_mode="hours", operating_hours=OPEN_9_TO_9,
+               timezone="Mars/Olympus_Mons")
+    assert alerting.is_scheduled_off(s, NOW) is False
+
+
+def test_a_closed_screen_raises_no_offline_alert():
+    s = screen(operating_mode="hours", operating_hours=OPEN_9_TO_9,
+               status="offline", last_seen=NOW - timedelta(hours=8))
+    assert alerting.evaluate_screen(s, NOW.replace(hour=23)) == []
+
+
+def test_a_closed_screen_raises_no_idle_alert():
+    # Powering down reports "idle" first; that must not become a critical either.
+    s = screen(operating_mode="hours", operating_hours=OPEN_9_TO_9,
+               status="online", playback_state="idle")
+    assert alerting.evaluate_screen(s, NOW.replace(hour=23)) == []
+
+
+def test_an_open_screen_still_alerts_normally():
+    # The suppression must not swallow a real outage during trading hours.
+    s = screen(operating_mode="hours", operating_hours=OPEN_9_TO_9,
+               status="offline", last_seen=NOW - timedelta(hours=8))
+    assert kinds(alerting.evaluate_screen(s, NOW)) == {alerting.SCREEN_OFFLINE}
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):

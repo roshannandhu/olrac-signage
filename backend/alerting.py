@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Iterable, Optional
 
+WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
 CRITICAL = "critical"
 WARNING = "warning"
 
@@ -89,6 +91,63 @@ def _as_utc(value: Optional[datetime]) -> Optional[datetime]:
     return value
 
 
+def is_scheduled_off(screen, now: datetime) -> bool:
+    """Whether this screen is *meant* to be dark right now.
+
+    operating_hours reached the database and the dashboard but nothing ever read it, so a
+    shop TV on 09:00-21:00 hours raised a CRITICAL "is offline" every night and a
+    "on but not playing" every morning while it woke up. Across a 500-screen fleet that is
+    a nightly flood of alerts that are all working as intended -- and an operator who
+    learns to swipe the whole category away stops seeing the real ones too.
+
+    Evaluated in the screen's own timezone: "closed at 21:00" means 21:00 where the TV is,
+    not on the server. An unknown or malformed zone falls back to UTC rather than raising,
+    because the reconciler sweeps the whole fleet in one pass and one bad row must not
+    abort the others.
+    """
+    mode = getattr(screen, "operating_mode", "always") or "always"
+    if mode == "always":
+        return False
+    if mode == "never":
+        return True
+
+    windows = getattr(screen, "operating_hours", None)
+    # "hours" with nothing configured is not a licence to silence the screen forever.
+    if not windows:
+        return False
+
+    local = now
+    zone = getattr(screen, "timezone", None)
+    if zone:
+        try:
+            from zoneinfo import ZoneInfo
+
+            local = now.astimezone(ZoneInfo(zone))
+        except Exception:  # noqa: BLE001 - unknown zone must not abort the sweep
+            local = now
+
+    window = windows.get(WEEKDAYS[local.weekday()])
+    if not window or len(window) != 2:
+        return True
+
+    try:
+        start, end = (_minutes(stamp) for stamp in window)
+    except (ValueError, AttributeError):
+        return False
+    minute = local.hour * 60 + local.minute
+
+    # An end before the start is an overnight window (22:00-02:00), which is the normal
+    # shape for a bar or a hotel lobby, not a typo.
+    if start <= end:
+        return not (start <= minute <= end)
+    return not (minute >= start or minute <= end)
+
+
+def _minutes(stamp: str) -> int:
+    hours, _, mins = stamp.partition(":")
+    return int(hours) * 60 + int(mins)
+
+
 def evaluate_screen(screen, now: datetime) -> list[AlertCondition]:
     """Everything currently wrong with one screen."""
     conditions: list[AlertCondition] = []
@@ -97,6 +156,13 @@ def evaluate_screen(screen, now: datetime) -> list[AlertCondition]:
 
     # A screen that has never been paired is not part of the fleet and cannot be "offline".
     if status == "waiting_pairing":
+        return conditions
+
+    # Outside its operating hours a screen is supposed to be dark, so neither its silence
+    # nor its blank playback is a fault. Checked before every condition below rather than
+    # only around the offline one: a screen powering down reports "idle" first and would
+    # otherwise trade one false critical for another.
+    if is_scheduled_off(screen, now):
         return conditions
 
     last_seen = _as_utc(getattr(screen, "last_seen", None))

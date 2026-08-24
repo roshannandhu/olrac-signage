@@ -147,6 +147,13 @@ def test_media_pipeline():
     
     # It should have generated 4 renditions
     assert len(c.renditions) == 4
+
+    # ...each at its own storage location. Counting them is not enough: the single-pass
+    # filtergraph built every key from a filename left over from the last loop iteration,
+    # so all four rows pointed at the 360p file while still reporting 1080p dimensions.
+    # Four rows, correct metadata, and every screen served 360p.
+    urls = [r.file_url for r in c.renditions]
+    assert len(set(urls)) == 4, f"renditions share a storage key: {urls}"
     
     # The thumbnail should be generated
     assert c.thumbnail is not None

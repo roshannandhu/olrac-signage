@@ -27,6 +27,7 @@ ISOLATED_SCRIPTS = {
     "test_proof_of_play.py",
     "test_play_log_attribution.py",
     "test_account_profile.py",
+    "test_screen_approval.py",
     "test_analytics.py",
     "test_p6_websockets.py",
     "test_media_selection.py",
@@ -41,6 +42,9 @@ ISOLATED_SCRIPTS = {
     "test_storage_cleanup.py",
     "test_sync_invalidation.py",
     "test_release_rollout.py",
+    # Google sign-in: authorisation, a case-insensitive lookup and a tenant guard.
+    # Owns a database, so it belongs here rather than in pytest.ini.
+    "test_google_signin.py",
 }
 
 # Pure-logic tests: no database, no import-time engine, safe to run in-process.
@@ -52,6 +56,7 @@ PURE_MODULES = {
     "test_rollout_policy.py",
     "test_media_storage.py",
     "test_alerting.py",
+    "test_maps_link.py",
 }
 
 
@@ -80,7 +85,13 @@ _PG_REACHABLE = None
 # server. Distinguished from the rest so that a machine with no database reports "these
 # were skipped, and why" rather than sixteen identical connection tracebacks that bury
 # whatever else went wrong in the run.
-NEEDS_POSTGRES = ISOLATED_SCRIPTS - {"test_sqlite_utc.py", "test_release_rollout.py"}
+NEEDS_POSTGRES = ISOLATED_SCRIPTS - {
+    "test_sqlite_utc.py",
+    "test_release_rollout.py",
+    # Falls back to SQLite when no server is listening; nothing it checks is
+    # dialect-specific, so it still runs on a machine with no database.
+    "test_google_signin.py",
+}
 
 
 def pytest_collect_file(parent, file_path):

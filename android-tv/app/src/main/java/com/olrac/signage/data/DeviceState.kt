@@ -109,7 +109,25 @@ sealed interface LaunchState {
      */
     data class SignIn(
         val error: String? = null,
-        val busy: Boolean = false
+        val busy: Boolean = false,
+        // Defaults false so the button stays hidden until the server says otherwise. A
+        // deployment with no Google credentials can only answer /google/start with a 503,
+        // and offering a button whose single outcome is an error is worse than not
+        // offering it. Shown optimistically would invert that on every offline start-up.
+        val googleEnabled: Boolean = false
+    ) : LaunchState
+
+    /**
+     * Waiting for the installer to approve on their phone.
+     *
+     * The code shown here is Google's, not ours: on a TV the supported Google flow is the
+     * device authorisation grant, so a code still appears. What it removes is typing a
+     * password with a D-pad, and needing somebody already signed in at a dashboard.
+     */
+    data class GoogleSignIn(
+        val userCode: String,
+        val verificationUrl: String,
+        val error: String? = null
     ) : LaunchState
 
     /** Fallback for when no keyboard is to hand. Reached from a link on [SignIn]. */

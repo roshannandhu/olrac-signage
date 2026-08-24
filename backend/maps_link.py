@@ -12,6 +12,8 @@ from __future__ import annotations
 import logging
 import re
 import json
+import threading
+import time
 import urllib.parse
 import urllib.request
 
@@ -56,6 +58,19 @@ def _expand(url: str) -> str:
         return url
 
 
+def _is_error_page(url: str) -> bool:
+    """Whether a followed link landed on Google's own error page.
+
+    A dead, expired or already-consumed share.google link is not answered with a 404.
+    Google returns 200 and redirects to https://share.google/error, so the expansion
+    looks like it worked and the result is simply a URL with no coordinate in it. The
+    operator was then told to re-copy a link that will never resolve, however many
+    times they try. Matched on the exact path so a place legitimately named "error"
+    cannot trip it.
+    """
+    return urllib.parse.urlparse(url).path.rstrip("/").endswith("/error")
+
+
 def _name_from(url: str) -> str | None:
     """The human place name Google puts in the path, e.g. /maps/place/Phoenix+Mall/."""
     match = re.search(r"/maps/place/([^/@]+)", url)
@@ -80,28 +95,73 @@ def _name_from_search(url: str) -> str | None:
     return None
 
 
+# Nominatim publishes an absolute maximum of one request a second, enforced by blocking
+# the calling IP. Setting a location is done once per screen, so a fleet rollout is a run
+# of these back to back from one server address -- exactly the shape that trips it. A ban
+# would take the feature out for every screen at once, so the interval is kept here
+# rather than trusted to how fast an operator happens to paste.
+NOMINATIM_MIN_INTERVAL = 1.0
+
+# Screens in one building share a place name, and that name resolves to the same point
+# every time. Successes only: caching a failure would let one timeout keep a location
+# unresolvable until the process restarts.
+_geocode_cache: dict[str, tuple[float, float]] = {}
+
+# ponytail: one global lock serialises every geocode. Fine while this is an
+# operator-driven action -- give it a per-process token bucket if it ever moves onto a
+# bulk import path, where serialising would make the import as slow as the sum of its
+# lookups.
+_geocode_lock = threading.Lock()
+_geocode_last_call = 0.0
+
+
 def geocode(name: str) -> tuple[float, float] | None:
     """Coordinates for a place name, via OpenStreetMap's keyless geocoder.
 
-    Used only when a link carries a name but no coordinate. One request per location an
-    operator sets by hand is well inside Nominatim's acceptable use; it identifies itself
-    as required, which is the condition they actually enforce.
+    Used only when a link carries a name but no coordinate, which is what a share.google
+    link expands to: a search result rather than a map.
     """
+    key = name.strip().lower()
+    if not key:
+        return None
+    cached = _geocode_cache.get(key)
+    if cached is not None:
+        return cached
+
     url = ("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q="
            + urllib.parse.quote(name))
     request = urllib.request.Request(
         url, headers={"User-Agent": "OlracSignage/1.0 (digital signage fleet management)"}
     )
+
+    global _geocode_last_call
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-            results = json.loads(response.read())
+        with _geocode_lock:
+            waited = NOMINATIM_MIN_INTERVAL - (time.monotonic() - _geocode_last_call)
+            if waited > 0:
+                time.sleep(waited)
+            try:
+                with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+                    results = json.loads(response.read())
+            finally:
+                # Stamped even when the call fails: a failed request still reached them,
+                # and retrying it immediately is what the limit exists to prevent.
+                _geocode_last_call = time.monotonic()
     except Exception as exc:
         logger.warning("geocode failed for %r: %s", name, exc)
         return None
-    if not results:
+
+    try:
+        lat, lng = float(results[0]["lat"]), float(results[0]["lon"])
+    except (IndexError, KeyError, TypeError, ValueError):
+        # No match, or a reply in a shape this does not know. Either way it is "could not
+        # locate", not a 500 -- this used to escape and the dialog showed nothing useful.
         return None
-    lat, lng = float(results[0]["lat"]), float(results[0]["lon"])
-    return (lat, lng) if _valid(lat, lng) else None
+    if not _valid(lat, lng):
+        return None
+
+    _geocode_cache[key] = (lat, lng)
+    return lat, lng
 
 
 def parse(link: str) -> tuple[float, float, str | None]:
@@ -116,13 +176,25 @@ def parse(link: str) -> tuple[float, float, str | None]:
         link = "https://" + link
 
     parsed = urllib.parse.urlparse(link)
-    if not parsed.netloc.endswith(ACCEPTED_HOSTS):
+    # `hostname`, not `netloc`: it lowercases, and drops any port and userinfo that could
+    # otherwise be used to dress a foreign host up as a Google one.
+    host = (parsed.hostname or "").lower()
+    # Suffix matching alone accepted "nedgoogle.com", because it ends in "google.com" --
+    # and _expand() then makes the server fetch whatever that host is, which is an SSRF
+    # any operator could aim wherever they liked. The host must BE an accepted domain or
+    # sit underneath one.
+    if not any(host == accepted or host.endswith("." + accepted) for accepted in ACCEPTED_HOSTS):
         raise MapsLinkError("That is not a Google Maps link.")
 
     url = link
     # A short link has nothing to parse until it is followed.
-    if parsed.netloc in SHORT_HOSTS and not _AT.search(url) and not _BANG.search(url):
+    if host in SHORT_HOSTS and not _AT.search(url) and not _BANG.search(url):
         url = _expand(url)
+        if _is_error_page(url):
+            raise MapsLinkError(
+                "Google could not open that link — it may have expired. Open the place "
+                "in Google Maps and use Share → Copy link again."
+            )
 
     # Most precise first: the place marker, then the map centre.
     for pattern in (_BANG, _AT):

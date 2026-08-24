@@ -1,14 +1,17 @@
+import logging
 import os
 from datetime import datetime, timedelta
 from typing import Callable
 
 import bcrypt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .. import database, models, schemas
+from .. import database, google_device, models, schemas
+from ..limiter import limiter
 
 router = APIRouter()
 
@@ -50,7 +53,9 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 
 
 @router.post("/token", response_model=schemas.TokenResponse)
+@limiter.limit("5/minute")
 def login_for_access_token(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(database.get_db),
 ):
@@ -120,6 +125,68 @@ def require_roles(*roles: str) -> Callable:
     return dependency
 
 
+@router.get("/methods")
+def auth_methods():
+    """Which sign-in buttons the dashboard should draw.
+
+    The TV has its own copy of this at /api/screens/auth-methods; they are deliberately
+    separate because they answer about different OAuth clients. A deployment can perfectly
+    well have the browser half configured and not the TV half, or the reverse.
+    """
+    return {"google": google_device.is_web_configured(), "password": True}
+
+
+@router.post("/google", response_model=schemas.TokenResponse)
+@limiter.limit("10/minute")
+def sign_in_with_google(
+    request: Request,
+    body: schemas.GoogleWebSignInRequest,
+    db: Session = Depends(database.get_db),
+):
+    """Sign in to the dashboard with a Google account.
+
+    Google authenticates a person; it does not authorise them. The verified address must
+    already belong to an OLRAC user, exactly as the TV flow requires -- otherwise anyone
+    holding any Gmail address could sign in to somebody's workspace. This route therefore
+    creates nothing.
+    """
+    if not google_device.is_web_configured():
+        raise HTTPException(status_code=503, detail="Google sign-in is not enabled on this server")
+
+    try:
+        claims = google_device.exchange_code(body.code, body.redirect_uri)
+    except google_device.GoogleError as error:
+        logging.getLogger(__name__).warning("Google web exchange failed: %s", error)
+        raise HTTPException(status_code=502, detail="Could not complete Google sign-in. Try again.")
+
+    email = (claims.get("email") or "").strip().lower()
+    if not email or not claims.get("email_verified"):
+        # An unverified address proves nothing about who owns it.
+        raise HTTPException(status_code=403, detail="That Google account has no verified email address.")
+
+    # Matched on username OR email: workspaces created before this existed identify people
+    # by a username that is usually their address, and requiring the columns to agree would
+    # lock out every account already in the database.
+    user = (
+        db.query(models.User)
+        .filter((func.lower(models.User.email) == email) | (func.lower(models.User.username) == email))
+        .first()
+    )
+    if not user or not user.is_active:
+        # Same message either way: never reveal which addresses have accounts here.
+        raise HTTPException(
+            status_code=403,
+            detail="No active OLRAC account matches that Google address. Ask your workspace owner to add you.",
+        )
+
+    logging.getLogger(__name__).info("Google web sign-in for %s", user.username)
+    return {
+        "access_token": create_access_token(data={"sub": user.username}),
+        "token_type": "bearer",
+        "user": user,
+    }
+
+
 @router.get("/me", response_model=schemas.UserResponse)
 def read_current_user(user: models.User = Depends(get_current_user)):
     return user
@@ -156,7 +223,9 @@ def update_current_user(
 
 
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/minute")
 def change_own_password(
+    request: Request,
     payload: schemas.PasswordChange,
     user: models.User = Depends(get_current_user),
     db: Session = Depends(database.get_db),

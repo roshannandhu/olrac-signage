@@ -22,6 +22,40 @@ data class SignInRequest(
     val name: String?
 )
 
+/**
+ * Google sign-in, as the device authorisation grant (RFC 8628).
+ *
+ * The TV never holds the OAuth client secret or Google's device_code -- a signage APK is
+ * sideloaded and unpacked as a matter of routine. It shows [user_code], and polls with an
+ * opaque [poll_token] the server minted for this device.
+ */
+data class GoogleStartRequest(val device_id: String, val name: String?)
+
+/** Which sign-in routes the server actually offers, so the TV draws only those. */
+data class AuthMethodsResponse(
+    val google: Boolean = false,
+    val password: Boolean = true,
+    val pair_code: Boolean = true
+)
+
+data class GoogleStartResponse(
+    val user_code: String,
+    val verification_url: String,
+    /** Google's documented floor is 5s; polling faster earns `slow_down`, not a token. */
+    val interval: Int,
+    val expires_in: Int,
+    val poll_token: String
+)
+
+data class GooglePollRequest(val poll_token: String)
+
+data class GooglePollResponse(
+    /** pending | slow_down | denied | expired | bound */
+    val status: String,
+    val screen: ScreenResponse? = null,
+    val detail: String? = null
+)
+
 data class EnrollRequest(
     val device_id: String,
     val enrollment_token: String,
@@ -134,6 +168,15 @@ interface ApiService {
 
     @POST("api/screens/sign-in")
     suspend fun signIn(@Body request: SignInRequest): Response<ScreenResponse>
+
+    @POST("api/screens/google/start")
+    suspend fun googleStart(@Body request: GoogleStartRequest): Response<GoogleStartResponse>
+
+    @GET("api/screens/auth-methods")
+    suspend fun authMethods(): Response<AuthMethodsResponse>
+
+    @POST("api/screens/google/poll")
+    suspend fun googlePoll(@Body request: GooglePollRequest): Response<GooglePollResponse>
 
     @POST("api/screens/enroll")
     suspend fun enroll(@Body request: EnrollRequest): Response<EnrollResponse>

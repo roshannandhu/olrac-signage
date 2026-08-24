@@ -3,6 +3,7 @@ import type { AlertSummary, FleetAlert, BookingReport, Placement, MediaReport, F
 
 const configuredUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '')
 let API_BASE = `${configuredUrl}/api`
+export let API_HOST = configuredUrl
 
 // If accessed on a mobile device over the local network, replace localhost with the actual IP.
 if (typeof window !== 'undefined') {
@@ -11,6 +12,7 @@ if (typeof window !== 'undefined') {
     if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
       url.hostname = window.location.hostname
       API_BASE = url.href.replace(/\/$/, '')
+      API_HOST = API_BASE.replace(/\/api$/, '')
     }
   } catch {
     // A malformed NEXT_PUBLIC_API_URL just means we keep the configured value.
@@ -18,6 +20,23 @@ if (typeof window !== 'undefined') {
 }
 
 export const WS_BASE = API_BASE.replace(/^http/, 'ws')
+
+export function resolveMediaUrl(urlStr: string | null | undefined): string | undefined {
+  if (!urlStr) return undefined;
+  if (typeof window === 'undefined') return urlStr;
+  try {
+    const url = new URL(urlStr);
+    const apiHost = new URL(API_HOST);
+    // If the media URL is on the same port as our API (meaning it's locally hosted uploads),
+    // rewrite its hostname to match where we are currently accessing the API from.
+    if (url.port === apiHost.port && url.pathname.startsWith('/uploads/')) {
+      url.hostname = apiHost.hostname;
+      return url.href;
+    }
+  } catch {}
+  return urlStr;
+}
+
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) {
@@ -60,6 +79,30 @@ export const api = {
     if (!response.ok) throw new ApiError('The username or password is incorrect', response.status)
     return response.json() as Promise<{ access_token: string; token_type: string; user: User }>
   },
+  authMethods: async () => {
+    // Failure means "draw the password form only": the dashboard must still be usable
+    // when this call fails, and a missing Google button is a far smaller problem than a
+    // login page that renders nothing.
+    try {
+      const response = await fetch(`${API_BASE}/auth/methods`)
+      if (!response.ok) return { google: false, password: true }
+      return (await response.json()) as { google: boolean; password: boolean }
+    } catch {
+      return { google: false, password: true }
+    }
+  },
+  loginWithGoogle: async (code: string, redirectUri: string) => {
+    const response = await fetch(`${API_BASE}/auth/google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, redirect_uri: redirectUri }),
+    })
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null)
+      throw new ApiError(detail?.detail || 'Google sign-in failed', response.status)
+    }
+    return response.json() as Promise<{ access_token: string; token_type: string; user: User }>
+  },
   me: () => fetchWithAuth<User>('/auth/me'),
   updateProfile: (data: { full_name?: string | null; email?: string | null }) =>
     fetchWithAuth<User>('/auth/me', {
@@ -73,7 +116,11 @@ export const api = {
   resolveLocationLink: (link: string) =>
     fetchWithAuth<{ latitude: number; longitude: number; name: string | null }>(
       '/screens/resolve-location-link',
-      { method: 'POST', body: JSON.stringify({ link }) },
+      // Without this header fetch() labels a string body text/plain, FastAPI rejects it
+      // before the handler ever runs, and the validation error it returns carries a list
+      // in `detail` where authFetch expects a string -- so every link, however valid,
+      // failed as "Something went wrong". The other 25 JSON calls here already set it.
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ link }) },
     ),
   // Partial by design: sending only the edited keys stops a rename from resetting
   // orientation, which is not editable anywhere in the dashboard.

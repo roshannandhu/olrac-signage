@@ -43,3 +43,9 @@ Redis.zip
 *.dump
 *.db
 *.sql
+
+# The demo assets under frontend/public/demo-media are deliberately tracked: Vercel serves
+# them so the hosted dashboard and the players have media without object-storage
+# credentials. The *.mp4 rule above had silently dropped the video from that folder,
+# leaving the content library listing an asset that 404'd everywhere.
+!frontend/public/demo-media/*.mp4

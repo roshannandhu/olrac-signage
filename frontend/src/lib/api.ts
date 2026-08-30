@@ -12,6 +12,18 @@ if (typeof window !== 'undefined') {
   try {
     const url = new URL(API_BASE)
     if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+      // Nothing below can produce a working API origin: the build simply was not told
+      // where the API lives. Said out loud because the failure is otherwise silent and
+      // looks like a dozen unrelated product bugs -- a deployed dashboard rewrote its API
+      // to its own origin, every call 404'd against the static host, and the visible
+      // symptom was "the Google button is missing" rather than "the API is unreachable".
+      if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        console.error(
+          '[olrac] NEXT_PUBLIC_API_URL was not set at BUILD time, so this bundle has no API ' +
+          'origin and every request will fail. Next inlines NEXT_PUBLIC_* during the build: ' +
+          'set it as a BUILD variable (Cloudflare) or a project env var (Vercel), then rebuild.',
+        )
+      }
       if (window.location.protocol === 'https:') {
         // Served over TLS, so the API has to be same-origin. Swapping only the hostname
         // left the protocol at http: and the port at :8000 -- the browser blocks that as

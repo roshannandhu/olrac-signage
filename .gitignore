@@ -49,3 +49,12 @@ Redis.zip
 # credentials. The *.mp4 rule above had silently dropped the video from that folder,
 # leaving the content library listing an asset that 404'd everywhere.
 !frontend/public/demo-media/*.mp4
+
+# Graphify cache & scratch
+graphify-out/cache/
+scratch/
+*.png
+!frontend/public/**/*.png
+android-tv/window_dump*.xml
+
+

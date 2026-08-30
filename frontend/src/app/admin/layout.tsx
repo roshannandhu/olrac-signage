@@ -1,0 +1,120 @@
+'use client'
+
+import { useEffect } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { useAuthStore } from '@/lib/store'
+import {
+  ShieldCheck, Users, Film, LogOut, ChevronRight, LayoutDashboard,
+  BarChart3, Package, Bell
+} from 'lucide-react'
+
+/**
+ * Platform-operator check. Role only.
+ *
+ * This used to also accept a hardcoded list of three email addresses -- one of four such
+ * lists in the codebase, and they had already drifted: this copy omitted an address the
+ * BACKEND trusted, so that operator was bounced out of /admin by the frontend while the
+ * API happily served them. The role now comes from the database, promoted once by the
+ * accompanying migration, so access is granted and revoked without a redeploy.
+ */
+function isSuperAdmin(user: { role?: string } | null) {
+  return user?.role === 'super_admin'
+}
+
+// Every entry here has a page. Four of the five previously did not: /admin, /admin/approvals,
+// /admin/releases and /admin/demo-video had no route file at all, so the sidebar was mostly
+// 404s -- including /admin itself, which is where login now lands a platform operator.
+const navItems = [
+  { href: '/admin', label: 'Overview', icon: LayoutDashboard, exact: true },
+  { href: '/admin/approvals', label: 'Approvals Queue', icon: ShieldCheck },
+  { href: '/admin/tenants', label: 'All Tenants', icon: Users },
+  { href: '/admin/packages', label: 'Packages', icon: Package },
+  { href: '/admin/demo-video', label: 'Demo Video', icon: Film },
+]
+
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const { token, user, hydrated, clearSession } = useAuthStore()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  useEffect(() => {
+    if (!hydrated) return
+    if (!token) { router.replace('/login'); return }
+    if (!isSuperAdmin(user)) {
+      if (user?.organization_status === 'pending_approval') {
+        router.replace('/dashboard/pending')
+      } else {
+        router.replace('/dashboard/screens')
+      }
+      return
+    }
+  }, [hydrated, token, user, router])
+
+  if (!hydrated || !token || !isSuperAdmin(user)) {
+    return <div className="bg-background min-h-screen" />
+  }
+
+  const logout = () => { clearSession(); router.replace('/login') }
+
+  return (
+    <div className="min-h-screen bg-[#070b14] flex">
+      {/* Sidebar */}
+      <aside className="w-64 shrink-0 border-r border-white/5 flex flex-col bg-[#080d18]">
+        {/* Logo */}
+        <div className="p-5 border-b border-white/5">
+          <div className="flex items-center gap-3">
+            <div className="size-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center">
+              <ShieldCheck className="size-4 text-white" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-white">OLRAC Admin</p>
+              <p className="text-[10px] text-violet-400 font-medium">Platform Control</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav className="flex-1 p-3 space-y-0.5">
+          {navItems.map((item) => {
+            const active = item.exact ? pathname === item.href : pathname.startsWith(item.href)
+            const Icon = item.icon
+            return (
+              <a
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition-all ${
+                  active
+                    ? 'bg-violet-500/15 text-violet-300 font-semibold border border-violet-500/20'
+                    : 'text-white/50 hover:bg-white/5 hover:text-white/80'
+                }`}
+              >
+                <Icon className="size-4 shrink-0" />
+                {item.label}
+                {active && <ChevronRight className="size-3 ml-auto text-violet-400" />}
+              </a>
+            )
+          })}
+        </nav>
+
+        {/* Divider — tenant dashboard link */}
+        <div className="p-3 border-t border-white/5 space-y-1">
+          <button
+            onClick={logout}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs text-white/40 hover:text-rose-400 hover:bg-rose-500/5 transition-all"
+          >
+            <LogOut className="size-3.5" />
+            Sign Out
+          </button>
+          <div className="px-3 pt-2">
+            <p className="text-[10px] text-white/20 font-mono truncate">{user?.email || user?.username}</p>
+          </div>
+        </div>
+      </aside>
+
+      {/* Main content */}
+      <main className="flex-1 overflow-auto">
+        {children}
+      </main>
+    </div>
+  )
+}

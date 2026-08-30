@@ -236,12 +236,16 @@ private fun DualSurfacePlayer(
         dao.insert(event)
         clearPlayCheckpoint(context)
 
+        // Trigger immediate background upload so dashboard play counters update in real time
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            try {
+                com.olrac.signage.service.ProofOfPlayReporter.flush(context)
+            } catch (_: Exception) {}
+        }
+        com.olrac.signage.service.ProofOfPlayWorker.enqueueNow(context)
+
         // Keep the queue bounded. Only ever trims when the backlog is already enormous,
         // which the drain loop in ProofOfPlayWorker now makes very unlikely.
-        //
-        // Checked every QUEUE_CHECK_EVERY plays rather than on each one: COUNT(*) has no
-        // index to use, and a full scan of a queue this size on cheap TV storage is real
-        // work to repeat for every advert when the answer changes by one each time.
         if (playsSinceQueueCheck.incrementAndGet() >= QUEUE_CHECK_EVERY) {
             playsSinceQueueCheck.set(0)
             trimQueueIfOversized(dao)

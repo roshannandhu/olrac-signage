@@ -3,8 +3,8 @@
  * publish or promote a player release, because a release installs across every tenant's
  * fleet. The team page never offers it — TenantRole is what that page may assign.
  */
-export type Role = 'super_admin' | 'owner' | 'editor' | 'viewer'
-export type TenantRole = 'owner' | 'editor' | 'viewer'
+export type Role = 'super_admin' | 'manager' | 'owner' | 'editor' | 'viewer'
+export type TenantRole = 'manager' | 'owner' | 'editor' | 'viewer'
 /** Promotion ring for a player build. Only `released` reaches screens with no pin. */
 export type RolloutState = 'draft' | 'canary' | 'released'
 export type TransitionName = 'none' | 'fade' | 'slide_left' | 'slide_right' | 'slide_up' | 'slide_down' | 'zoom'
@@ -19,6 +19,7 @@ export interface User {
   full_name?: string | null
   email?: string | null
   organization_name?: string | null
+  organization_status?: string | null
 }
 
 export interface ContentItem {
@@ -381,4 +382,83 @@ export interface AlertSummary {
   critical: number
   warning: number
   unacknowledged: number
+}
+
+// --- Platform administration ---------------------------------------------------------
+// Mirrors the Pydantic models in backend/routers/admin.py. These are cross-tenant shapes
+// only a super_admin can fetch, kept apart from the tenant types above for that reason.
+
+export interface TenantSummary {
+  id: number
+  name: string
+  slug: string
+  status: string
+  created_at: string
+  owner_email?: string | null
+  owner_name?: string | null
+  plan_id?: number | null
+  plan_name?: string | null
+  screens_count: number
+  online_screens_count: number
+  max_screens: number
+  max_ad_slots: number
+  ad_slots_used: number
+  storage_used_bytes: number
+  storage_quota_bytes: number
+  rejection_reason?: string | null
+}
+
+export interface TenantScreen {
+  id: number
+  name?: string | null
+  status: string
+  last_seen?: string | null
+  location?: string | null
+  model?: string | null
+  app_version?: string | null
+  playback_state: string
+}
+
+export interface TenantContent {
+  id: number
+  name?: string | null
+  type?: string | null
+  status: string
+  file_size_bytes: number
+  uploaded_at?: string | null
+  thumbnail?: string | null
+}
+
+export interface TenantUser {
+  id: number
+  username: string
+  email?: string | null
+  full_name?: string | null
+  role: string
+  is_active: boolean
+}
+
+export interface Package {
+  id: number
+  name: string
+  slug: string
+  monthly_price_paise: number
+  yearly_price_paise: number
+  max_screens: number
+  max_storage_bytes: number
+  max_ad_slots: number
+  is_active: boolean
+}
+
+// slug is write-once: /api/billing/checkout resolves the payment provider's plan id from
+// an env var named after it, so renaming one silently breaks checkout for that package.
+export interface PackageWrite {
+  name: string
+  slug: string
+  monthly_price_paise: number
+  yearly_price_paise: number
+  max_screens: number
+  max_storage_bytes: number
+  max_ad_slots: number
+  is_active: boolean
 }

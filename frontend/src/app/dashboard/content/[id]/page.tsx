@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ArrowLeft, CheckCircle2, Film, MapPin, MonitorPlay, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Film, MapPin, MonitorPlay, RefreshCw, TriangleAlert } from 'lucide-react'
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { ErrorState } from '@/components/dashboard/error-state'
 import { AdBookings } from '@/components/dashboard/ad-bookings'
@@ -44,6 +44,7 @@ export default function AdDetailPage() {
     queryKey: ['media-report', contentId],
     queryFn: () => api.getMediaReport(contentId),
     enabled: Number.isFinite(contentId),
+    refetchInterval: 10000,
   })
 
   const item = contentQuery.data?.find((entry) => entry.id === contentId)
@@ -172,6 +173,20 @@ export default function AdDetailPage() {
             <ErrorState message="The playback report could not be loaded." onRetry={() => reportQuery.refetch()} />
           ) : (
             <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">Proof-of-play metrics auto-update in real-time as screens report in.</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => reportQuery.refetch()}
+                  disabled={reportQuery.isFetching}
+                  className="bg-card gap-1.5 text-xs h-8"
+                >
+                  <RefreshCw className={`size-3.5 ${reportQuery.isFetching ? 'animate-spin' : ''}`} />
+                  Refresh
+                </Button>
+              </div>
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <StatTile label="Today" stats={report.today} />
                 <StatTile label="This week" stats={report.week} />

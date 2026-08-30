@@ -23,9 +23,11 @@ import com.olrac.signage.MainActivity
 import com.olrac.signage.R
 import com.olrac.signage.boot.PlayerLauncher
 import com.olrac.signage.network.ConnectivityWatcher
+import com.olrac.signage.network.RealtimeClient
 import com.olrac.signage.sync.PlaylistSynchronizer
 import com.olrac.signage.sync.SyncBackoffPolicy
 import com.olrac.signage.telemetry.HeartbeatReporter
+import com.olrac.signage.telemetry.ScreenshotManager
 import com.olrac.signage.workers.HeartbeatWorker
 import com.olrac.signage.workers.SyncWorker
 import kotlinx.coroutines.CoroutineScope
@@ -45,12 +47,14 @@ class PlaybackService : Service() {
     private val immediateSyncSignals = Channel<Unit>(capacity = Channel.CONFLATED)
     private var pollingJob: Job? = null
     private var connectivityWatcher: ConnectivityWatcher? = null
+    private var realtimeClient: RealtimeClient? = null
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         promoteToForeground()
         acquireWakeLock()
+        startRealtimeClient()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -71,6 +75,8 @@ class PlaybackService : Service() {
     }
 
     override fun onDestroy() {
+        realtimeClient?.stop()
+        realtimeClient = null
         connectivityWatcher?.stop()
         connectivityWatcher = null
         pollingJob = null
@@ -78,6 +84,17 @@ class PlaybackService : Service() {
         wakeLock?.takeIf(PowerManager.WakeLock::isHeld)?.release()
         wakeLock = null
         super.onDestroy()
+    }
+
+    private fun startRealtimeClient() {
+        realtimeClient = RealtimeClient(this) { msg ->
+            when (msg.optString("type")) {
+                "request_screenshot" -> ScreenshotManager.requestScreenshot()
+                "launch_app", "bring_to_front" -> launchPlayer()
+                "sync_now", "reload_playlist" -> immediateSyncSignals.trySend(Unit)
+            }
+        }
+        realtimeClient?.start()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -140,7 +157,7 @@ class PlaybackService : Service() {
         // on Android 10+, so a bare startActivity() here is silently dropped on budget
         // OEM firmware. PlayerLauncher routes through an AlarmManager PendingIntent,
         // which the system process dispatches and is therefore permitted.
-        PlayerLauncher.launch(this, PlayerLauncher.WARM_RESTART_MS, reason = "service")
+        PlayerLauncher.launch(this, delayMs = 500L, reason = "service_command")
     }
 
     private fun isUserUnlocked(): Boolean {
@@ -166,6 +183,8 @@ class PlaybackService : Service() {
                 val outcome = synchronizer.sync()
                 try {
                     HeartbeatReporter.send(this@PlaybackService)
+                    ProofOfPlayReporter.flush(this@PlaybackService)
+                    ProofOfPlayWorker.enqueueNow(this@PlaybackService)
                 } catch (exception: Exception) {
                     Log.d(TAG, "Telemetry heartbeat unavailable", exception)
                 }

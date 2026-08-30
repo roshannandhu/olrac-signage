@@ -7,11 +7,28 @@ import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 
-data class RegisterRequest(val device_id: String)
+data class RegisterRequest(
+    val device_id: String,
+    val installation_id: String? = null,
+    val hardware_name: String? = null,
+    val device_model: String? = null,
+    val manufacturer: String? = null
+)
 data class ScreenResponse(
     val pair_code: String? = null,
     val status: String,
-    val name: String? = null
+    val name: String? = null,
+    val is_paired: Boolean? = null,
+    val organization_id: Int? = null,
+    /**
+     * The device's own credential, returned exactly once by whichever route bound this
+     * screen. Null on every other response, and never returned again -- the server keeps
+     * only a hash -- so it has to be persisted the moment it arrives.
+     *
+     * Before this existed, a screen paired by code or TV sign-in authenticated with nothing
+     * but its device id, which is guessable and is echoed back by /register.
+     */
+    val device_secret: String? = null
 )
 
 /** Credentials typed on the TV. Held in memory for the duration of the call only. */
@@ -19,7 +36,10 @@ data class SignInRequest(
     val username: String,
     val password: String,
     val device_id: String,
-    val name: String?
+    val name: String?,
+    val installation_id: String? = null,
+    val model: String? = null,
+    val manufacturer: String? = null
 )
 
 /**
@@ -29,7 +49,22 @@ data class SignInRequest(
  * sideloaded and unpacked as a matter of routine. It shows [user_code], and polls with an
  * opaque [poll_token] the server minted for this device.
  */
-data class GoogleStartRequest(val device_id: String, val name: String?)
+data class DeviceAuthRequest(
+    val device_id: String,
+    val device_secret: String
+)
+
+data class DeviceTokenResponse(
+    val access_token: String
+)
+
+data class GoogleStartRequest(
+    val device_id: String,
+    val name: String?,
+    val installation_id: String? = null,
+    val model: String? = null,
+    val manufacturer: String? = null
+)
 
 /** Which sign-in routes the server actually offers, so the TV draws only those. */
 data class AuthMethodsResponse(
@@ -104,10 +139,12 @@ data class SyncResponse(
     val playlist_updated_at: String?,
     val status: String?,
     val app_version: AppVersionDto?,
-    val sync_interval_seconds: Int?
-,
+    val sync_interval_seconds: Int?,
     val fit_mode: String? = null,
-    val maintenance_pin: String? = null
+    val maintenance_pin: String? = null,
+    val pending_command: String? = null,
+    val screen_id: Int? = null,
+    val organization_id: Int? = null
 )
 
 data class AppVersionDto(
@@ -159,10 +196,25 @@ data class HeartbeatResponse(
     val screen_status: String?,
     val server_time_ms: Long?,
     val screen_id: Int?,
-    val organization_id: Int?
+    val organization_id: Int?,
+    val pending_command: String? = null
+)
+
+data class GoogleOAuthUrlResponse(
+    val oauth_url: String,
+    val redirect_uri: String
 )
 
 interface ApiService {
+    @GET("api/screens/google/oauth-url")
+    suspend fun getGoogleOAuthUrl(
+        @Query("device_id") deviceId: String,
+        @Query("name") name: String? = null,
+        @Query("installation_id") installationId: String? = null,
+        @Query("model") model: String? = null,
+        @Query("manufacturer") manufacturer: String? = null
+    ): Response<GoogleOAuthUrlResponse>
+
     @POST("api/screens/register")
     suspend fun register(@Body request: RegisterRequest): Response<ScreenResponse>
 
@@ -180,6 +232,10 @@ interface ApiService {
 
     @POST("api/screens/enroll")
     suspend fun enroll(@Body request: EnrollRequest): Response<EnrollResponse>
+
+    /** Trade the stored device secret for a short-lived bearer token. */
+    @POST("api/screens/auth")
+    suspend fun authDevice(@Body request: DeviceAuthRequest): Response<DeviceTokenResponse>
 
     @POST("api/screens/heartbeat")
     suspend fun heartbeat(@Body request: HeartbeatRequest): Response<HeartbeatResponse>

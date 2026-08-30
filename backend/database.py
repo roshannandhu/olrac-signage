@@ -44,6 +44,17 @@ if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
 _pool_options = {} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {
     "pool_pre_ping": True,
     "pool_recycle": 280,
+    # SQLAlchemy defaults to 5 + 10 overflow. That was sized for request traffic, where a
+    # connection is held for milliseconds -- but a fleet also holds one websocket per
+    # screen, and those used to pin a connection each (see routers/websockets.py). With
+    # the pinning fixed a burst of screens reconnecting at once still needs more headroom
+    # than 15, and heartbeat, sync and play-log ingestion all share this pool.
+    #
+    # Overridable because the ceiling is the database's, not ours: point DATABASE_URL at
+    # Supabase's transaction pooler (port 6543) rather than raising this past what a
+    # direct-connection plan allows.
+    "pool_size": int(os.getenv("DB_POOL_SIZE", "10")),
+    "max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
 }
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=connect_args, **_pool_options)
@@ -62,10 +73,53 @@ import redis.asyncio as redis_async
 from arq.connections import RedisSettings
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-redis_pool = redis_async.ConnectionPool.from_url(REDIS_URL)
+import asyncio
+import weakref
+
+# One connection pool PER EVENT LOOP, not one for the process.
+#
+# redis.asyncio connections bind to the loop that created them. A single shared pool works
+# perfectly under uvicorn, which runs one loop forever -- and then fails with
+# "RuntimeError: Event loop is closed" the moment anything else touches Redis from a
+# different loop: a TestClient request (a fresh loop per request), a management script, an
+# asyncio.run() inside a threadpool worker.
+#
+# That failure mode is quiet in exactly the wrong way. Every Redis call in this codebase is
+# wrapped in `except Exception` because Redis being down must not fail a TV's heartbeat, so
+# a cross-loop error is swallowed and the feature just silently does nothing -- which is
+# how a queued device command could be written and then never read back.
+#
+# Keyed weakly so a discarded loop takes its pool with it rather than accumulating one per
+# request for the life of the process.
+_pools: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, redis_async.ConnectionPool]" = (
+    weakref.WeakKeyDictionary()
+)
+_no_loop_pool: redis_async.ConnectionPool | None = None
+
+
+def _pool_for_current_loop() -> redis_async.ConnectionPool:
+    global _no_loop_pool
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # Called from synchronous code; there is no loop to key on yet.
+        if _no_loop_pool is None:
+            _no_loop_pool = redis_async.ConnectionPool.from_url(
+                REDIS_URL, socket_connect_timeout=0.5, socket_timeout=0.5
+            )
+        return _no_loop_pool
+
+    pool = _pools.get(loop)
+    if pool is None:
+        pool = redis_async.ConnectionPool.from_url(
+            REDIS_URL, socket_connect_timeout=0.5, socket_timeout=0.5
+        )
+        _pools[loop] = pool
+    return pool
+
 
 def get_redis():
-    return redis_async.Redis(connection_pool=redis_pool)
+    return redis_async.Redis(connection_pool=_pool_for_current_loop())
 
 # arq parses the DSN itself, so credentials, TLS (rediss://) and the database index all
 # survive. The hand-rolled split() this replaces understood only "redis://host:port/db",

@@ -12,7 +12,12 @@ object HeartbeatReporter {
     suspend fun send(context: Context, suppliedSnapshot: PlaybackSnapshot? = null): Boolean {
         val appContext = context.applicationContext
         val preferences = appContext.getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
-        val deviceId = preferences.getString("device_id", null) ?: return false
+        // Through DeviceState, which derives and persists the id on first access. Reading
+        // the preference directly returned null whenever the service started before
+        // MainActivity had ever run -- a boot straight into the player -- and the screen
+        // then reported no heartbeat at all, so the fleet list showed it permanently
+        // offline while it was sitting there playing.
+        val deviceId = com.olrac.signage.data.DeviceState(appContext).deviceId
         val snapshot = suppliedSnapshot ?: PlaybackTelemetry(appContext).snapshot()
 
         val stat = StatFs(Environment.getDataDirectory().path)
@@ -66,6 +71,18 @@ object HeartbeatReporter {
                 body.screen_id?.let { edit.putInt("screen_id", it) }
                 body.organization_id?.let { edit.putInt("organization_id", it) }
                 edit.apply()
+
+                body.pending_command?.let { cmd ->
+                    if (cmd == "bring_to_front" || cmd == "launch_app") {
+                        android.util.Log.i("HeartbeatReporter", "Received $cmd command from server; bringing app to front")
+                        com.olrac.signage.boot.PlayerLauncher.launch(appContext, delayMs = 500L, reason = "heartbeat_command")
+                    }
+                }
+
+                // Flush any accumulated offline or pending play logs immediately on heartbeat
+                try {
+                    com.olrac.signage.service.ProofOfPlayReporter.flush(appContext)
+                } catch (_: Exception) {}
             }
         }
         

@@ -17,6 +17,15 @@ def main() -> None:
     )
     parser.add_argument("username")
     parser.add_argument(
+        "--email",
+        default=None,
+        help=(
+            "Address this account signs in with. Worth setting for a super_admin: platform "
+            "status now comes from this row's role, so Google sign-in has to be able to "
+            "match the account by address."
+        ),
+    )
+    parser.add_argument(
         "--role",
         choices=SEEDABLE_ROLES,
         default="owner",
@@ -39,6 +48,7 @@ def main() -> None:
         user = models.User(
             organization_id=organization.id,
             username=args.username,
+            email=args.email,
             hashed_password=get_password_hash(password),
             role=args.role,
             is_active=True,
@@ -48,8 +58,12 @@ def main() -> None:
         print(f"Created {args.role} account: {args.username}")
         if args.role == "super_admin":
             print(
-                "This account can publish player releases to every tenant's screens. "
-                "It is hidden from the team page and cannot be edited there."
+                "This account is a platform operator: it signs in to /admin, approves "
+                "companies, sets packages and publishes player releases to every tenant's "
+                "fleet. It is hidden from the team page and cannot be edited there. "
+                "This command is the ONLY way to create one -- the role is refused on "
+                "every HTTP route, and the hardcoded email allow-lists it used to be "
+                "granted by have been removed."
             )
     finally:
         db.close()

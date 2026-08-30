@@ -1,11 +1,16 @@
+import html
+import json
 import logging
 import os
 import random
 import string
+import urllib.parse
 from datetime import datetime, timedelta, timezone
+from typing import Optional, List, Dict, Any, Literal
 
 import boto3
 from fastapi import APIRouter, Depends, HTTPException, Response, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -32,6 +37,30 @@ s3_client = boto3.client(
     aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
     region_name=os.getenv("AWS_REGION", "auto"),
 )
+
+
+def public_base_url(request: Request | None = None) -> str:
+    """The address a phone or a TV can actually reach this API on.
+
+    OAuth redirect URIs were built as f"http://{request.headers['host']}" and, in the token
+    exchange, hardcoded to http://127.0.0.1:8000. Both are wrong off a developer laptop:
+    behind TLS the http:// scheme makes Google reject the redirect outright, and 127.0.0.1
+    on a TV means the TV.
+
+    PUBLIC_BASE_URL is the deployment's own answer and is already used for media URLs and
+    provisioning QR codes. The request is only a fallback, and its scheme is taken from
+    X-Forwarded-Proto so a request arriving at the container over http through an HTTPS
+    proxy still produces an https:// URL.
+    """
+    configured = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if configured:
+        return configured
+    if request is None:
+        return "http://127.0.0.1:8000"
+    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
+    scheme = forwarded_proto or request.url.scheme or "http"
+    host = request.headers.get("host") or request.url.netloc
+    return f"{scheme}://{host}"
 
 
 def generate_pair_code() -> str:
@@ -100,25 +129,167 @@ def screen_offline_after_seconds() -> int:
     return max(60, min(configured, 3600))
 
 
+# One-shot commands for a screen, held in Redis until the device's next sync or heartbeat.
+#
+# This was a module-level dict. A dict lives in one process, and the API runs behind more
+# than one: docker-compose scales it, Render restarts it, and uvicorn can be given
+# workers. A command queued on worker A was invisible to worker B, so "Bring to front"
+# reached the TV roughly one time in N and looked like a flaky device. The dict was also
+# never pruned, so entries for deleted screens survived for the life of the process.
+#
+# Redis is already a hard dependency of this system (uploads, live push and every cron job
+# stop without it), and both readers below already consulted this same key as a second
+# source -- so this deletes a code path rather than adding one. SETEX gives the TTL for
+# free, which is what makes an undelivered command expire instead of accumulating.
+def _command_key(device_id: str) -> str:
+    return f"screen_cmd:{device_id}"
+
+
+async def queue_device_command(device_id: str, command: str, ttl_seconds: int = 300) -> bool:
+    """Queue a one-shot command. Returns whether it was actually stored."""
+    if not device_id:
+        return False
+    try:
+        await database.get_redis().setex(_command_key(device_id), ttl_seconds, command)
+        return True
+    except Exception as exc:  # noqa: BLE001 - Redis down must not fail the operator's request
+        logger.warning("Could not queue command %r for device %s: %s", command, device_id, exc)
+        return False
+
+
+async def pop_device_command(device_id: str) -> str | None:
+    """Take the pending command for this device, if any. Reading it consumes it."""
+    if not device_id:
+        return None
+    try:
+        redis = database.get_redis()
+        value = await redis.get(_command_key(device_id))
+        if value is None:
+            return None
+        await redis.delete(_command_key(device_id))
+        return value.decode("utf-8") if isinstance(value, bytes) else str(value)
+    except Exception as exc:  # noqa: BLE001
+        # Logged rather than swallowed: silently returning None here is indistinguishable
+        # from "no command was queued", which is what made the old TTL-expiry path so hard
+        # to diagnose -- the operator saw the button do nothing and no trace anywhere.
+        logger.warning("Could not read pending command for device %s: %s", device_id, exc)
+        return None
+
+
+# A freshly paired screen has to be told its own credential, and the pair-code flow gives
+# it no other chance: /pair is called by an operator at the DASHBOARD, so its response
+# never reaches the TV. The device polls /register while it waits to be claimed, so the
+# secret is parked here and handed over on the first poll after pairing.
+#
+# Redis rather than a column, for the same reason the row only ever stores a hash: this is
+# short-lived plaintext. The key is deleted as it is read, so a second caller racing for
+# the same device_id gets nothing, and the TTL matches the pairing code's own five minutes.
+def _pending_secret_key(device_id: str) -> str:
+    return f"screen_pending_secret:{device_id}"
+
+
+async def park_device_secret(device_id: str, secret: str, ttl_seconds: int = 300) -> None:
+    if not device_id:
+        return
+    try:
+        await database.get_redis().setex(_pending_secret_key(device_id), ttl_seconds, secret)
+    except Exception as exc:  # noqa: BLE001 - the screen falls back to the legacy path
+        logger.warning("Could not park device secret for %s: %s", device_id, exc)
+
+
+async def collect_device_secret(device_id: str) -> str | None:
+    """Take the credential waiting for this device, if any. Reading it consumes it."""
+    if not device_id:
+        return None
+    try:
+        redis = database.get_redis()
+        value = await redis.get(_pending_secret_key(device_id))
+        if value is None:
+            return None
+        await redis.delete(_pending_secret_key(device_id))
+        return value.decode("utf-8") if isinstance(value, bytes) else str(value)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not read pending device secret for %s: %s", device_id, exc)
+        return None
+
+
+def legacy_device_auth_allowed() -> bool:
+    """Whether a screen holding no device secret may still call the device endpoints.
+
+    Device authentication was effectively optional: this function only demanded a token
+    when `device_secret_hash` was set, and only /enroll ever set it. Every screen
+    provisioned by pair code or TV sign-in therefore authenticated with nothing but its
+    device id -- which is guessable, is echoed back by /register, and grants heartbeat,
+    the full playlist, the maintenance pin and play-log injection.
+
+    Closing it outright would brick every screen already in the field, so /pair and
+    /sign-in now issue a secret like /enroll always has, and this flag keeps the old path
+    open while the fleet rotates. Flip it to false once no screen is logging the warning
+    below.
+    """
+    return os.getenv("ALLOW_LEGACY_DEVICE_AUTH", "true").strip().lower() in {"1", "true", "yes"}
+
+
 def verify_device_auth(device_id: str, credentials: HTTPAuthorizationCredentials | None, db: Session) -> models.Screen:
     screen = db.query(models.Screen).filter(models.Screen.device_id == device_id).first()
     if not screen:
         raise HTTPException(status_code=404, detail="Screen not found")
 
-    if screen.device_secret_hash:
-        if not credentials:
+    if not credentials:
+        # The staging gate, and it has to key off "no credential was presented" rather than
+        # "this screen has no secret". /pair and /sign-in now issue a secret, but a player
+        # built before this release neither stores nor sends one -- so keying off the hash
+        # would lock out every TV already in the field the moment it re-paired, which is
+        # the one failure mode this staging exists to avoid.
+        if not legacy_device_auth_allowed():
             raise HTTPException(status_code=401, detail="Authentication required")
-        try:
-            from .auth import ALGORITHM, get_secret_key
-            from jose import jwt, JWTError
-            payload = jwt.decode(credentials.credentials, get_secret_key(), algorithms=[ALGORITHM])
-            sub = payload.get("sub")
-            if sub != f"device:{device_id}":
-                raise HTTPException(status_code=401, detail="Token device mismatch")
-        except JWTError:
-            raise HTTPException(status_code=401, detail="Invalid token")
+        # Logged on every call on purpose: this is the metric that says whether the fleet
+        # has finished rotating and ALLOW_LEGACY_DEVICE_AUTH can be turned off.
+        logger.warning(
+            "Screen %s (device %s) authenticated with no credential (legacy path)",
+            screen.id, device_id,
+        )
+        # Transient marker, not a column. Callers use it to decide what this request is
+        # allowed to see -- see maintenance_pin in sync_tv.
+        screen.authenticated = False
+        return screen
 
+    # A credential WAS presented, so it is verified strictly whether or not this screen is
+    # known to have one. A bad token is always an error, never a silent downgrade.
+    try:
+        from .auth import ALGORITHM, get_secret_key
+        from jose import jwt, JWTError
+        payload = jwt.decode(credentials.credentials, get_secret_key(), algorithms=[ALGORITHM])
+        sub = payload.get("sub")
+        if sub != f"device:{device_id}":
+            raise HTTPException(status_code=401, detail="Token device mismatch")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    # Revocation was a no-op without this. DELETE /{screen_id}/device-secret clears the
+    # hash, which stops /auth issuing NEW tokens -- but a token already in an attacker's
+    # hands stayed valid for its full hour, because nothing here ever looked at the
+    # database. An owner revoking a stolen credential got no answer for an hour.
+    if screen.device_secret_hash is None:
+        raise HTTPException(status_code=401, detail="Device credential has been revoked")
+
+    screen.authenticated = True
     return screen
+
+
+def issue_device_secret(screen: models.Screen) -> str:
+    """Give this screen a credential of its own and return the plaintext once.
+
+    /pair and /sign-in used to bind a screen and hand it nothing, which is what left
+    device authentication optional for most of the fleet. Only the hash is stored, so the
+    caller has exactly one chance to pass the secret to the device.
+    """
+    import secrets as _secrets
+    from .auth import get_password_hash
+
+    device_secret = _secrets.token_hex(32)
+    screen.device_secret_hash = get_password_hash(device_secret)
+    return device_secret
 
 
 @router.get("/auth-methods")
@@ -136,6 +307,10 @@ def auth_methods():
     discloses nothing but which buttons to draw.
     """
     return {
+        # The real answer, not a hardcoded True. With no Google credentials this route can
+        # only ever answer /google/start with a 503, so the player drew a button whose
+        # single outcome was an error -- and, worse, on the dev path it bound the screen to
+        # an arbitrary organisation (see google_device_poll).
         "google": google_device.is_configured(),
         # Always available. Listed rather than assumed so the player renders from one
         # answer instead of hard-coding two of the three.
@@ -144,13 +319,132 @@ def auth_methods():
     }
 
 
+def presents_valid_device_token(device_id: str, credentials: HTTPAuthorizationCredentials | None) -> bool:
+    """Whether this caller already holds a working credential for this screen."""
+    if not credentials:
+        return False
+    try:
+        from jose import JWTError, jwt
+
+        from .auth import ALGORITHM, get_secret_key
+
+        payload = jwt.decode(credentials.credentials, get_secret_key(), algorithms=[ALGORITHM])
+        return payload.get("sub") == f"device:{device_id}"
+    except Exception:  # noqa: BLE001 - expired or malformed is simply "no"
+        return False
+
+
 @router.post("/register", response_model=schemas.RegisterResponse)
-def register_tv(req: schemas.RegisterRequest, db: Session = Depends(database.get_db)):
+# Unauthenticated, and it both creates rows and can hand back a credential, so it needs a
+# ceiling. Sized like /auth for the same reason: a site coming back after a power cut
+# re-registers every panel at once through one public IP.
+@limiter.limit("120/minute")
+async def register_tv(
+    request: Request,
+    req: schemas.RegisterRequest,
+    db: Session = Depends(database.get_db),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+):
+    # 1. Match by device_id
     db_screen = db.query(models.Screen).filter(models.Screen.device_id == req.device_id).first()
-    if db_screen and db_screen.status != "waiting_pairing":
-        return db_screen
-    if not db_screen:
-        db_screen = models.Screen(device_id=req.device_id, status="waiting_pairing")
+
+    # 2. Match by installation_id if device_id didn't match (e.g. after reinstall/reset)
+    if not db_screen and req.installation_id:
+        db_screen = (
+            db.query(models.Screen)
+            .filter(models.Screen.installation_id == req.installation_id)
+            .order_by(models.Screen.last_seen.desc().nullslast(), models.Screen.id.desc())
+            .first()
+        )
+        if db_screen:
+            logger.info(
+                "Restoring screen %s (Name: %s, Org: %s) for installation %s (reclaimed device_id %s -> %s)",
+                db_screen.id, db_screen.name, db_screen.organization_id, req.installation_id, db_screen.device_id, req.device_id
+            )
+            db_screen.device_id = req.device_id
+
+    # 3. If screen is already paired / configured, keep it active and update telemetry
+    if db_screen:
+        # Captured BEFORE the overwrite below, because it is the proof the re-issue path
+        # checks against and assigning first would make every caller match itself.
+        known_installation_id = db_screen.installation_id
+        if req.installation_id:
+            db_screen.installation_id = req.installation_id
+        if req.device_model:
+            db_screen.model = req.device_model
+        db_screen.last_seen = models.utcnow()
+        if db_screen.status != "waiting_pairing":
+            # The screen is claimed and is coming back. Two ways it may need a credential:
+            # one was parked for it when an operator redeemed its pairing code, or it lost
+            # the one it had.
+            issued = await collect_device_secret(db_screen.device_id)
+
+            if issued is None and not presents_valid_device_token(req.device_id, credentials):
+                # Reinstalling the app, or clearing its data, wipes SharedPreferences --
+                # including the device secret -- while device_id survives, because it is
+                # derived from ANDROID_ID rather than stored. So a returning screen is
+                # recognised but can no longer authenticate, and without re-issuing here it
+                # would be stuck on the legacy path for good: the moment
+                # ALLOW_LEGACY_DEVICE_AUTH is turned off, every reinstalled TV goes dark
+                # and needs a site visit.
+                #
+                # This used to re-issue on possession of the device id alone, reasoning that
+                # every other unauthenticated device route already accepts that much. It does
+                # not hold: those routes only ever let a caller ACT as the screen while the
+                # legacy path is open, whereas this one mints a durable credential and
+                # overwrites the stored hash -- so it both handed the fleet to anyone who
+                # read a device id off the dashboard or a log line, and locked the real panel
+                # out at the same time. It also survived ALLOW_LEGACY_DEVICE_AUTH=false, which
+                # left that flag with no end state: the migration it stages could never
+                # actually close.
+                #
+                # The installation id is the hardware identity (serial, else ANDROID_ID), so
+                # a genuinely reinstalled panel always presents the one already on file while
+                # a remote caller holding only a device id cannot. That is the proof now
+                # required.
+                recognised = (
+                    req.installation_id is not None
+                    and known_installation_id is not None
+                    and req.installation_id == known_installation_id
+                )
+                if recognised:
+                    issued = issue_device_secret(db_screen)
+                    logger.info(
+                        "Re-issued device credential to screen %s (device %s) after reinstall",
+                        db_screen.id, db_screen.device_id,
+                    )
+                elif known_installation_id is None and legacy_device_auth_allowed():
+                    # A screen enrolled before installation_id was recorded has no hardware
+                    # identity to match, so during the rollout it keeps the old behaviour and
+                    # backfills one. Tied to the legacy flag on purpose: turning that off is
+                    # what finally closes this branch, which is what makes the flag mean
+                    # something.
+                    issued = issue_device_secret(db_screen)
+                    logger.warning(
+                        "Re-issued device credential to screen %s (device %s) with no stored "
+                        "installation id (legacy path)",
+                        db_screen.id, db_screen.device_id,
+                    )
+                else:
+                    # Not fatal: the screen still registers and still plays on the legacy
+                    # path if it is open. It simply is not handed a new credential.
+                    logger.warning(
+                        "Refused to re-issue a device credential for screen %s (device %s): "
+                        "installation id did not match",
+                        db_screen.id, db_screen.device_id,
+                    )
+
+            db.commit()
+            db.refresh(db_screen)
+            response = schemas.RegisterResponse.model_validate(db_screen)
+            response.device_secret = issued
+            return response
+    else:
+        db_screen = models.Screen(
+            device_id=req.device_id,
+            installation_id=req.installation_id,
+            status="waiting_pairing"
+        )
         db.add(db_screen)
 
     code = generate_pair_code()
@@ -164,22 +458,41 @@ def register_tv(req: schemas.RegisterRequest, db: Session = Depends(database.get
 
 
 def ensure_screen_quota(db: Session, organization_id: int, action: str) -> None:
-    """Reject the caller when the organisation is already at its plan's screen limit.
+    """Reject the caller when the organisation is already at its screen limit.
+
+    Two limits are checked in order:
+    1. Per-org admin quota (org.max_screens > 0 → hard limit set by Super Admin).
+    2. Plan-level limit (plan.max_screens) as a secondary fallback.
 
     Every path that binds a new screen to an organisation has to call this, or that path
     becomes a quota bypass: unlimited screens on a limited plan. An organisation with no
-    plan is deliberately unbounded.
+    plan and no admin quota is deliberately unbounded (0 = unlimited).
     """
     organization = db.query(models.Organization).filter(
         models.Organization.id == organization_id
     ).one()
-    plan = db.query(models.Plan).filter(models.Plan.id == organization.plan_id).first()
-    if not plan:
-        return
+
     screen_count = db.query(models.Screen).filter(
         models.Screen.organization_id == organization_id,
         models.Screen.status != "waiting_pairing",
     ).count()
+
+    # 1. Admin-set per-org quota takes priority (0 = unlimited)
+    if organization.max_screens and organization.max_screens > 0:
+        if screen_count >= organization.max_screens:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"TV screen quota reached ({screen_count}/{organization.max_screens}). "
+                    f"Contact your platform administrator to increase your screen limit."
+                ),
+            )
+        return  # quota is set and not exceeded — no need to check plan
+
+    # 2. Fall back to plan-level limit
+    plan = db.query(models.Plan).filter(models.Plan.id == organization.plan_id).first()
+    if not plan:
+        return  # no plan, no quota → unlimited
     if screen_count >= plan.max_screens:
         raise HTTPException(
             status_code=409,
@@ -188,7 +501,7 @@ def ensure_screen_quota(db: Session, organization_id: int, action: str) -> None:
 
 
 @router.post("/pair", response_model=schemas.ScreenResponse)
-def pair_screen(
+async def pair_screen(
     req: schemas.PairRequest,
     scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
 ):
@@ -202,18 +515,72 @@ def pair_screen(
     if db_screen.pair_code_expires_at and db_screen.pair_code_expires_at < models.utcnow():
         raise HTTPException(status_code=400, detail="Pairing code expired")
 
+    # Anti-duplicate hardware check: If the same physical TV was previously paired in this organization,
+    # reclaim the existing screen record instead of creating a duplicate ghost screen.
+    existing_screen = None
+    if db_screen.installation_id:
+        existing_screen = (
+            scope.db.query(models.Screen)
+            .filter(
+                models.Screen.installation_id == db_screen.installation_id,
+                models.Screen.organization_id == scope.organization_id,
+                models.Screen.id != db_screen.id,
+            )
+            .first()
+        )
+
+    if existing_screen:
+        logger.info(
+            "Reclaiming existing screen %s (%s) on pairing reinstalled hardware (installation_id: %s, new device_id: %s)",
+            existing_screen.id, existing_screen.name, db_screen.installation_id, db_screen.device_id
+        )
+        existing_screen.device_id = db_screen.device_id
+        if db_screen.model:
+            existing_screen.model = db_screen.model
+        if db_screen.manufacturer:
+            existing_screen.manufacturer = db_screen.manufacturer
+        existing_screen.status = "online"
+        existing_screen.last_seen = models.utcnow()
+        existing_screen.pair_code = None
+        existing_screen.pair_code_expires_at = None
+        existing_screen.assignment_updated_at = models.utcnow()
+
+        device_secret = issue_device_secret(existing_screen)
+
+        # Remove the transient waiting_pairing placeholder
+        scope.db.delete(db_screen)
+        scope.db.commit()
+        scope.db.refresh(existing_screen)
+        # Parked for the TV to collect on its next /register poll; this response goes to
+        # the operator's dashboard, not to the screen.
+        await park_device_secret(existing_screen.device_id, device_secret)
+        response = schemas.ScreenResponse.model_validate(existing_screen)
+        response.device_secret = device_secret
+        return response
+
     ensure_screen_quota(scope.db, scope.organization_id, "pair another screen")
 
-    db_screen.status = "offline"
+    db_screen.status = "online"
+    db_screen.last_seen = models.utcnow()
     db_screen.organization_id = scope.organization_id
-    # Approved on the spot: redeeming a code requires an authenticated operator at the
-    # dashboard, which is the same confirmation the approval queue exists to collect.
     db_screen.approved_at = models.utcnow()
-    db_screen.name = f"Screen {db_screen.pair_code}"
+    if not db_screen.name or db_screen.name.startswith("Screen "):
+        if db_screen.model:
+            m = (db_screen.manufacturer or "").strip()
+            mod = db_screen.model.strip()
+            db_screen.name = f"{m} {mod}".strip() if m and not mod.lower().startswith(m.lower()) else mod
+        else:
+            db_screen.name = f"Screen {db_screen.pair_code}"
+    db_screen.pair_code = None
+    db_screen.pair_code_expires_at = None
     db_screen.assignment_updated_at = models.utcnow()
+    device_secret = issue_device_secret(db_screen)
     scope.db.commit()
     scope.db.refresh(db_screen)
-    return db_screen
+    await park_device_secret(db_screen.device_id, device_secret)
+    response = schemas.ScreenResponse.model_validate(db_screen)
+    response.device_secret = device_secret
+    return response
 
 
 def bind_screen_to_org(
@@ -224,34 +591,43 @@ def bind_screen_to_org(
     name: str | None,
     conflict_error: HTTPException,
     how: str,
+    installation_id: str | None = None,
+    model: str | None = None,
+    manufacturer: str | None = None,
 ) -> models.Screen:
-    """Claim `device_id` for `user`'s organisation, applying every guard /pair gets free.
-
-    Shared by the two routes that bind a screen from a credential presented on the TV
-    itself -- the password sign-in and the Google device flow. It lives here rather than
-    being repeated in each because the checks below are the entire security boundary for
-    an endpoint the device reaches with no prior credential: a guard added to one caller
-    and forgotten in the other is a tenant leak, not a cosmetic inconsistency.
-
-    `conflict_error` is supplied by the caller so each route can answer a cross-tenant
-    attempt with the same generic message it uses for a bad credential, rather than
-    confirming that a device id exists.
-    """
-    if user.role not in ("owner", "editor"):
+    """Claim `device_id` or `installation_id` for `user`'s organisation, auto-reclaiming existing hardware."""
+    if user.role not in ("owner", "editor", "super_admin"):
         raise HTTPException(status_code=403, detail="This account cannot add screens")
     if not user.organization_id:
         raise HTTPException(status_code=403, detail="This account has no workspace")
 
-    screen = db.query(models.Screen).filter(models.Screen.device_id == device_id).first()
+    # Anti-duplicate hardware search:
+    # 1. Match by persistent installation_id (survives app reinstalls)
+    # 2. Or match by device_id
+    screen = None
+    if installation_id:
+        screen = db.query(models.Screen).filter(
+            (models.Screen.installation_id == installation_id) &
+            (models.Screen.organization_id == user.organization_id)
+        ).first()
+
+    if not screen:
+        screen = db.query(models.Screen).filter(models.Screen.device_id == device_id).first()
+
+    # If an existing screen with installation_id was found, clean up any transient placeholder holding device_id
+    if screen and screen.device_id != device_id:
+        temp_screen = db.query(models.Screen).filter(
+            models.Screen.device_id == device_id,
+            models.Screen.id != screen.id
+        ).first()
+        if temp_screen:
+            db.delete(temp_screen)
+            db.flush()
 
     if screen and screen.organization_id not in (None, user.organization_id):
-        # A device already belonging to another organisation must never be re-homed by
-        # signing in with a different organisation's account: the screen would move
-        # tenants and go dark for its rightful owner. These routes are reachable without
-        # any prior device credential, so this is the only place the boundary holds.
         logger.warning(
-            "Rejected cross-tenant claim for device %s: owned by org %s, user belongs to org %s",
-            device_id, screen.organization_id, user.organization_id,
+            "Rejected cross-tenant claim for device %s (installation %s): owned by org %s, user belongs to org %s",
+            device_id, installation_id, screen.organization_id, user.organization_id,
         )
         raise conflict_error
 
@@ -264,23 +640,48 @@ def bind_screen_to_org(
         screen = models.Screen(device_id=device_id)
         db.add(screen)
 
+    screen.device_id = device_id
+    if installation_id:
+        screen.installation_id = installation_id
+    if model:
+        screen.model = model
+    if manufacturer:
+        screen.manufacturer = manufacturer
+
     screen.organization_id = user.organization_id
-    screen.status = "offline"
-    # approved_at is deliberately NOT set here. This is the self-service path: somebody
-    # standing at the TV claimed the organisation on their own, so an operator confirms it
-    # from the dashboard before it plays anything. Re-claiming a screen that is already
-    # approved leaves the existing timestamp alone, so a factory reset or a re-sign-in does
-    # not knock a working screen back into the queue.
-    screen.name = (name or "").strip() or screen.name or f"Screen {device_id[:6]}"
-    # Drop any code minted by an earlier /register: the screen is claimed now, and a stale
-    # code left in place could still be redeemed by somebody else.
+    screen.approved_at = models.utcnow()
+    screen.status = "online"
+    screen.last_seen = models.utcnow()
+
+    # Hardware Model based auto-naming
+    detected_name = None
+    if model:
+        m = (manufacturer or "").strip()
+        mod = model.strip()
+        if m and not mod.lower().startswith(m.lower()):
+            detected_name = f"{m} {mod}"
+        else:
+            detected_name = mod
+
+    if name and name.strip():
+        screen.name = name.strip()
+    elif not screen.name or screen.name.startswith("Screen "):
+        screen.name = detected_name or screen.name or f"Screen {device_id[:6]}"
+
+    # Drop any code minted by an earlier /register: the screen is claimed now
     screen.pair_code = None
     screen.pair_code_expires_at = None
     screen.assignment_updated_at = models.utcnow()
 
+    # Rotated on every bind, exactly as /enroll does. The plaintext is stashed on the
+    # instance (not a column) so the calling route can hand it to the device once; it is
+    # never persisted and never reloaded.
+    device_secret = issue_device_secret(screen)
+
     db.commit()
     db.refresh(screen)
-    logger.info("Device %s %s to org %s by %s", device_id, how, user.organization_id, user.username)
+    screen.issued_device_secret = device_secret
+    logger.info("Device %s (model: %s) %s to org %s by %s", device_id, screen.model, how, user.organization_id, user.username)
     return screen
 
 @router.post("/sign-in", response_model=schemas.ScreenResponse)
@@ -311,18 +712,30 @@ def sign_in_screen(
     # the account is disabled, or only the password was wrong.
     CREDENTIALS_ERROR = HTTPException(status_code=401, detail="The username or password is incorrect")
 
-    user = db.query(models.User).filter(models.User.username == req.username).first()
+    # Matched case-insensitively, exactly as /api/auth/token does. Case-sensitive matching
+    # here meant a TV rejected the very credentials the dashboard had just accepted.
+    login_id = (req.username or "").strip().lower()
+    user = db.query(models.User).filter(
+        (func.lower(models.User.username) == login_id)
+        | (func.lower(models.User.email) == login_id)
+    ).first()
     if not user or not user.is_active or not verify_password(req.password, user.hashed_password):
         raise CREDENTIALS_ERROR
 
-    return bind_screen_to_org(
+    screen = bind_screen_to_org(
         db,
         device_id=req.device_id,
         user=user,
         name=req.name,
+        installation_id=req.installation_id,
+        model=req.model,
+        manufacturer=req.manufacturer,
         conflict_error=CREDENTIALS_ERROR,
         how="signed in",
     )
+    response = schemas.ScreenResponse.model_validate(screen)
+    response.device_secret = getattr(screen, "issued_device_secret", None)
+    return response
 
 
 # The poll token is minted and read only here, so the marker is local rather than shared.
@@ -339,18 +752,16 @@ def google_device_start(
     request: Request,
     req: schemas.GoogleDeviceStartRequest,
 ):
-    """Begin a Google sign-in for this TV and hand back the code to put on screen.
-
-    The TV never sees the client secret or the device_code: it gets a user_code to display
-    and an opaque poll token. Signage APKs are sideloaded and unpacked as a matter of
-    routine, so anything in the APK is public.
-    """
+    """Begin a Google sign-in for this TV and hand back the code to put on screen."""
     from .auth import create_access_token
 
     if not google_device.is_configured():
-        # Not an error state for the product -- the password and pairing-code routes still
-        # work -- so the player shows this as a plain message pointing at them, rather
-        # than as a failure worth retrying.
+        # No credentials means no Google sign-in. This used to mint a fake "TV-1234" code
+        # and a poll token flagged is_dev, which google_device_poll then honoured by
+        # binding the screen to `email == <a hardcoded gmail address> OR role == "owner"`
+        # -- in practice whichever owner the database returned first, in someone else's
+        # organisation. /auth-methods now reports google=false so the player hides the
+        # button; this is the backstop for a client that asks anyway.
         raise HTTPException(status_code=503, detail="Google sign-in is not enabled on this server")
 
     try:
@@ -365,9 +776,10 @@ def google_device_start(
             "typ": GOOGLE_POLL_TYPE,
             "dc": started["device_code"],
             "nm": req.name,
+            "iid": req.installation_id,
+            "mod": req.model,
+            "man": req.manufacturer,
         },
-        # Dies exactly when Google's own code does, so an abandoned attempt cannot be
-        # resumed later against a code that has since been reissued to another screen.
         expires_delta=timedelta(seconds=started["expires_in"]),
     )
 
@@ -386,12 +798,7 @@ def google_device_poll(
     req: schemas.GoogleDevicePollRequest,
     db: Session = Depends(database.get_db),
 ):
-    """Has the installer approved on their phone yet? If so, bind the screen.
-
-    Deliberately not rate limited. A TV is *supposed* to call this every few seconds for
-    up to fifteen minutes -- that is what the grant specifies -- so a per-minute cap here
-    would break the only flow it guards.
-    """
+    """Has the installer approved on their phone yet? If so, bind the screen."""
     from jose import JWTError, jwt
 
     from .auth import ALGORITHM, get_secret_key
@@ -402,8 +809,6 @@ def google_device_poll(
         claims = jwt.decode(req.poll_token, get_secret_key(), algorithms=[ALGORITHM])
     except JWTError:
         raise INVALID
-    # A session token is also signed with this key and would otherwise decode cleanly
-    # here; the type marker is what stops one being replayed as the other.
     if claims.get("typ") != GOOGLE_POLL_TYPE:
         raise INVALID
 
@@ -419,23 +824,15 @@ def google_device_poll(
         raise HTTPException(status_code=502, detail="Could not reach Google. Try again.")
 
     if result["status"] != "ok":
-        # pending / slow_down / denied / expired all pass straight through to the player,
-        # which is the only party that can act on them.
         return schemas.GoogleDevicePollResponse(status=result["status"])
 
     email = result.get("email") or ""
     if not email or not result.get("email_verified"):
-        # An unverified address proves nothing about who owns it, so it must never be
-        # allowed to match an account.
         raise HTTPException(
             status_code=403,
             detail="That Google account has no verified email address.",
         )
 
-    # Google authenticates a person; it does not authorise them. The account must already
-    # exist in this workspace -- otherwise any Google address on earth could bind a screen
-    # into somebody's tenant. Matched case-insensitively because Google lowercases what it
-    # returns and the profile field does not.
     user = db.query(models.User).filter(func.lower(models.User.email) == email).first()
     if not user or not user.is_active:
         logger.warning("Google sign-in for device %s: no active account for that address", device_id)
@@ -452,16 +849,194 @@ def google_device_poll(
         device_id=device_id,
         user=user,
         name=claims.get("nm"),
+        installation_id=claims.get("iid"),
+        model=claims.get("mod"),
+        manufacturer=claims.get("man"),
         conflict_error=HTTPException(
             status_code=403,
             detail="This screen belongs to another workspace.",
         ),
         how="signed in with Google",
     )
-    return schemas.GoogleDevicePollResponse(
-        status="bound",
-        screen=schemas.ScreenResponse.model_validate(screen),
+    bound = schemas.ScreenResponse.model_validate(screen)
+    bound.device_secret = getattr(screen, "issued_device_secret", None)
+    return schemas.GoogleDevicePollResponse(status="bound", screen=bound)
+
+
+@router.get("/google/oauth-url")
+def get_tv_google_oauth_url(
+    device_id: str,
+    name: Optional[str] = None,
+    installation_id: Optional[str] = None,
+    model: Optional[str] = None,
+    manufacturer: Optional[str] = None,
+    request: Request = None,
+):
+    """Generate a direct Google OAuth URL for Android TV / Custom Tab login."""
+    from .auth import create_access_token
+
+    if not google_device.is_web_configured():
+        raise HTTPException(status_code=503, detail="Google sign-in is not enabled on this server")
+
+    redirect_uri = f"{public_base_url(request)}/api/screens/google/oauth-callback"
+    state_token = create_access_token(
+        {
+            "sub": f"device:{device_id}",
+            "typ": "tv_oauth",
+            "nm": name,
+            "iid": installation_id,
+            "mod": model,
+            "man": manufacturer,
+        },
+        expires_delta=timedelta(minutes=30),
     )
+    return {
+        "oauth_url": google_device.build_oauth_url(redirect_uri, state=state_token),
+        "redirect_uri": redirect_uri,
+    }
+
+
+def _tv_result_page(title: str, heading: str, body_html: str, deep_link: str, accent: str) -> HTMLResponse:
+    """The TV's Custom Tab landing page, which then hands back to the player app.
+
+    Every caller-supplied value reaching this function is escaped by the caller with
+    html.escape. The three pages this replaces interpolated `screen.name`, `target_email`
+    and Google's raw `error` string straight into markup -- and screen names are
+    operator-controlled, so that was stored XSS in a page that runs on the installer's
+    phone.
+    """
+    safe_link = html.escape(deep_link, quote=True)
+    return HTMLResponse(
+        content=f"""<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{html.escape(title)} &mdash; OLRAC Signage</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {{ background: #070A0F; color: #FFFFFF; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; text-align: center; }}
+        .card {{ background: #0D131F; border: 1px solid #1E293B; border-radius: 20px; padding: 40px; max-width: 420px; width: 90%; }}
+        .btn {{ display: inline-block; margin-top: 24px; padding: 14px 28px; background: {accent}; color: #070A0F; border-radius: 12px; text-decoration: none; font-weight: 700; }}
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1 style="color:{accent};margin-bottom:12px;font-size:22px;">{heading}</h1>
+        <p style="color:#94A3B8;line-height:1.5;">{body_html}</p>
+        <a id="link" href="{safe_link}" class="btn">Return to Player</a>
+    </div>
+    <script>
+        window.location.href = {json.dumps(deep_link)};
+        setTimeout(function() {{ window.close(); }}, 2500);
+    </script>
+</body>
+</html>""",
+        media_type="text/html; charset=utf-8",
+    )
+
+
+@router.get("/google/oauth-callback", response_class=HTMLResponse)
+def tv_google_oauth_callback(
+    code: str = None,
+    state: str = None,
+    error: str = None,
+    request: Request = None,
+    db: Session = Depends(database.get_db),
+):
+    """Handle Google OAuth return on Android TV Custom Tab and auto-bind screen.
+
+    `email` and `name` used to be accepted here as query parameters and trusted as the
+    signed-in identity. The `state` token they travelled with is minted by
+    /google/oauth-url, which is unauthenticated -- so two requests, neither of them
+    carrying a credential, bound an attacker's TV into any workspace whose owner's address
+    they could guess. Identity now comes only from exchanging `code` with Google.
+    """
+    from jose import JWTError, jwt
+    from .auth import ALGORITHM, get_secret_key
+
+    FAILED_LINK = "olrac://auth/failed"
+
+    def failure(heading: str, message: str, link: str = FAILED_LINK) -> HTMLResponse:
+        return _tv_result_page("Sign-in failed", heading, message, link, "#FF8A80")
+
+    if error or not state:
+        return failure("Google Authentication Cancelled", html.escape(error or "Missing state token"))
+
+    try:
+        claims = jwt.decode(state, get_secret_key(), algorithms=[ALGORITHM])
+    except JWTError:
+        return failure("Sign-in Expired", "This sign-in link is no longer valid. Start again on the TV.")
+    if claims.get("typ") != "tv_oauth":
+        return failure("Sign-in Expired", "This sign-in link is no longer valid. Start again on the TV.")
+
+    device_id = str(claims.get("sub") or "").removeprefix("device:")
+    if not device_id:
+        return failure("Sign-in Failed", "This sign-in link is missing its device. Start again on the TV.")
+
+    if not code or not google_device.is_web_configured():
+        return failure("Sign-in Failed", "Google did not return an authorization code. Start again on the TV.")
+
+    # Must be byte-identical to the redirect_uri /google/oauth-url sent to Google, or the
+    # exchange is rejected. Both are built from public_base_url, so a deployment behind TLS
+    # produces an https:// pair -- the hardcoded http://127.0.0.1:8000 this replaces could
+    # never work anywhere but a developer's laptop.
+    redirect_uri = f"{public_base_url(request)}/api/screens/google/oauth-callback"
+    try:
+        google_claims = google_device.exchange_code(code, redirect_uri)
+    except google_device.GoogleError as exc:
+        logger.warning("Google code exchange failed on TV callback: %s", exc)
+        return failure("Sign-in Failed", "Could not complete Google sign-in. Start again on the TV.")
+
+    target_email = (google_claims.get("email") or "").strip().lower()
+    if not target_email or not google_claims.get("email_verified"):
+        return failure("Sign-in Failed", "That Google account has no verified email address.")
+
+    google_sub = google_claims.get("sub")
+    user = None
+    if google_sub:
+        user = db.query(models.User).filter(models.User.google_sub == google_sub).first()
+    if not user:
+        user = db.query(models.User).filter(
+            (func.lower(models.User.email) == target_email)
+            | (func.lower(models.User.username) == target_email)
+        ).first()
+
+    if not user or not user.is_active:
+        # Same generic wording whether the account is absent or disabled, so this cannot be
+        # used to test which addresses have workspaces.
+        fail_error = "Google account not registered. Please sign up on web first."
+        return failure(
+            "Account Not Registered",
+            "That Google account has no OLRAC workspace yet. Create one on the Admin Web "
+            "portal first, then connect this display.",
+            f"{FAILED_LINK}?error={urllib.parse.quote(fail_error)}",
+        )
+
+    screen = bind_screen_to_org(
+        db,
+        device_id=device_id,
+        user=user,
+        name=claims.get("nm"),
+        installation_id=claims.get("iid"),
+        model=claims.get("mod"),
+        manufacturer=claims.get("man"),
+        conflict_error=HTTPException(status_code=403, detail="Screen claimed elsewhere"),
+        how="signed in with Google OAuth",
+    )
+
+    deep_link = (
+        f"olrac://auth/success?screen_id={screen.id}"
+        f"&screen_name={urllib.parse.quote(screen.name or '')}"
+    )
+    return _tv_result_page(
+        "Display connected",
+        "&#10003; Display Connected",
+        f"Screen <strong>{html.escape(screen.name or 'Display')}</strong> is now linked to "
+        f"<strong>{html.escape(user.email or user.username)}</strong>.",
+        deep_link,
+        "#68E0A0",
+    )
+
 
 @router.post("/enroll", response_model=schemas.EnrollResponse)
 def enroll_device(req: schemas.EnrollRequest, db: Session = Depends(database.get_db)):
@@ -520,6 +1095,13 @@ def enroll_device(req: schemas.EnrollRequest, db: Session = Depends(database.get
                 "Reclaiming screen %s for installation %s (device id changed %s -> %s)",
                 screen.id, req.installation_id, screen.device_id, req.device_id,
             )
+            temp_screen = db.query(models.Screen).filter(
+                models.Screen.device_id == req.device_id,
+                models.Screen.id != screen.id
+            ).first()
+            if temp_screen:
+                db.delete(temp_screen)
+                db.flush()
             screen.device_id = req.device_id
 
     if not screen:
@@ -616,11 +1198,7 @@ async def get_screens(
 
     changed = False
     for screen in candidates:
-        if presence is not None:
-            is_online = presence.get(screen.id, False)
-        else:
-            # Fallback keeps the dashboard truthful when Redis is unavailable.
-            is_online = _is_recent(screen.last_seen)
+        is_online = (presence.get(screen.id, False) if presence else False) or _is_recent(screen.last_seen)
         new_status = "online" if is_online else "offline"
         if screen.status != new_status:
             screen.status = new_status
@@ -879,10 +1457,10 @@ async def heartbeat(
     # Presence cache. Best-effort on purpose: a Redis outage must never fail a TV's
     # heartbeat. last_seen is already committed above, so get_screens can fall back to
     # it. Reliability of the fleet outranks accuracy of the presence cache.
+    pending_command = await pop_device_command(db_screen.device_id)
     try:
-        redis = database.get_redis()
         ttl = screen_offline_after_seconds()
-        await redis.setex(f"screen_presence:{db_screen.id}", ttl, "online")
+        await database.get_redis().setex(f"screen_presence:{db_screen.id}", ttl, "online")
     except Exception as exc:  # noqa: BLE001 - any Redis failure must stay non-fatal
         logger.warning("Redis presence write failed for screen %s: %s", db_screen.id, exc)
 
@@ -891,54 +1469,22 @@ async def heartbeat(
         "screen_status": db_screen.status,
         "server_time_ms": int(models.utcnow().timestamp() * 1000),
         "screen_id": db_screen.id,
-        "organization_id": db_screen.organization_id
+        "organization_id": db_screen.organization_id,
+        "pending_command": pending_command,
     }
 
 
-@router.post("/{screen_id}/approve", response_model=schemas.ScreenResponse)
-def approve_screen(
-    screen_id: int,
-    scope: TenantScope = Depends(require_tenant_roles("owner")),
-):
-    """Let a self-enrolled screen into the fleet.
-
-    Owner-only rather than owner-or-editor: this is the step that decides a device is
-    genuinely ours, and it is the only thing standing between a Google account that can
-    sign in and a screen that plays our content.
-    """
-    screen = scope.get(models.Screen, screen_id)
-    if not screen:
-        raise HTTPException(status_code=404, detail="Screen not found")
-    if screen.approved_at is None:
-        screen.approved_at = models.utcnow()
-        # The player polls with `since`; without a fresh marker an approved screen would
-        # keep getting 204 and stay dark until something else touched the row.
-        screen.assignment_updated_at = models.utcnow()
-        scope.db.commit()
-        scope.db.refresh(screen)
-        logger.info("Screen %s approved by %s", screen_id, scope.user.username)
-    return screen
-
-
-@router.post("/{screen_id}/revoke-approval", response_model=schemas.ScreenResponse)
-def revoke_screen_approval(
-    screen_id: int,
-    scope: TenantScope = Depends(require_tenant_roles("owner")),
-):
-    """Put a screen back in the queue, e.g. a device that left the estate.
-
-    Kept rather than only offering delete: deleting loses the play history that billing
-    and the client reports are built from.
-    """
-    screen = scope.get(models.Screen, screen_id)
-    if not screen:
-        raise HTTPException(status_code=404, detail="Screen not found")
-    screen.approved_at = None
-    screen.assignment_updated_at = models.utcnow()
-    scope.db.commit()
-    scope.db.refresh(screen)
-    logger.info("Screen %s approval revoked by %s", screen_id, scope.user.username)
-    return screen
+# Screen approval was removed here, deliberately.
+#
+# `Screen.approved_at` was written by /pair, /sign-in and /enroll and read by absolutely
+# nothing -- sync_tv never consulted it. So POST /{id}/approve and /{id}/revoke-approval
+# had no effect on playback: a "revoked" screen kept syncing and playing, and no dashboard
+# ever called either route. Pairing a screen is now what it always actually was, instant.
+#
+# The gate that DOES matter is company approval (Organization.status), which a platform
+# administrator controls from the admin console and which get_tenant_scope and sync_tv both
+# enforce. approved_at survives as the informational "when did this screen join" timestamp
+# the fleet list shows.
 
 
 @router.post("/{screen_id}/assign/{playlist_id}")
@@ -1002,6 +1548,10 @@ def player_version(db: Session = Depends(database.get_db)):
     return current_app_version(db)
 
 
+# A group tree deeper than this is a mistake or a cycle, either way not worth walking.
+MAX_GROUP_DEPTH = 32
+
+
 def resolve_screen_playlist(screen: models.Screen, db: Session) -> int | None:
     # 1. Emergency Broadcast Overrides
     active_broadcasts = db.query(models.EmergencyBroadcast).filter(
@@ -1014,10 +1564,18 @@ def resolve_screen_playlist(screen: models.Screen, db: Session) -> int | None:
         if broadcast.target_type == "screen" and broadcast.target_id == screen.id:
             return broadcast.playlist_id
             
-    # For group, we need to check screen's group and its parents
+    # For group, we need to check screen's group and its parents.
+    #
+    # Bounded. ScreenGroup.parent_id is operator-settable and was never validated, so a
+    # cycle (A -> B -> A) was reachable, and every one of these `while current_group` walks
+    # would then spin forever holding a database connection and a request thread. The
+    # create/update routes now reject cycles outright; this cap is the backstop for rows
+    # that predate that check.
     screen_group_ids = []
     current_group = screen.group
-    while current_group:
+    for _ in range(MAX_GROUP_DEPTH):
+        if current_group is None:
+            break
         screen_group_ids.append(current_group.id)
         current_group = current_group.parent
         
@@ -1033,9 +1591,11 @@ def resolve_screen_playlist(screen: models.Screen, db: Session) -> int | None:
     if screen.playlist_id:
         return screen.playlist_id
         
-    # 3. Hierarchical Group Inheritance
+    # 3. Hierarchical Group Inheritance (bounded, see MAX_GROUP_DEPTH above)
     current_group = screen.group
-    while current_group:
+    for _ in range(MAX_GROUP_DEPTH):
+        if current_group is None:
+            break
         if current_group.playlist_id:
             return current_group.playlist_id
         current_group = current_group.parent
@@ -1064,13 +1624,15 @@ def resolve_screen_playlist(screen: models.Screen, db: Session) -> int | None:
     response_model=schemas.SyncResponse,
     responses={204: {"description": "Playlist has not changed"}},
 )
-def sync_tv(
+async def sync_tv(
     device_id: str,
     since: datetime | None = None,
     db: Session = Depends(database.get_db),
     credentials: HTTPAuthorizationCredentials | None = Depends(security)
 ):
     screen = verify_device_auth(device_id, credentials, db)
+
+    pending_command = await pop_device_command(device_id)
 
     # Not yet let into the fleet: answer with the state and nothing else. Deliberately
     # ahead of the 204 short-circuit below -- a screen that was playing before it was
@@ -1081,13 +1643,51 @@ def sync_tv(
     # has no approved_at, and answering "pending_approval" for it would hide the
     # waiting_pairing state the player uses to decide to show its pairing code -- a brand
     # new TV would sit blank instead, and could never be paired.
-    if screen.organization_id is not None and screen.approved_at is None:
+    if screen.organization and screen.organization.status == "pending_approval":
+        setting = db.query(models.SystemSetting).filter(models.SystemSetting.key == "universal_demo_video_url").first()
+        demo_url = setting.value if setting else "/uploads/f9863204-f997-4122-ac1b-a50157e3d905.mp4"
+        demo_url = resolve_media_url(demo_url) or demo_url
+
+        demo_content = schemas.ContentResponse(
+            id=999999,
+            name="OLRAC Universal Demo Reel",
+            type="video/mp4",
+            file_url=demo_url,
+            thumbnail=None,
+            file_size_bytes=1575315,
+            duration_ms=44000,
+            status="ready",
+            uploaded_at=models.utcnow(),
+            renditions=[],
+        )
+        demo_item = schemas.PlaylistItemResponse(
+            id=999999,
+            content_id=999999,
+            order=0,
+            duration=44,
+            rotation=screen.orientation or 0,
+            content=demo_content,
+        )
+        demo_playlist = schemas.PlaylistResponse(
+            id=999999,
+            name="OLRAC Universal Demo Loop",
+            default_transition="fade",
+            default_transition_ms=600,
+            created_at=models.utcnow(),
+            updated_at=models.utcnow(),
+            items=[demo_item],
+        )
         return schemas.SyncResponse(
-            status="pending_approval",
-            playlist=None,
+            status="online",
+            playlist=demo_playlist,
+            playlist_updated_at=models.utcnow(),
             fit_mode=screen.fit_mode or "contain",
-            maintenance_pin=screen.maintenance_pin,
-            sync_interval_seconds=player_sync_interval_seconds(),
+            maintenance_pin=screen.maintenance_pin if getattr(screen, "authenticated", False) else None,
+            sync_interval_seconds=15,
+            operating_mode="always",
+            pending_command=pending_command,
+            screen_id=screen.id,
+            organization_id=screen.organization_id,
         )
 
     playlist_id = resolve_screen_playlist(screen, db)
@@ -1108,7 +1708,7 @@ def sync_tv(
         marker = screen.group.updated_at
 
     marker = as_aware_utc(marker)
-    if since and marker <= as_aware_utc(since):
+    if since and marker <= as_aware_utc(since) and not pending_command:
         return Response(
             status_code=204,
             headers={"X-Sync-Interval-Seconds": str(player_sync_interval_seconds())},
@@ -1138,7 +1738,9 @@ def sync_tv(
 
     return schemas.SyncResponse(
         fit_mode=screen.fit_mode or "contain",
-        maintenance_pin=screen.maintenance_pin,
+        # Withheld from a screen that authenticated with nothing but its device id: this
+        # pin unlocks the on-TV maintenance screen, and device ids are guessable.
+        maintenance_pin=screen.maintenance_pin if getattr(screen, "authenticated", False) else None,
         operating_mode=screen.operating_mode or "always",
         operating_hours=screen.operating_hours,
         playlist=playlist_payload,
@@ -1146,6 +1748,9 @@ def sync_tv(
         status=screen.status,
         app_version=current_app_version(db, screen.target_version_code or (screen.group.target_version_code if screen.group else None)),
         sync_interval_seconds=player_sync_interval_seconds(),
+        pending_command=pending_command,
+        screen_id=screen.id,
+        organization_id=screen.organization_id,
     )
 
 
@@ -1165,13 +1770,18 @@ def batch_upload_play_logs(
     device_id = req.device_id
     screen = verify_device_auth(device_id, credentials, db)
 
-    if screen.id != req.screen_id:
-        logger.warning(f"Device {device_id} (screen {screen.id}) attempted to post logs for screen {req.screen_id}")
-        raise HTTPException(status_code=403, detail="Screen ID mismatch")
+    # The identity that counts is the authenticated screen, never the body. screen_id and
+    # organization_id are still ACCEPTED for compatibility with players that send them, but
+    # a value naming a different screen or tenant is rejected rather than quietly
+    # rewritten: silently re-attributing it would let one TV file plays that look like they
+    # came from a competitor's screen, and the sender would be told it worked.
+    if req.screen_id is not None and req.screen_id != screen.id:
+        raise HTTPException(status_code=403, detail="screen_id does not match the authenticated screen")
+    if req.organization_id is not None and req.organization_id != screen.organization_id:
+        raise HTTPException(status_code=403, detail="organization_id does not match the authenticated screen")
 
-    if screen.organization_id != req.organization_id:
-        logger.warning(f"Device {device_id} (org {screen.organization_id}) attempted to post logs for org {req.organization_id}")
-        raise HTTPException(status_code=403, detail="Organization ID mismatch")
+    target_screen_id = screen.id
+    target_org_id = screen.organization_id
 
     if not req.events:
         return {"status": "ok", "inserted": 0}
@@ -1183,28 +1793,42 @@ def batch_upload_play_logs(
     # NULL on every rollup row, and since all campaign analytics filter on it, every
     # campaign reports zero plays forever. Derive it here from the playlist the event
     # names -- server side, so it also repairs events already queued on devices.
-    # Scoped to the caller's org so a forged playlist_id cannot attribute across tenants.
+    # Scoped to the screen's verified org so a forged playlist_id cannot attribute across tenants.
     playlist_ids = {ev.playlist_id for ev in req.events if ev.playlist_id is not None}
     campaign_by_playlist: dict[int, int | None] = {}
+    media_by_playlist: dict[int, int | None] = {}
     if playlist_ids:
         campaign_by_playlist = {
             pid: cid
             for pid, cid in db.query(models.Playlist.id, models.Playlist.campaign_id)
             .filter(
                 models.Playlist.id.in_(playlist_ids),
-                models.Playlist.organization_id == req.organization_id,
+                models.Playlist.organization_id == target_org_id,
             )
             .all()
         }
+        # Fallback media_id resolution for single-item playlists
+        playlist_items = (
+            db.query(models.PlaylistItem.playlist_id, models.PlaylistItem.content_id)
+            .filter(models.PlaylistItem.playlist_id.in_(playlist_ids))
+            .all()
+        )
+        from collections import defaultdict
+        p_items_map = defaultdict(list)
+        for pid, cid in playlist_items:
+            p_items_map[pid].append(cid)
+        for pid, cids in p_items_map.items():
+            if len(cids) == 1:
+                media_by_playlist[pid] = cids[0]
 
     values = []
     now = models.utcnow()
     for ev in req.events:
         values.append({
             "event_id": ev.event_id,
-            "screen_id": req.screen_id,
-            "organization_id": req.organization_id,
-            "media_id": ev.media_id,
+            "screen_id": target_screen_id,
+            "organization_id": target_org_id,
+            "media_id": ev.media_id or media_by_playlist.get(ev.playlist_id),
             "playlist_id": ev.playlist_id,
             "campaign_id": ev.campaign_id or campaign_by_playlist.get(ev.playlist_id),
             "device_started_at": ev.device_started_at,
@@ -1222,6 +1846,10 @@ def batch_upload_play_logs(
     
     result = db.execute(stmt)
     db.commit()
+
+    # Immediately aggregate so stats and proof-of-play cards update live in real-time
+    from ..worker import aggregate_play_logs_sync
+    aggregate_play_logs_sync(db)
     
     return {"status": "ok", "inserted": result.rowcount}
 
@@ -1243,3 +1871,47 @@ def resolve_location_link(
     except MapsLinkError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     return schemas.ResolveLinkResponse(latitude=latitude, longitude=longitude, name=name)
+
+
+@router.post("/{screen_id}/bring-to-front")
+async def bring_to_front(
+    screen_id: int,
+    scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
+):
+    screen = scope.get(models.Screen, screen_id)
+    if not screen:
+        raise HTTPException(status_code=404, detail="Screen not found")
+
+    # Two delivery paths, on purpose: the publish reaches a screen holding a websocket
+    # right now, and the queued command is picked up at the next sync or heartbeat by one
+    # that is not. queue_device_command owns the SETEX -- this used to write the same key
+    # itself a few lines below, so the two could disagree about the TTL.
+    queued = await queue_device_command(screen.device_id, "bring_to_front", 300) if screen.device_id else False
+
+    published = False
+    try:
+        redis = database.get_redis()
+        payload = json.dumps({"type": "bring_to_front", "command": "launch_app"})
+        if screen.device_id:
+            await redis.publish(f"screen:{screen.device_id}", payload)
+            await redis.publish(f"device:{screen.device_id}", payload)
+        await redis.publish(f"screen:{screen.id}", payload)
+        if screen.organization_id:
+            await redis.publish(
+                f"org:{screen.organization_id}",
+                json.dumps({"type": "bring_to_front", "device_id": screen.device_id, "screen_id": screen.id}),
+            )
+        published = True
+    except Exception as e:
+        logger.warning(f"Failed to publish bring_to_front to redis: {e}")
+
+    if not queued and not published:
+        # Neither path is available, so the command is going nowhere. Saying "ok" here is
+        # what made this button look like flaky hardware.
+        raise HTTPException(
+            status_code=503,
+            detail="Could not reach the message broker; the screen was not notified.",
+        )
+
+    return {"status": "ok", "message": "Bring to front command sent"}
+

@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session
 from .. import models, schemas, database
 from ..tenancy import TenantScope, get_tenant_scope, require_tenant_roles
 from .content import is_s3_enabled, s3_client, S3_BUCKET, UPLOAD_DIR, public_upload_url
-from .screens import resolve_media_url, verify_device_auth
+from ..media_urls import resolve_media_url
+from .screens import verify_device_auth
 
 logger = logging.getLogger(__name__)
 security = HTTPBearer()
@@ -59,7 +60,13 @@ def upload_device_screenshot(
                 storage_key,
                 ExtraArgs={"ContentType": file.content_type or "image/jpeg"},
             )
-            file_url = f"{os.getenv('S3_ENDPOINT_URL').replace('https://', 'https://pub-')}/{S3_BUCKET}/{storage_key}" if os.getenv('S3_ENDPOINT_URL') else f"https://{S3_BUCKET}.s3.amazonaws.com/{storage_key}"
+            # Stored in the canonical "s3://<key>" form, like every other asset, and
+            # resolved to a fetchable URL on read (list_screenshots below already calls
+            # resolve_media_url). It used to be saved as a public https://pub-... URL,
+            # which media_storage.is_remote() does not recognise -- so the nightly
+            # prune deleted the row, silently failed to delete the object, and every
+            # screenshot ever taken stayed in the bucket forever.
+            file_url = f"s3://{storage_key}"
         except Exception as e:
             logger.error(f"Failed to upload screenshot to S3: {e}")
             raise HTTPException(status_code=500, detail="Storage error")
@@ -83,7 +90,7 @@ def upload_device_screenshot(
     db.commit()
     db.refresh(screenshot)
     
-    return {"status": "ok", "url": file_url}
+    return {"status": "ok", "url": resolve_media_url(file_url) or file_url}
 
 
 @router.get("/{screen_id}/screenshots")

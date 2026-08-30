@@ -49,6 +49,9 @@ class Plan(Base):
     yearly_price_paise = Column(Integer, nullable=False, default=0)
     max_screens = Column(Integer, nullable=False)
     max_storage_bytes = Column(BigInteger, nullable=False)
+    # 0 = unlimited, matching Organization.max_ad_slots. A package carries the default;
+    # Organization.max_ad_slots overrides it for one tenant without editing the package.
+    max_ad_slots = Column(Integer, nullable=False, default=0, server_default="0")
     feature_flags_json = Column(Text, nullable=False, default="{}")
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(UtcDateTime, nullable=False, default=utcnow)
@@ -64,7 +67,14 @@ class Organization(Base):
     name = Column(String, nullable=False)
     slug = Column(String, unique=True, index=True, nullable=False)
     plan_id = Column(Integer, ForeignKey("plans.id"), nullable=True)
+    status = Column(String, nullable=False, default="active") # pending_approval, active, suspended, rejected
+    approved_at = Column(UtcDateTime, nullable=True)
+    approved_by_user_id = Column(Integer, nullable=True)
+    rejection_reason = Column(String, nullable=True)
     storage_quota_bytes = Column(BigInteger, nullable=False, default=10 * 1024 * 1024 * 1024)
+    # Per-tenant quotas set by Super Admin. 0 = unlimited (default).
+    max_screens = Column(Integer, nullable=False, default=0)
+    max_ad_slots = Column(Integer, nullable=False, default=0)
     created_at = Column(UtcDateTime, nullable=False, default=utcnow)
 
     users = relationship("User", back_populates="organization")
@@ -74,6 +84,17 @@ class Organization(Base):
     playlists = relationship("Playlist", back_populates="organization")
     plan = relationship("Plan", back_populates="organizations")
     subscription = relationship("Subscription", back_populates="organization", uselist=False)
+
+
+class SystemSetting(Base):
+    __tablename__ = "system_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String, unique=True, index=True, nullable=False)
+    value = Column(Text, nullable=False)
+    description = Column(String, nullable=True)
+    updated_at = Column(UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
 
 
 class Subscription(Base):
@@ -121,13 +142,20 @@ class User(Base):
     # they are unset.
     full_name = Column(String, nullable=True)
     email = Column(String, unique=True, index=True, nullable=True)
+    google_sub = Column(String, unique=True, index=True, nullable=True)
+    picture = Column(String, nullable=True)
+    auth_provider = Column(String, nullable=False, default="local")
 
-    organization = relationship("Organization", back_populates="users")
+    organization = relationship("Organization", back_populates="users", foreign_keys=[organization_id])
 
     @property
     def organization_name(self) -> str | None:
         """Exposed so UserResponse can show the tenant by name instead of a bare id."""
         return self.organization.name if self.organization else None
+
+    @property
+    def organization_status(self) -> str:
+        return self.organization.status if self.organization else "active"
 
 
 class ScreenshotLog(Base):

@@ -9,10 +9,21 @@ def select_rendition(content: schemas.ContentResponse, screen: models.Screen) ->
     if not content.renditions:
         return None
         
-    # Rule 2: If screen has never reported capabilities, return 720p (safe default)
+    # Rule 2: a screen that has not reported its capabilities yet gets a conservative
+    # rendition -- the largest whose longest edge is within 1280, the same ceiling Rule 6
+    # applies to low-memory devices.
+    #
+    # Chosen by dimensions, not by the label "720p". That name was a coincidence of
+    # whichever resolutions the transcoder happened to produce, so when the set changed
+    # this returned None -- and the caller falls back to content.file_url, which is the
+    # full-size master. Every freshly provisioned screen, the ones nothing is known
+    # about, would have been handed the heaviest file in the library.
     if screen.screen_width is None:
-        safe_rend = next((r for r in content.renditions if r.resolution == "720p"), None)
-        return safe_rend if safe_rend else None
+        modest = [r for r in content.renditions if max(r.width or 0, r.height or 0) <= 1280]
+        if modest:
+            return max(modest, key=lambda r: (r.width or 0) * (r.height or 0))
+        # Every rendition is above the ceiling; the smallest is the safest on offer.
+        return min(content.renditions, key=lambda r: (r.width or 0) * (r.height or 0))
         
     valid_renditions = list(content.renditions)
     

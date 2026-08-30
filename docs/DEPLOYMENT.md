@@ -2,6 +2,11 @@
 
 This document covers the end-to-end deployment process for a new production environment, from standing up the server stack to provisioning physical Android TVs in the field.
 
+> **Deploying to Oracle Cloud / Cloudflare / Supabase instead?** See
+> [DEPLOYMENT_CLOUD.md](DEPLOYMENT_CLOUD.md). This guide assumes Postgres and Redis run
+> in the same Compose stack and the dashboard is served from a container; the split
+> hosting path differs in enough places that mixing the two will not work.
+
 ## 1. Server Environment Setup
 
 Before starting the stack, ensure the following mandatory environment variables are set in your `.env` file (see `.env.example` for reference):
@@ -9,7 +14,7 @@ Before starting the stack, ensure the following mandatory environment variables 
 - `SECRET_KEY`: A cryptographically secure random string used for JWT signing.
 - `PUBLIC_BASE_URL`: The public-facing URL of the backend (e.g., `https://api.olracsignage.com`). This must be correct, as it is used to generate absolute URLs for media assets and APK downloads.
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET_NAME`, `S3_ENDPOINT_URL`: R2/S3 credentials for media storage.
-- `PLAY_LOG_RETENTION_DAYS`: Number of days to keep proof-of-play billing logs (default is 180).
+- `PLAY_LOG_RETENTION_DAYS`: Days of raw proof-of-play logs to keep (default 7). At ~316MB/day for 100 screens this is the fastest-growing table in the database; size it against the database you have. `ROLLUP_RETENTION_DAYS` (default 400) bounds the aggregated history separately.
 
 ## 2. Storage Configuration
 

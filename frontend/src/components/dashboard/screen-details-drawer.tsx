@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Camera, X } from 'lucide-react'
+import { Camera, PlaySquare, X } from 'lucide-react'
 import { Dialog as BaseDialog } from '@base-ui/react/dialog'
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { Button } from '@/components/ui/button'
@@ -58,12 +58,32 @@ export function ScreenDetailsDrawer({
     onError: (error: Error) => toast.error(error.message),
   })
 
+  const bringToFrontMutation = useMutation({
+    mutationFn: () => api.bringToFront(screen.id),
+    onSuccess: () => {
+      toast.success('Command sent: opening signage app on screen.')
+    },
+    onError: (error: Error) => toast.error(error.message),
+  })
+
   return (
     <BaseDialog.Root open={open} onOpenChange={onOpenChange}>
       <BaseDialog.Portal>
         <BaseDialog.Backdrop className="fixed inset-0 z-50 bg-black/30 backdrop-blur-[2px]" />
         <BaseDialog.Popup className="bg-card fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col shadow-2xl">
-          <div className="flex items-center justify-between p-4">
+          <div className="flex items-center justify-between p-4 border-b border-hairline">
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={bringToFrontMutation.isPending}
+                onClick={() => bringToFrontMutation.mutate()}
+                className="text-xs"
+              >
+                <PlaySquare data-icon="inline-start" className="size-3.5" />
+                {bringToFrontMutation.isPending ? 'Opening…' : 'Open app on TV'}
+              </Button>
+            </div>
             <BaseDialog.Title className="sr-only">Screen details</BaseDialog.Title>
             <BaseDialog.Close
               aria-label="Close details"

@@ -40,6 +40,14 @@ from fastapi.testclient import TestClient
 
 from backend import database, models
 from backend.main import app
+
+# Build the schema explicitly. backend.main used to do this as an import side effect,
+# so importing the app silently wrote to whatever DATABASE_URL pointed at; it now runs
+# in the lifespan, which a bare TestClient(app) never starts. Each isolated script owns
+# its own database anyway, so creating it here is the honest version of what was
+# happening implicitly before.
+from backend import database as _bootstrap_db, models as _bootstrap_models
+_bootstrap_models.Base.metadata.create_all(bind=_bootstrap_db.engine)
 from backend.routers.auth import get_password_hash
 
 
@@ -150,7 +158,8 @@ def run() -> None:
         )
         assert signed_in.status_code == 200, signed_in.text
         assert signed_in.json()["name"] == "Lobby TV"
-        assert signed_in.json()["status"] == "offline"
+        # Pairing is instant now; see the note in test_screen_approval.py.
+        assert signed_in.json()["status"] == "online"
         assert signed_in.json()["pair_code"] is None, "the claimed code must not stay redeemable"
         assert signed_in.json()["id"] in {
             screen["id"] for screen in client.get("/api/screens/", headers=owner).json()

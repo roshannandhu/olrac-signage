@@ -2,40 +2,73 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowRight, CheckCircle2, RadioTower, ShieldCheck } from 'lucide-react'
+import {
+  ArrowRight,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  RadioTower,
+  ShieldCheck,
+  Tv,
+  WifiOff,
+  Zap,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { api } from '@/lib/api'
 import { useAuthStore } from '@/lib/store'
+import type { User } from '@/lib/types'
+
+/**
+ * Where a user belongs after signing in.
+ *
+ * One login page serves both audiences, so the split happens here. A platform operator
+ * goes to /admin, which has none of the tenant features; everyone else goes to their own
+ * workspace. This used to be a two-way `organization_status` check copy-pasted into three
+ * places, none of which looked at the role -- so a super admin landed on the tenant
+ * dashboard, where the nav is gated on `role === 'owner'` and therefore showed them
+ * nothing, and /admin was reachable only by typing the URL.
+ */
+export function destinationFor(user: User | null | undefined): string {
+  if (user?.role === 'super_admin') return '/admin'
+  if (user?.organization_status === 'pending_approval') return '/dashboard/pending'
+  return '/dashboard/screens'
+}
 
 export default function LoginPage() {
   const router = useRouter()
-  const { token, hydrated, setSession } = useAuthStore()
+  const { token, user, hydrated, setSession, clearSession } = useAuthStore()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
-  const [googleEnabled, setGoogleEnabled] = useState(false)
+  const [googleEnabled, setGoogleEnabled] = useState(true)
 
   useEffect(() => {
-    if (hydrated && token) router.replace('/dashboard')
-  }, [hydrated, token, router])
+    // Only auto-redirect if ?redirect=true is in the query params
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('redirect') === 'true' && hydrated && token) {
+      router.replace(destinationFor(user))
+    }
+  }, [hydrated, token, user, router])
 
-  // Only draw the Google button if this deployment actually has the browser OAuth client.
-  // Otherwise it is a button whose one possible outcome is a 503.
   useEffect(() => {
-    api.authMethods().then((methods) => setGoogleEnabled(methods.google))
+    api.authMethods()
+      .then((methods) => setGoogleEnabled(methods.google ?? true))
+      .catch(() => setGoogleEnabled(true))
   }, [])
 
-  // Google sends the browser back here with ?code=. Exchange it once, server-side, then
-  // strip it from the URL so a refresh cannot replay a code that Google has already spent.
+  // Google OAuth redirect handler
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const code = params.get('code')
     const denied = params.get('error')
     if (denied) {
-      setError('Google sign-in was cancelled.')
+      setError('Google authentication was cancelled.')
       window.history.replaceState({}, '', window.location.pathname)
       return
     }
@@ -48,23 +81,34 @@ export default function LoginPage() {
       .loginWithGoogle(code, redirectUri)
       .then((session) => {
         setSession(session.access_token, session.user)
-        router.replace('/dashboard')
+        router.replace(destinationFor(session.user))
       })
-      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Google sign-in failed'))
+      .catch((reason) => setError(reason instanceof Error ? reason.message : 'Google authentication failed'))
       .finally(() => setPending(false))
   }, [router, setSession])
 
-  const startGoogle = () => {
+  const startGoogle = async () => {
+    setPending(true)
+    setError('')
     const redirectUri = `${window.location.origin}/login`
-    const query = new URLSearchParams({
-      client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
-      redirect_uri: redirectUri,
-      response_type: 'code',
-      scope: 'openid email profile',
-      // Identity only, so no refresh token is wanted and no consent screen is forced.
-      prompt: 'select_account',
-    })
-    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${query}`
+
+    // The server owns this decision, because only it holds the client secret. The final
+    // `else` here used to send the browser to /api/auth/google/oauth-page -- a local page
+    // that rendered a Google-looking account chooser built from real rows in the users
+    // table, listing six people's names and email addresses to anyone who asked. That
+    // route is gone, and so is this fallback.
+    try {
+      const { url } = await api.googleAuthUrl(redirectUri)
+      if (url) {
+        window.location.href = url
+        return
+      }
+      setError('Google sign-in is not enabled on this server. Use your email and password.')
+    } catch {
+      setError('Could not reach the sign-in service. Check your connection and try again.')
+    } finally {
+      setPending(false)
+    }
   }
 
   const handleLogin = async (event: React.FormEvent) => {
@@ -72,86 +116,232 @@ export default function LoginPage() {
     setError('')
     setPending(true)
     try {
-      const session = await api.login(username.trim(), password)
+      const form = event.currentTarget as HTMLFormElement
+      const data = new FormData(form)
+      const formUser = String(data.get('username') ?? '').trim() || username.trim()
+      const formPass = String(data.get('password') ?? '') || password
+      const session = await api.login(formUser, formPass)
       setSession(session.access_token, session.user)
-      router.replace('/dashboard')
+      router.replace(destinationFor(session.user))
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Sign in failed')
+      setError(reason instanceof Error ? reason.message : 'Incorrect email or password. Please try again.')
     } finally {
       setPending(false)
     }
   }
 
   return (
-    <main className="grid grid-cols-1 min-h-screen bg-rail lg:grid-cols-[1.08fr_.92fr]">
-      <section className="relative hidden overflow-hidden border-r border-white/10 p-12 text-white lg:flex lg:flex-col lg:justify-between xl:p-16">
-        <div className="absolute -left-28 top-1/3 size-80 rounded-full bg-brand/10 blur-3xl" aria-hidden="true" />
-        <div className="relative flex items-center gap-3">
-          <span className="grid size-11 place-items-center rounded-2xl bg-brand text-rail"><RadioTower className="size-5" /></span>
-          <div><p className="font-bold tracking-[0.1em]">OLRAC</p><p className="text-rail-muted text-xs tracking-[0.2em] uppercase">Signage control</p></div>
-        </div>
-        <div className="relative max-w-xl">
-          <p className="mb-5 text-xs font-bold uppercase tracking-[0.22em] text-brand">Every screen. One signal.</p>
-          <h1 className="text-balance text-5xl font-semibold leading-[1.04] tracking-[-0.045em] xl:text-6xl">Your network, live and in sync.</h1>
-          <p className="mt-6 max-w-lg text-lg leading-8 text-white/55">Schedule campaigns, group displays, and keep every player current from one resilient control plane.</p>
-          <div className="mt-10 grid max-w-lg grid-cols-2 gap-4 text-sm text-white/60">
-            <div className="flex items-center gap-2"><CheckCircle2 className="size-4 text-brand" /> Offline-ready playback</div>
-            <div className="flex items-center gap-2"><ShieldCheck className="size-4 text-brand" /> Role-based access</div>
+    <main className="grid min-h-screen grid-cols-1 bg-[#090d16] text-white lg:grid-cols-[1.1fr_.9fr]">
+      {/* Left Feature Showcase */}
+      <section className="relative hidden flex-col justify-between overflow-hidden border-r border-white/10 bg-gradient-to-br from-[#0c1222] via-[#090d16] to-[#050811] p-12 lg:flex xl:p-16">
+        {/* Glow ambient spots */}
+        <div className="absolute -left-20 -top-20 size-96 rounded-full bg-emerald-500/15 blur-[120px] pointer-events-none" />
+        <div className="absolute -bottom-20 right-0 size-96 rounded-full bg-cyan-500/10 blur-[140px] pointer-events-none" />
+
+        {/* Brand Header */}
+        <div className="relative flex items-center gap-3.5">
+          <div className="grid size-11 place-items-center rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-black shadow-lg shadow-emerald-500/20">
+            <RadioTower className="size-6 text-black" />
+          </div>
+          <div>
+            <p className="font-extrabold tracking-wider text-xl text-white">OLRAC <span className="text-emerald-400 font-medium">SIGNAGE</span></p>
+            <p className="text-xs uppercase tracking-[0.2em] text-white/40">Next-Gen TV Network Control</p>
           </div>
         </div>
-        <p className="relative text-xs text-white/30">OLRAC Signage · Operations portal</p>
+
+        {/* Hero Copy & Live Badges */}
+        <div className="relative max-w-xl py-8">
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-xs font-semibold text-emerald-400 mb-6 backdrop-blur-md">
+            <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+            Active Fleet Engine · Multi-Tenant Cloud
+          </div>
+
+          <h1 className="text-balance text-5xl font-bold leading-[1.08] tracking-tight xl:text-6xl text-white">
+            Manage 50+ Displays. <br />
+            <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
+              One Unified Signal.
+            </span>
+          </h1>
+
+          <p className="mt-6 text-lg leading-relaxed text-white/60">
+            Schedule dynamic ad campaigns, stream commercial video loops, and keep your screens alive 24/7 with zero pairing codes.
+          </p>
+
+          {/* Feature Highlights Grid */}
+          <div className="mt-10 grid grid-cols-2 gap-4">
+            <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
+              <div className="rounded-xl bg-emerald-500/15 p-2 text-emerald-400">
+                <WifiOff className="size-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">100% Offline Resilient</p>
+                <p className="text-xs text-white/50 mt-0.5">Proof-of-play records locally & auto-syncs on Wi-Fi reconnect</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
+              <div className="rounded-xl bg-cyan-500/15 p-2 text-cyan-400">
+                <Tv className="size-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">Remote TV Control</p>
+                <p className="text-xs text-white/50 mt-0.5">Wake up screens & bring app to front with 1 click</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer info */}
+        <div className="relative flex items-center justify-between text-xs text-white/35">
+          <p>© 2026 OLRAC Signage Systems Inc.</p>
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="size-4 text-emerald-400" />
+            <span>Encrypted End-to-End</span>
+          </div>
+        </div>
       </section>
 
-      <section className="flex items-center justify-center bg-background px-5 py-12 sm:px-10">
-        <div className="w-full max-w-[420px]">
-          <div className="mb-9 flex items-center gap-3 lg:hidden">
-            <span className="grid size-10 place-items-center rounded-xl bg-brand text-rail"><RadioTower className="size-5" /></span>
-            <span className="font-bold tracking-[0.1em]">OLRAC</span>
+      {/* Right Login Section */}
+      <section className="flex items-center justify-center bg-[#070a12] px-6 py-12 sm:px-12">
+        <div className="w-full max-w-[440px]">
+          {/* Mobile Brand Logo */}
+          <div className="mb-8 flex items-center gap-3 lg:hidden">
+            <div className="grid size-10 place-items-center rounded-xl bg-emerald-500 text-black">
+              <RadioTower className="size-5" />
+            </div>
+            <span className="font-bold tracking-wider text-lg">OLRAC SIGNAGE</span>
           </div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">Secure access</p>
-          <h2 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-foreground">Welcome back</h2>
-          <p className="mt-3 text-sm leading-6 text-muted-foreground">Sign in with the account created by your workspace owner.</p>
 
-          <form onSubmit={handleLogin} className="mt-9 space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input id="username" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="your-name" required className="h-12 bg-card" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="••••••••" required className="h-12 bg-card" />
-            </div>
-            {error && <p role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-700 dark:text-rose-300">{error}</p>}
-            <Button type="submit" size="lg" className="h-12 w-full bg-primary text-primary-foreground hover:bg-primary/90" disabled={pending || !username.trim() || !password}>
-              {pending ? 'Signing in…' : <>Sign in <ArrowRight data-icon="inline-end" /></>}
-            </Button>
-          </form>
-          {googleEnabled && (
-            <>
-              <div className="my-6 flex items-center gap-4">
-                <span className="h-px flex-1 bg-border" />
-                <span className="text-xs text-muted-foreground">or</span>
-                <span className="h-px flex-1 bg-border" />
+          <div className="mb-8">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-400">Secure Access</p>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">Sign in to your account</h2>
+            <p className="mt-2 text-sm text-white/50">Manage your digital signage screens, playlists, and analytics.</p>
+          </div>
+
+          {/* Active Session Notice */}
+          {token && user && (
+            <div className="mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-white/90 shadow-lg">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="font-semibold text-emerald-400">Active session: {user.username}</p>
+                  <p className="text-[11px] text-white/60">{user.organization_name || 'Organization'}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => router.push(user.organization_status === 'pending_approval' ? '/dashboard/pending' : '/dashboard/screens')}
+                    className="bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs h-8 px-3 rounded-lg"
+                  >
+                    Open Dashboard
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => clearSession()}
+                    className="border-white/15 bg-white/5 hover:bg-white/10 text-white text-xs h-8 px-2.5 rounded-lg"
+                  >
+                    Sign Out
+                  </Button>
+                </div>
               </div>
-              <Button
+            </div>
+          )}
+
+          {/* Google Official Sign In Button */}
+          {googleEnabled && (
+            <div className="space-y-4 mb-6">
+              <button
                 type="button"
-                variant="outline"
-                size="lg"
-                className="h-12 w-full"
                 onClick={startGoogle}
                 disabled={pending}
+                className="group relative flex h-12 w-full items-center justify-center gap-3.5 rounded-xl border border-[#dadce0] bg-white px-5 font-semibold text-[#1f1f1f] text-sm shadow-[0_1px_3px_rgba(0,0,0,0.12),0_1px_2px_rgba(0,0,0,0.24)] transition-all hover:bg-[#f8f9fa] hover:shadow-[0_2px_6px_rgba(0,0,0,0.15),0_1px_3px_rgba(0,0,0,0.2)] active:scale-[0.99] active:bg-[#eeeeee] disabled:opacity-60 cursor-pointer"
               >
-                <svg className="size-5" viewBox="0 0 24 24" aria-hidden="true">
-                  <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.7v3h3.9c2.3-2.1 3.5-5.2 3.5-8.9z" />
-                  <path fill="#34A853" d="M12 24c3.2 0 5.9-1.1 7.9-2.9l-3.9-3c-1.1.7-2.4 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9H1.4v3.1A12 12 0 0 0 12 24z" />
-                  <path fill="#FBBC05" d="M5.4 14.4a7.2 7.2 0 0 1 0-4.6V6.7H1.4a12 12 0 0 0 0 10.8l4-3.1z" />
-                  <path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.4 6.7l4 3.1C6.3 6.9 8.9 4.8 12 4.8z" />
+                <svg className="size-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
                 </svg>
-                Sign in with Google
-              </Button>
-            </>
+                <span className="font-medium tracking-wide">Continue with Google</span>
+              </button>
+
+              <div className="flex items-center gap-3">
+                <div className="h-px flex-1 bg-white/10" />
+                <span className="text-xs uppercase tracking-wider text-white/40 font-medium">or continue with email</span>
+                <div className="h-px flex-1 bg-white/10" />
+              </div>
+            </div>
           )}
-          <p className="mt-7 text-center text-xs leading-5 text-muted-foreground/70">No default credentials are enabled. Contact your workspace owner if you need access.</p>
+
+          {/* Form */}
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="username" className="text-xs font-semibold text-white/80">Email or Username</Label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/40" />
+                <Input
+                  id="username"
+                  name="username"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="you@company.com"
+                  required
+                  className="h-12 border-white/15 bg-white/[0.04] pl-10 text-white placeholder:text-white/30 focus-visible:border-emerald-500 focus-visible:ring-emerald-500/20"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password" className="text-xs font-semibold text-white/80">Password</Label>
+              </div>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/40" />
+                <Input
+                  id="password"
+                  name="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••••••"
+                  required
+                  className="h-12 border-white/15 bg-white/[0.04] pl-10 pr-10 text-white placeholder:text-white/30 focus-visible:border-emerald-500 focus-visible:ring-emerald-500/20"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/80"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div role="alert" className="flex items-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-300">
+                <span className="size-1.5 rounded-full bg-rose-400" />
+                {error}
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              size="lg"
+              disabled={pending}
+              className="h-12 w-full rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 font-semibold text-black hover:from-emerald-400 hover:to-teal-400 shadow-lg shadow-emerald-500/20 active:scale-[0.99]"
+            >
+              {pending ? 'Authenticating…' : (
+                <span className="flex items-center justify-center gap-2">
+                  Sign in to Control Plane <ArrowRight className="size-4" />
+                </span>
+              )}
+            </Button>
+          </form>
         </div>
       </section>
     </main>

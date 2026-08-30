@@ -66,6 +66,9 @@ def get_campaign_stats(
     tenant: TenantScope = Depends(require_tenant_roles("owner", "editor", "viewer")),
     db: Session = Depends(get_db),
 ):
+    from ..worker import aggregate_play_logs_sync
+    aggregate_play_logs_sync(db)
+
     # Tenant scoping validation
     campaign = db.query(Campaign).filter(
         Campaign.organization_id == tenant.organization_id,
@@ -129,6 +132,9 @@ def get_campaign_timeseries(
     tenant: TenantScope = Depends(require_tenant_roles("owner", "editor", "viewer")),
     db: Session = Depends(get_db),
 ):
+    from ..worker import aggregate_play_logs_sync
+    aggregate_play_logs_sync(db)
+
     campaign = db.query(Campaign).filter(
         Campaign.organization_id == tenant.organization_id,
         Campaign.id == campaign_id
@@ -166,6 +172,9 @@ def export_campaign_report(
     tenant: TenantScope = Depends(require_tenant_roles("owner", "editor", "viewer")),
     db: Session = Depends(get_db),
 ):
+    from ..worker import aggregate_play_logs_sync
+    aggregate_play_logs_sync(db)
+
     campaign = db.query(Campaign).filter(
         Campaign.organization_id == tenant.organization_id,
         Campaign.id == campaign_id
@@ -204,7 +213,7 @@ def export_campaign_report(
         from openpyxl import Workbook
         wb = Workbook()
         ws = wb.active
-        ws.title = "Analytics"
+        ws.title = "Playback Report"
         ws.append(["Date/Hour", "Screen", "Total Plays", "Completed Plays", "Error Plays"])
         for row in rows:
             ws.append([row.date_hour.strftime("%Y-%m-%d %H:00"), row.screen_name, row.total_plays, row.completed_plays, row.error_plays])
@@ -257,12 +266,14 @@ def get_media_report(
     deduplicated record the players upload — rather than from anything the dashboard
     infers about what *should* be playing.
     """
-    content = db.query(Content).filter(
-        Content.organization_id == tenant.organization_id,
-        Content.id == content_id,
-    ).first()
+    from ..worker import aggregate_play_logs_sync
+    aggregate_play_logs_sync(db)
+
+    content = tenant.get(Content, content_id)
     if not content:
         raise HTTPException(status_code=404, detail="Content not found")
+
+    target_org_id = content.organization_id
 
     now = datetime.now(timezone.utc)
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -275,7 +286,7 @@ def get_media_report(
             func.coalesce(func.sum(PlayLogHourlyRollup.completed_plays), 0),
             func.coalesce(func.sum(PlayLogHourlyRollup.error_plays), 0),
         ).filter(
-            PlayLogHourlyRollup.organization_id == tenant.organization_id,
+            PlayLogHourlyRollup.organization_id == target_org_id,
             PlayLogHourlyRollup.media_id == content_id,
         )
         if since is not None:
@@ -309,12 +320,12 @@ def get_media_report(
             PlayLogHourlyRollup,
             and_(
                 PlayLogHourlyRollup.screen_id == Screen.id,
-                PlayLogHourlyRollup.organization_id == tenant.organization_id,
+                PlayLogHourlyRollup.organization_id == target_org_id,
                 PlayLogHourlyRollup.media_id == content_id,
             ),
         )
         .outerjoin(ScreenGroup, Screen.group_id == ScreenGroup.id)
-        .filter(Screen.organization_id == tenant.organization_id)
+        .filter(Screen.organization_id == target_org_id)
         .group_by(
             Screen.id, Screen.name, Screen.location,
             Screen.latitude, Screen.longitude, ScreenGroup.name,
@@ -339,12 +350,6 @@ def get_media_report(
         for row in per_screen_rows
     ]
 
-    # Rolled up in Python rather than a second query: the per-screen set is at most the
-    # size of the fleet, and this keeps one source of truth for both views.
-    # Keyed on the screen's real location, which is what "how many times did my advert
-    # play in each place" actually means. It used to key on the screen *group* — a
-    # playlist-sharing construct that has nothing to do with geography, so two screens in
-    # one mall in different groups were reported as two separate places.
     places: dict[str, dict] = {}
     for row in per_screen:
         key = row["location"] or row["group_name"] or "No location set"
@@ -360,7 +365,7 @@ def get_media_report(
             func.coalesce(func.sum(PlayLogHourlyRollup.completed_plays), 0).label("completed"),
         )
         .filter(
-            PlayLogHourlyRollup.organization_id == tenant.organization_id,
+            PlayLogHourlyRollup.organization_id == target_org_id,
             PlayLogHourlyRollup.media_id == content_id,
             PlayLogHourlyRollup.date_hour >= now - timedelta(days=30),
         )

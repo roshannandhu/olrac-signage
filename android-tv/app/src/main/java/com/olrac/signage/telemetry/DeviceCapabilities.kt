@@ -114,7 +114,7 @@ data class DeviceCapabilities(
             val screenWidth = metrics.widthPixels
             val screenHeight = metrics.heightPixels
             val refreshRate = display.refreshRate
-            val orientation = if (screenWidth > screenHeight) 0 else 90
+            val orientation = 0
 
             val am = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
             val memInfo = ActivityManager.MemoryInfo()

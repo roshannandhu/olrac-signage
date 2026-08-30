@@ -184,7 +184,10 @@ def run() -> None:
     db = TestingSessionLocal()
     bound = db.query(Screen).filter(Screen.device_id == "tv-1").one()
     assert bound.organization_id == acme_id
-    assert bound.status == "offline"
+    # Bound screens go straight to "online". The screen-approval gate this used to
+    # assert ("offline" until an owner approved) was dead code: approved_at was written
+    # by three routes and read by none, so a "pending" screen synced and played anyway.
+    assert bound.status == "online"
     # A code from an earlier /register must not survive the claim: it could still be
     # redeemed by somebody else afterwards.
     assert bound.pair_code is None

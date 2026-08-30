@@ -55,7 +55,7 @@ function useStoredView(): ViewMode {
 export default function ScreensPage() {
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
-  const canEdit = user?.role === 'owner' || user?.role === 'editor'
+  const canEdit = user?.role === 'owner' || user?.role === 'editor' || user?.role === 'super_admin'
 
   // Screens report in on their own cadence; a slow poll keeps the wall of thumbnails
   // roughly live without hammering the API at 500 screens.

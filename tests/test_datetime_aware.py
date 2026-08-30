@@ -32,6 +32,14 @@ alembic_args = ['-c', 'backend/alembic.ini', 'upgrade', 'head']
 alembic.config.main(argv=alembic_args)
 from backend.main import app
 
+# Build the schema explicitly. backend.main used to do this as an import side effect,
+# so importing the app silently wrote to whatever DATABASE_URL pointed at; it now runs
+# in the lifespan, which a bare TestClient(app) never starts. Each isolated script owns
+# its own database anyway, so creating it here is the honest version of what was
+# happening implicitly before.
+from backend import database as _bootstrap_db, models as _bootstrap_models
+_bootstrap_models.Base.metadata.create_all(bind=_bootstrap_db.engine)
+
 def run():
     with TestClient(app) as client:
         # 1. Login

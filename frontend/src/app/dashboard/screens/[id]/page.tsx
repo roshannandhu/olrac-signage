@@ -1,10 +1,11 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { ArrowLeft, Clock, Info, Monitor, MonitorPlay, Settings, Smartphone, Tv2 } from 'lucide-react'
+import { ArrowLeft, Clock, Info, Monitor, MonitorPlay, PlaySquare, Settings, Smartphone, Tv2 } from 'lucide-react'
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { ErrorState } from '@/components/dashboard/error-state'
 import { OverlayBadge } from '@/components/dashboard/asset-card'
@@ -28,7 +29,7 @@ export default function ScreenDetailPage() {
   const params = useParams()
   const screenId = Number(params.id)
   const user = useAuthStore((state) => state.user)
-  const canEdit = user?.role === 'owner' || user?.role === 'editor'
+  const canEdit = user?.role === 'owner' || user?.role === 'editor' || user?.role === 'super_admin'
 
   const screensQuery = useQuery({ queryKey: ['screens'], queryFn: api.getScreens })
   const screens = useMemo(() => screensQuery.data || [], [screensQuery.data])
@@ -37,6 +38,12 @@ export default function ScreenDetailPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [hoursOpen, setHoursOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
+
+  const bringToFrontMutation = useMutation({
+    mutationFn: () => api.bringToFront(screenId),
+    onSuccess: () => toast.success('Command sent: opening signage app on screen.'),
+    onError: (error: Error) => toast.error(error.message),
+  })
 
   const backLink = (
     <Link href="/dashboard/screens" className="text-muted-foreground hover:text-foreground mb-4 inline-flex items-center gap-2 text-sm font-medium">
@@ -98,6 +105,15 @@ export default function ScreenDetailPage() {
               >
                 <Info className="size-4" aria-hidden="true" /> Details
               </button>
+              {canEdit && (
+                <button
+                  onClick={() => bringToFrontMutation.mutate()}
+                  disabled={bringToFrontMutation.isPending}
+                  className="text-primary dark:text-brand hover:bg-accent flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-medium"
+                >
+                  <PlaySquare className="size-4" aria-hidden="true" /> {bringToFrontMutation.isPending ? 'Opening…' : 'Open app on TV'}
+                </button>
+              )}
             </div>
           </div>
 

@@ -1,9 +1,17 @@
-"""A self-enrolled screen waits for an operator: python tests/test_screen_approval.py
+"""Screen pairing is instant: python tests/test_screen_approval.py
 
-Signing in on the TV proves who the installer is; it does not prove the operator wanted
-that device in the fleet. So /sign-in and the Google flow leave the screen pending and it
-syncs nothing until approved, while /pair and /enroll -- which already carry an operator's
-intent -- admit the screen immediately.
+This file used to assert a per-screen approval queue: /sign-in and the Google flow left
+`approved_at` NULL and the screen was supposed to sync nothing until an owner approved it.
+
+That gate never existed in practice. `approved_at` was written by /pair, /sign-in and
+/enroll and read by nothing at all -- sync_tv never consulted it -- so a "pending" screen
+synced and played exactly like an approved one, and "revoking" a screen did nothing. The
+routes have been removed rather than wired up, because the gate that actually matters is
+company approval (Organization.status), which a platform administrator controls.
+
+What is asserted here now: every route that binds a screen admits it immediately, and a
+screen belonging to an unapproved COMPANY still gets the demo reel rather than the
+tenant's own playlist.
 """
 
 import os
@@ -40,6 +48,14 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from backend.limiter import limiter  # noqa: E402
 from backend.main import app  # noqa: E402
+
+# Build the schema explicitly. backend.main used to do this as an import side effect,
+# so importing the app silently wrote to whatever DATABASE_URL pointed at; it now runs
+# in the lifespan, which a bare TestClient(app) never starts. Each isolated script owns
+# its own database anyway, so creating it here is the honest version of what was
+# happening implicitly before.
+from backend import database as _bootstrap_db, models as _bootstrap_models
+_bootstrap_models.Base.metadata.create_all(bind=_bootstrap_db.engine)
 
 # This file drives /sign-in and /auth/token dozens of times in a few seconds, which is
 # exactly what the per-IP caps exist to stop. The caps are a separate concern from the
@@ -96,57 +112,69 @@ def sign_in(device_id: str, name: str = "Lobby TV"):
     )
 
 
-def test_sign_in_leaves_the_screen_pending():
+def test_sign_in_admits_the_screen_immediately():
     r = sign_in("dev-pending-1")
     assert r.status_code == 200, r.text
-    assert r.json()["approved_at"] is None
+    assert r.json()["approved_at"] is not None
+    assert r.json()["status"] == "online"
 
 
-def test_a_pending_screen_syncs_nothing():
+def test_a_signed_in_screen_syncs_straight_away():
     sign_in("dev-pending-2")
     r = client.get("/api/screens/dev-pending-2/sync")
     assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["status"] == "pending_approval"
-    assert body["playlist"] is None
+    assert r.json()["status"] != "pending_approval"
 
 
-def test_approval_admits_the_screen():
-    sign_in("dev-approve-1")
-    screen_id = sign_in("dev-approve-1").json()["id"]
-
-    r = client.post(f"/api/screens/{screen_id}/approve", headers=auth_header())
+def test_sign_in_issues_a_device_credential():
+    # The screen has to leave this call able to authenticate. Without it device auth stays
+    # optional for everything except /enroll, and any caller who guesses a device id can
+    # read the playlist and post play logs as that screen.
+    r = sign_in("dev-credential-1")
     assert r.status_code == 200, r.text
-    assert r.json()["approved_at"] is not None
-
-    body = client.get("/api/screens/dev-approve-1/sync").json()
-    assert body["status"] != "pending_approval"
+    assert r.json()["device_secret"], "sign-in must hand the screen a device secret"
 
 
-def test_approving_twice_keeps_the_first_timestamp():
-    # The queue is worked in bulk; a double-click must not rewrite when it was admitted.
-    screen_id = sign_in("dev-approve-2").json()["id"]
-    first = client.post(f"/api/screens/{screen_id}/approve", headers=auth_header()).json()["approved_at"]
-    second = client.post(f"/api/screens/{screen_id}/approve", headers=auth_header()).json()["approved_at"]
-    assert first == second
+def test_the_issued_secret_authenticates():
+    secret = sign_in("dev-credential-2").json()["device_secret"]
+    r = client.post(
+        "/api/screens/auth",
+        json={"device_id": "dev-credential-2", "device_secret": secret},
+    )
+    assert r.status_code == 200, r.text
+    token = r.json()["access_token"]
+    synced = client.get(
+        "/api/screens/dev-credential-2/sync",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert synced.status_code == 200, synced.text
 
 
-def test_re_signing_in_does_not_send_an_approved_screen_back_to_the_queue():
+def test_a_secret_does_not_authenticate_a_different_screen():
+    # Both screens are created here rather than relying on another test: these run in
+    # alphabetical order, so referencing a screen a later test creates fails by name.
+    secret = sign_in("dev-credential-3").json()["device_secret"]
+    sign_in("dev-credential-4")
+    token = client.post(
+        "/api/screens/auth",
+        json={"device_id": "dev-credential-3", "device_secret": secret},
+    ).json()["access_token"]
+    # Same token, someone else's device id. This is the check that stops one TV reading
+    # another tenant's playlist or filing play logs against their screen.
+    r = client.get(
+        "/api/screens/dev-credential-4/sync",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 401, r.text
+
+
+def test_re_signing_in_keeps_the_screen_admitted():
     # A factory reset or a reinstall re-runs sign-in. Knocking a working screen dark would
     # turn a routine repair into an outage nobody would connect to the repair.
-    screen_id = sign_in("dev-approve-3").json()["id"]
-    client.post(f"/api/screens/{screen_id}/approve", headers=auth_header())
+    sign_in("dev-approve-3")
     again = sign_in("dev-approve-3", name="Lobby TV")
     assert again.json()["approved_at"] is not None
-
-
-def test_revoking_puts_it_back_in_the_queue():
-    screen_id = sign_in("dev-revoke-1").json()["id"]
-    client.post(f"/api/screens/{screen_id}/approve", headers=auth_header())
-    r = client.post(f"/api/screens/{screen_id}/revoke-approval", headers=auth_header())
-    assert r.status_code == 200, r.text
-    assert r.json()["approved_at"] is None
-    assert client.get("/api/screens/dev-revoke-1/sync").json()["status"] == "pending_approval"
+    assert again.json()["status"] == "online"
 
 
 def test_pairing_admits_immediately():
@@ -155,6 +183,7 @@ def test_pairing_admits_immediately():
     r = client.post("/api/screens/pair", json={"pair_code": code}, headers=auth_header())
     assert r.status_code == 200, r.text
     assert r.json()["approved_at"] is not None
+    assert r.json()["device_secret"], "pairing must hand the screen a device secret"
 
 
 def test_enrolment_token_admits_immediately():
@@ -172,12 +201,6 @@ def test_enrolment_token_admits_immediately():
     detail = client.get("/api/screens/", headers=auth_header()).json()
     enrolled = [s for s in detail if s["device_id"] == "dev-enroll-1"]
     assert enrolled and enrolled[0]["approved_at"] is not None
-
-
-def test_only_an_owner_can_approve():
-    screen_id = sign_in("dev-perm-1").json()["id"]
-    r = client.post(f"/api/screens/{screen_id}/approve")
-    assert r.status_code in (401, 403), r.text
 
 
 if __name__ == "__main__":

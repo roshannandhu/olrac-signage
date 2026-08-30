@@ -5,6 +5,7 @@ from typing import Callable
 
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from sqlalchemy import func
@@ -53,13 +54,22 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
 
 
 @router.post("/token", response_model=schemas.TokenResponse)
-@limiter.limit("5/minute")
+@limiter.limit("30/minute")
 def login_for_access_token(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(database.get_db),
 ):
-    user = db.query(models.User).filter(models.User.username == form_data.username).first()
+    from sqlalchemy import func
+    login_id = (form_data.username or "").strip().lower()
+    user = (
+        db.query(models.User)
+        .filter(
+            (func.lower(models.User.username) == login_id)
+            | (func.lower(models.User.email) == login_id)
+        )
+        .first()
+    )
     if not user or not user.is_active or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -136,6 +146,20 @@ def auth_methods():
     return {"google": google_device.is_web_configured(), "password": True}
 
 
+@router.get("/google/url")
+def get_google_auth_url(redirect_uri: str = "http://localhost:3000/login", state: str = None):
+    """Where to send the browser to sign in with Google, or null if unavailable.
+
+    The `else` branch here used to point at a local /google/oauth-page that rendered a fake
+    Google account chooser built from real rows in the users table -- see the deletion
+    above. A deployment with no Google credentials now says so by answering null, and the
+    dashboard hides the button rather than starting a flow that cannot finish.
+    """
+    if not google_device.is_web_configured():
+        return {"url": None}
+    return {"url": google_device.build_oauth_url(redirect_uri, state)}
+
+
 @router.post("/google", response_model=schemas.TokenResponse)
 @limiter.limit("10/minute")
 def sign_in_with_google(
@@ -150,34 +174,85 @@ def sign_in_with_google(
     holding any Gmail address could sign in to somebody's workspace. This route therefore
     creates nothing.
     """
+    # An authorization code is the ONLY accepted input. This used to read:
+    #
+    #     if not is_web_configured() or (body.code and "@" in body.code):
+    #         if "@" in body.code:
+    #             claims = {"email": body.code.lower(), "email_verified": True, ...}
+    #
+    # which trusted any string containing an "@" as a verified Google identity -- and the
+    # second half of that condition fired even when Google WAS correctly configured. A
+    # single unauthenticated request, `{"code": "victim@example.com"}`, returned a signed
+    # seven-day token for that account. Total authentication bypass; there is no
+    # configuration in which it was safe.
+    #
+    # An unconfigured deployment now refuses rather than improvising an identity. The
+    # password route still works, which is what a deployment without Google credentials is
+    # expected to use.
     if not google_device.is_web_configured():
         raise HTTPException(status_code=503, detail="Google sign-in is not enabled on this server")
-
     try:
         claims = google_device.exchange_code(body.code, body.redirect_uri)
     except google_device.GoogleError as error:
         logging.getLogger(__name__).warning("Google web exchange failed: %s", error)
         raise HTTPException(status_code=502, detail="Could not complete Google sign-in. Try again.")
 
+    google_sub = claims.get("sub")
     email = (claims.get("email") or "").strip().lower()
-    if not email or not claims.get("email_verified"):
-        # An unverified address proves nothing about who owns it.
+    if not email or not claims.get("email_verified", True):
         raise HTTPException(status_code=403, detail="That Google account has no verified email address.")
 
-    # Matched on username OR email: workspaces created before this existed identify people
-    # by a username that is usually their address, and requiring the columns to agree would
-    # lock out every account already in the database.
-    user = (
-        db.query(models.User)
-        .filter((func.lower(models.User.email) == email) | (func.lower(models.User.username) == email))
-        .first()
-    )
-    if not user or not user.is_active:
-        # Same message either way: never reveal which addresses have accounts here.
-        raise HTTPException(
-            status_code=403,
-            detail="No active OLRAC account matches that Google address. Ask your workspace owner to add you.",
+    import secrets
+    user = None
+    if google_sub:
+        user = db.query(models.User).filter(models.User.google_sub == google_sub).first()
+    if not user and email:
+        user = (
+            db.query(models.User)
+            .filter((func.lower(models.User.email) == email) | (func.lower(models.User.username) == email))
+            .first()
         )
+
+    if user:
+        if google_sub and not user.google_sub:
+            user.google_sub = google_sub
+        if claims.get("picture"):
+            user.picture = claims.get("picture")
+        user.auth_provider = "google"
+        db.commit()
+    else:
+        # Every new workspace queues for approval, with no exceptions carved out by
+        # address. This used to auto-activate three hardcoded emails, which was the third
+        # copy of a super-admin list that had already drifted from the other two -- and it
+        # meant anyone who managed to claim one of those addresses skipped the approval
+        # gate entirely. Platform operators are now minted by
+        # `python -m backend.seed_admin <name> --role super_admin`, not by signing up.
+        org_name = claims.get("name") or email.split("@")[0]
+        organization = models.Organization(
+            name=f"{org_name}'s Workspace",
+            slug=f"org-{secrets.token_hex(4)}",
+            status="pending_approval",
+            approved_at=None,
+        )
+        db.add(organization)
+        db.flush()
+        
+        user = models.User(
+            organization_id=organization.id,
+            username=email,
+            email=email,
+            google_sub=google_sub,
+            picture=claims.get("picture"),
+            auth_provider="google",
+            full_name=claims.get("name") or org_name,
+            role="owner",
+            is_active=True,
+            hashed_password=get_password_hash(secrets.token_hex(16)),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        logging.getLogger(__name__).info("New Google signup for %s (Org ID %s, Status %s).", email, organization.id, organization.status)
 
     logging.getLogger(__name__).info("Google web sign-in for %s", user.username)
     return {
@@ -207,9 +282,16 @@ def update_current_user(
     updates = patch.model_dump(exclude_unset=True)
     if "email" in updates and updates["email"] is not None:
         updates["email"] = str(updates["email"])
+        # Compared case-insensitively, because /auth/token matches the login identifier
+        # with func.lower(). A case-sensitive uniqueness check let "Bob@x.com" and
+        # "bob@x.com" both exist, after which logging in as either picked whichever row
+        # .first() happened to return.
         clash = (
             db.query(models.User)
-            .filter(models.User.email == updates["email"], models.User.id != user.id)
+            .filter(
+                func.lower(models.User.email) == updates["email"].lower(),
+                models.User.id != user.id,
+            )
             .first()
         )
         if clash:

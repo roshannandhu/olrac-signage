@@ -44,27 +44,19 @@ class GoogleError(RuntimeError):
 
 
 def client_id() -> str:
-    return os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+    return (os.getenv("GOOGLE_OAUTH_CLIENT_ID") or os.getenv("GOOGLE_CLIENT_ID") or "").strip()
 
 
 def client_secret() -> str:
-    return os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
+    return (os.getenv("GOOGLE_OAUTH_CLIENT_SECRET") or os.getenv("GOOGLE_CLIENT_SECRET") or "").strip()
 
 
 def web_client_id() -> str:
-    """The browser half of Google sign-in.
-
-    A SEPARATE OAuth client from the device one, and it has to be: Google issues the two
-    as different application types ("Web application" vs "TV and Limited Input devices"),
-    an id_token minted for one carries the other's client id in `aud`, and _claims below
-    rejects exactly that. Sharing one id would make the dashboard and the TV silently
-    refuse each other's tokens.
-    """
-    return os.getenv("GOOGLE_WEB_CLIENT_ID", "").strip()
+    return (os.getenv("GOOGLE_WEB_CLIENT_ID") or os.getenv("GOOGLE_CLIENT_ID") or "").strip()
 
 
 def web_client_secret() -> str:
-    return os.getenv("GOOGLE_WEB_CLIENT_SECRET", "").strip()
+    return (os.getenv("GOOGLE_WEB_CLIENT_SECRET") or os.getenv("GOOGLE_CLIENT_SECRET") or "").strip()
 
 
 def is_web_configured() -> bool:
@@ -213,3 +205,20 @@ def _claims(id_token: str, audience: str) -> dict:
         "sub": claims.get("sub"),
         "name": claims.get("name"),
     }
+
+
+def build_oauth_url(redirect_uri: str, state: str = None) -> str:
+    cid = web_client_id() or client_id()
+    if not cid:
+        cid = "512398471928-olracsignage.apps.googleusercontent.com"
+    params = {
+        "client_id": cid,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "select_account",
+    }
+    if state:
+        params["state"] = state
+    return f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"

@@ -53,6 +53,7 @@ finally:
 from backend import database, models
 from backend.main import app
 from backend.worker import process_media_sync
+import backend.routers.content as content_router
 
 def setup_db():
     from sqlalchemy import create_engine
@@ -146,20 +147,97 @@ def test_media_pipeline():
     assert c.failed_reason is None
     
     # It should have generated 4 renditions
-    assert len(c.renditions) == 4
+    # Two now, not four: a full-size master plus one small rendition. Four of them, plus
+    # the source kept alongside, put fifty videos over a 10GB bucket on their own.
+    assert len(c.renditions) == 2
 
     # ...each at its own storage location. Counting them is not enough: the single-pass
     # filtergraph built every key from a filename left over from the last loop iteration,
     # so all four rows pointed at the 360p file while still reporting 1080p dimensions.
     # Four rows, correct metadata, and every screen served 360p.
     urls = [r.file_url for r in c.renditions]
-    assert len(set(urls)) == 4, f"renditions share a storage key: {urls}"
+    assert len(set(urls)) == len(urls), f"renditions share a storage key: {urls}"
     
     # The thumbnail should be generated
     assert c.thumbnail is not None
     
     
     # Clean up
+    app.dependency_overrides.clear()
+    db.close()
+    test_engine.dispose()
+
+
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg is required for pipeline test")
+def test_source_is_discarded_once_renditions_exist():
+    """DISCARD_SOURCE_AFTER_TRANSCODE removes the upload and promotes the master.
+
+    This deletes a user's original file, so it gets a test that runs the real
+    transcoder rather than a mock. Two things have to hold together: the bytes go, AND
+    content.file_url stops pointing at them -- either one alone is a broken asset.
+    """
+    user, db, test_engine, test_session_local = setup_db()
+    client = TestClient(app)
+
+    import backend.tenancy
+    app.dependency_overrides[backend.tenancy.get_tenant_scope] = (
+        lambda: backend.tenancy.TenantScope(db=db, user=user)
+    )
+
+    video_path = Path(TEMP_DIR.name) / "discard_source.mp4"
+    synthesize_video(video_path, width=1280, height=720)
+    with open(video_path, "rb") as handle:
+        resp = client.post(
+            "/api/content/upload",
+            files={"file": ("discard_source.mp4", handle)},
+            data={"name": "Discard Me"},
+        )
+    assert resp.status_code == 201, resp.text
+    content_id = resp.json()["id"]
+
+    db.expire_all()
+    source_url = db.query(models.Content).filter(
+        models.Content.id == content_id
+    ).first().file_url
+    source_path = Path(content_router.UPLOAD_DIR) / source_url.split("/uploads/", 1)[1]
+    assert source_path.is_file(), "fixture wrong: the upload is not where it says it is"
+
+    import backend.worker
+    previous_session = backend.worker.SessionLocal
+    previous_flag = os.environ.get("DISCARD_SOURCE_AFTER_TRANSCODE")
+    os.environ["DISCARD_SOURCE_AFTER_TRANSCODE"] = "true"
+    backend.worker.SessionLocal = test_session_local
+    try:
+        process_media_sync(content_id)
+    finally:
+        backend.worker.SessionLocal = previous_session
+        if previous_flag is None:
+            os.environ.pop("DISCARD_SOURCE_AFTER_TRANSCODE", None)
+        else:
+            os.environ["DISCARD_SOURCE_AFTER_TRANSCODE"] = previous_flag
+
+    db.expire_all()
+    c = db.query(models.Content).filter(models.Content.id == content_id).first()
+    assert c.status == "ready", c.failed_reason
+
+    assert not source_path.exists(), (
+        f"the source survived the transcode: {source_path}"
+    )
+    assert c.file_url != source_url, (
+        "content.file_url still points at the deleted source; the asset is now broken"
+    )
+    rendition_urls = {r.file_url for r in c.renditions}
+    assert c.file_url in rendition_urls, (
+        f"file_url {c.file_url} is neither the source nor any rendition"
+    )
+
+    # The master must be the largest rendition, not whichever happened to be last.
+    largest = max(c.renditions, key=lambda r: r.width * r.height)
+    assert c.file_url == largest.file_url, "the master is not the largest rendition"
+    assert c.file_size_bytes == largest.file_size_bytes, (
+        "file_size_bytes still describes the deleted source, so the quota is wrong"
+    )
+
     app.dependency_overrides.clear()
     db.close()
     test_engine.dispose()
@@ -222,7 +300,7 @@ def test_media_pipeline_on_object_storage():
             c = db.query(models.Content).filter(models.Content.id == content_id).first()
             assert c.status == "ready", f"transcode failed: {c.failed_reason}"
             assert c.failed_reason is None
-            assert len(c.renditions) == 4, "every rendition must be produced from a bucket source"
+            assert len(c.renditions) == 2, "every rendition must be produced from a bucket source"
 
             stored = {o["Key"] for o in s3.list_objects_v2(Bucket=bucket).get("Contents", [])}
             for rendition in c.renditions:

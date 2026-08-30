@@ -70,9 +70,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // looking at it.
   useFleetAlerts()
 
+  const isPending = (meQuery.data?.organization_status || user?.organization_status) === 'pending_approval'
+  // A platform operator has no tenant workspace to manage, and every ownerOnly link below
+  // is gated on role === 'owner' -- so a super_admin landing here (from a bookmark, or the
+  // old post-login redirect) got a dashboard with an empty Admin menu and no way to reach
+  // the console. Send them where their tools actually are.
+  const isSuperAdmin = (meQuery.data?.role || user?.role) === 'super_admin'
+
   useEffect(() => {
-    if (hydrated && !token) router.replace('/login')
-  }, [hydrated, token, router])
+    if (hydrated && !token) {
+      router.replace('/login')
+      return
+    }
+    if (hydrated && token && isSuperAdmin) {
+      router.replace('/admin')
+      return
+    }
+    if (hydrated && token && isPending && pathname !== '/dashboard/pending') {
+      router.replace('/dashboard/pending')
+    }
+  }, [hydrated, token, isSuperAdmin, isPending, pathname, router])
 
   useEffect(() => {
     if (meQuery.data) setUser(meQuery.data)
@@ -89,8 +106,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.replace('/login')
   }
 
-  if (!hydrated || !token) {
+  if (!hydrated || !token || isSuperAdmin) {
     return <div className="bg-background min-h-screen" aria-label="Loading dashboard" />
+  }
+
+  if (isPending) {
+    if (pathname !== '/dashboard/pending') {
+      return <div className="bg-background min-h-screen" aria-label="Redirecting to pending verification" />
+    }
+    return <main className="bg-background min-h-screen">{children}</main>
   }
 
   return (

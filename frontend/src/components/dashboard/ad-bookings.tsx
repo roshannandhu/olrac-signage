@@ -35,7 +35,7 @@ function runState(placement: Placement): { label: string; tone: 'success' | 'war
 export function AdBookings({ contentId }: { contentId: number }) {
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
-  const canEdit = user?.role === 'owner' || user?.role === 'editor'
+  const canEdit = user?.role === 'owner' || user?.role === 'editor' || user?.role === 'super_admin'
 
   const placementsQuery = useQuery({ queryKey: ['placements', contentId], queryFn: () => api.getPlacements(contentId) })
   const screensQuery = useQuery({ queryKey: ['screens'], queryFn: api.getScreens })

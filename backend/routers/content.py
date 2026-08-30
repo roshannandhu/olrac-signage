@@ -17,8 +17,8 @@ from arq import create_pool
 from .. import models, schemas
 from ..database import REDIS_SETTINGS
 from ..tenancy import TenantScope, get_tenant_scope, require_tenant_roles
-from ..media_urls import delete_stored_file
-from .screens import is_s3_enabled, resolve_media_url
+from .. import media_storage
+from ..media_urls import is_s3_enabled, resolve_media_url
 
 router = APIRouter()
 
@@ -46,14 +46,25 @@ def queue_processing(db, content: models.Content) -> None:
         # event loop of their own — asyncio.run is safe and, unlike create_task, actually
         # propagates the failure back to us.
         asyncio.run(_enqueue())
-    except Exception as exc:  # noqa: BLE001 - any queue failure must surface, not vanish
-        logger.exception("Could not queue processing for content %s", content.id)
-        content.status = "failed"
-        content.failed_reason = f"Could not queue processing: {exc}"
-        db.commit()
+    except Exception as exc:
+        logger.warning("Could not queue via Redis for content %s (%s). Running via background thread worker.", content.id, exc)
+        import threading
+        from ..worker import process_media_sync
+        threading.Thread(target=process_media_sync, args=(content.id,), daemon=True).start()
 
 UPLOAD_DIR = os.path.join(pathlib.Path(__file__).parent.parent.parent.absolute(), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# The extension came straight off the client filename and was appended to the stored
+# name, with nothing checking it. /uploads is mounted as StaticFiles, so uploading
+# "poster.html" -- or an SVG with a <script> in it, which is the easy one to miss --
+# stored and then served attacker-controlled markup from the API's own origin. Signage
+# only ever plays pictures and video, so the set of things worth accepting is short and
+# an allowlist costs nothing.
+ALLOWED_UPLOAD_EXTENSIONS = {
+    ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp",
+    ".mp4", ".mov", ".webm", ".mkv", ".m4v",
+}
 S3_BUCKET = os.getenv("S3_BUCKET_NAME", "olrac-media")
 
 s3_client = boto3.client(
@@ -124,9 +135,18 @@ def upload_content(
     organization = scope.db.query(models.Organization).filter(
         models.Organization.id == scope.organization_id
     ).one()
+    # Renditions count too. Summing only the source measured roughly a third of what a
+    # video really occupies -- a transcode adds a full-size master and a smaller copy on
+    # top -- so a 10GB quota let through nearer 25GB of objects and the bucket filled
+    # while the dashboard still reported plenty of room.
     used_bytes = scope.query(models.Content).with_entities(
         func.coalesce(func.sum(models.Content.file_size_bytes), 0)
     ).scalar()
+    used_bytes += scope.db.query(
+        func.coalesce(func.sum(models.MediaRendition.file_size_bytes), 0)
+    ).join(
+        models.Content, models.Content.id == models.MediaRendition.content_id
+    ).filter(models.Content.organization_id == scope.organization_id).scalar()
     if used_bytes + file_size_bytes > organization.storage_quota_bytes:
         remaining = max(organization.storage_quota_bytes - used_bytes, 0)
         raise HTTPException(
@@ -135,6 +155,14 @@ def upload_content(
         )
 
     extension = os.path.splitext(file.filename or "")[1].lower()
+    if extension not in ALLOWED_UPLOAD_EXTENSIONS:
+        raise HTTPException(
+            status_code=415,
+            detail=(
+                f"Unsupported file type '{extension or file.filename}'. Allowed: "
+                + ", ".join(sorted(ALLOWED_UPLOAD_EXTENSIONS))
+            ),
+        )
     stem = str(uuid.uuid4())
     unique_filename = f"{stem}{extension}"
     storage_key = f"{scope.organization_id}/{unique_filename}"
@@ -270,7 +298,12 @@ def delete_content(
     stored = [content.file_url, content.thumbnail]
     stored.extend(rendition.file_url for rendition in content.renditions)
     for stored_url in stored:
-        delete_stored_file(stored_url, UPLOAD_DIR)
+        # Through media_storage, which handles both backends. delete_stored_file only
+        # understands "/uploads/" paths and returns False for an "s3://" key without
+        # touching anything -- so on object storage this loop deleted the database rows
+        # and left all six objects (original, four renditions, thumbnail) in the bucket
+        # for good. The quota they consumed was never released either.
+        media_storage.delete(stored_url)
 
     scope.db.delete(content)
     scope.db.commit()

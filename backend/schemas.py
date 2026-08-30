@@ -71,6 +71,7 @@ class UserResponse(BaseModel):
     # Read-only convenience for the account menu, which otherwise has only a numeric
     # organization_id to show. Resolved from the relationship, never written through here.
     organization_name: Optional[str] = None
+    organization_status: Optional[str] = "active"
 
     # organization_name is resolved by User.organization_name on the model, so
     # from_attributes picks it up like any other column.
@@ -136,6 +137,9 @@ class ScreenSignInRequest(BaseModel):
     password: str
     device_id: str
     name: Optional[str] = Field(default=None, max_length=120)
+    installation_id: Optional[str] = None
+    model: Optional[str] = None
+    manufacturer: Optional[str] = None
 
 
 class GoogleWebSignInRequest(BaseModel):
@@ -151,6 +155,9 @@ class GoogleDeviceStartRequest(BaseModel):
 
     device_id: str
     name: Optional[str] = Field(default=None, max_length=120)
+    installation_id: Optional[str] = None
+    model: Optional[str] = None
+    manufacturer: Optional[str] = None
 
 
 class GoogleDeviceStartResponse(BaseModel):
@@ -247,6 +254,12 @@ class ScreenResponse(ScreenBase):
     id: int
     pair_code: Optional[str]
     status: str
+    # Returned exactly once, by the routes that bind a screen (/pair, /sign-in, the Google
+    # flows), so the device can store it and authenticate from then on. Only the hash is
+    # persisted, and Screen has no `device_secret` attribute, so every other route that
+    # serialises a Screen -- notably GET /api/screens/ for the dashboard -- leaves this
+    # null rather than leaking a credential into the fleet list.
+    device_secret: Optional[str] = None
     orientation_source: str = "auto"
     # Newest capture, attached by the list endpoint so the fleet grid can show a live
     # thumbnail without a request per card.
@@ -522,6 +535,10 @@ class ScreenGroupResponse(BaseModel):
 
 class RegisterRequest(BaseModel):
     device_id: str
+    installation_id: Optional[str] = None
+    hardware_name: Optional[str] = None
+    device_model: Optional[str] = None
+    manufacturer: Optional[str] = None
 
 
 class RegisterResponse(BaseModel):
@@ -540,6 +557,11 @@ class RegisterResponse(BaseModel):
     status: str
     pair_code: Optional[str] = None
     pair_code_expires_at: Optional[datetime] = None
+    # One-time delivery of the device credential, and the only way a pair-code screen can
+    # ever receive one: /pair is called by the DASHBOARD, so its response never reaches the
+    # TV. The device polls /register while it waits to be claimed, so the secret is handed
+    # over on the first poll after pairing and never again -- see collect_device_secret.
+    device_secret: Optional[str] = None
 
 
 class PairRequest(BaseModel):
@@ -685,6 +707,9 @@ class SyncResponse(BaseModel):
     # the whole point of the offline cache.
     operating_mode: OperatingMode = "always"
     operating_hours: Optional[dict[str, list[str]]] = None
+    pending_command: Optional[str] = None
+    screen_id: Optional[int] = None
+    organization_id: Optional[int] = None
 
 
 class PlanResponse(BaseModel):
@@ -765,8 +790,8 @@ class PlayEventItem(BaseModel):
 
 class PlayLogBatchRequest(BaseModel):
     device_id: str
-    screen_id: int
-    organization_id: int
+    screen_id: Optional[int] = None
+    organization_id: Optional[int] = None
     events: List[PlayEventItem] = Field(..., max_length=500)
 
 

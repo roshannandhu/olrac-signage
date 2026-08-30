@@ -40,6 +40,14 @@ from fastapi.testclient import TestClient  # noqa: E402
 from backend import database, models  # noqa: E402
 from backend.main import app  # noqa: E402
 
+# Build the schema explicitly. backend.main used to do this as an import side effect,
+# so importing the app silently wrote to whatever DATABASE_URL pointed at; it now runs
+# in the lifespan, which a bare TestClient(app) never starts. Each isolated script owns
+# its own database anyway, so creating it here is the honest version of what was
+# happening implicitly before.
+from backend import database as _bootstrap_db, models as _bootstrap_models
+_bootstrap_models.Base.metadata.create_all(bind=_bootstrap_db.engine)
+
 
 def auth_header(client: TestClient) -> dict[str, str]:
     response = client.post(

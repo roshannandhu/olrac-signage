@@ -1,0 +1,15 @@
+{
+  // Built by `npm run cf:build` into .open-next/. `name` is the Pages/Workers project.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "olrac-signage",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-03-25",
+  // Required by the adapter: the Next server bundle uses Node built-ins.
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  }
+  // NEXT_PUBLIC_API_URL is inlined at BUILD time, not read at runtime, so it belongs in
+  // the Cloudflare project's build environment variables -- not in a [vars] block here.
+}

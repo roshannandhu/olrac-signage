@@ -22,6 +22,48 @@ def serialize_group(group: models.ScreenGroup) -> schemas.ScreenGroupResponse:
     )
 
 
+# Matches MAX_GROUP_DEPTH in routers/screens.py, which walks the same chain at sync time.
+MAX_GROUP_DEPTH = 32
+
+
+def validate_parent(scope: TenantScope, parent_id: int | None, group_id: int | None) -> None:
+    """Reject a parent that is not ours, is the group itself, or would close a loop.
+
+    `parent_id` was previously assigned straight from the request body with no checks at
+    all. Two things went wrong with that. A tenant could name another organisation's group
+    as their parent, because nothing confirmed the id was in scope. And nothing stopped
+    A -> B -> A, which is worse than it sounds: resolve_screen_playlist and the emergency
+    broadcast lookup both walk `group.parent` in a `while` loop on the sync path, so one
+    cycle would hang a request thread and hold its database connection open, for every
+    screen in that group, forever.
+    """
+    if parent_id is None:
+        return
+    if group_id is not None and parent_id == group_id:
+        raise HTTPException(status_code=400, detail="A group cannot be its own parent")
+
+    parent = scope.get(models.ScreenGroup, parent_id)
+    if not parent:
+        # Same 404 wording as a missing group, so this cannot be used to probe which group
+        # ids exist in other organisations.
+        raise HTTPException(status_code=404, detail="Parent group not found")
+
+    if group_id is None:
+        return
+
+    # Walk up from the proposed parent: meeting ourselves means this edge closes a loop.
+    seen = {group_id}
+    current = parent
+    for _ in range(MAX_GROUP_DEPTH):
+        if current is None:
+            return
+        if current.id in seen:
+            raise HTTPException(status_code=400, detail="That parent would create a loop in the group tree")
+        seen.add(current.id)
+        current = current.parent
+    raise HTTPException(status_code=400, detail="Group hierarchy is too deep")
+
+
 @router.get("/", response_model=list[schemas.ScreenGroupResponse])
 def list_groups(
     scope: TenantScope = Depends(get_tenant_scope),
@@ -38,6 +80,7 @@ def create_group(
     name = payload.name.strip()
     if scope.query(models.ScreenGroup).filter(models.ScreenGroup.name == name).first():
         raise HTTPException(status_code=409, detail="Group name already exists")
+    validate_parent(scope, payload.parent_id, group_id=None)
     group = models.ScreenGroup(
         name=name, 
         organization_id=scope.organization_id,
@@ -60,6 +103,7 @@ def update_group(
     group = scope.get(models.ScreenGroup, group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
+    validate_parent(scope, payload.parent_id, group_id=group.id)
     group.name = payload.name.strip()
     group.parent_id = payload.parent_id
     group.is_dynamic = payload.is_dynamic

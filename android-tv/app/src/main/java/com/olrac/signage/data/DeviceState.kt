@@ -15,9 +15,20 @@ class DeviceState(context: Context) {
         get() {
             preferences.getString(KEY_DEVICE_ID, null)?.let { return it }
 
-            val generatedId = UUID.randomUUID().toString()
-            preferences.edit().putString(KEY_DEVICE_ID, generatedId).commit()
-            return generatedId
+            val androidId = try {
+                Settings.Secure.getString(appContext.contentResolver, Settings.Secure.ANDROID_ID)
+            } catch (_: Exception) {
+                null
+            }
+
+            val stableId = if (!androidId.isNullOrBlank() && androidId != "9774d56d682e549c") {
+                UUID.nameUUIDFromBytes("olrac_screen_${androidId}".toByteArray()).toString()
+            } else {
+                UUID.randomUUID().toString()
+            }
+
+            preferences.edit().putString(KEY_DEVICE_ID, stableId).commit()
+            return stableId
         }
 
     /**
@@ -34,20 +45,89 @@ class DeviceState(context: Context) {
      */
     @Suppress("HardwareIds")
     val installationId: String
+        get() = hardwareSerial()?.let { "sn_${it}" } ?: androidId()?.let { "hw_${it}" } ?: deviceId
+
+    /**
+     * Which of the identity sources actually answered, reported to the server so an
+     * operator can tell WHY a screen did or did not come back as itself.
+     *
+     * "serial" survives a factory reset. "android_id" survives a reinstall but not a reset.
+     * "random" survives nothing -- a screen on that tier will duplicate if it is ever wiped,
+     * and the fleet list is where that has to be visible rather than a surprise later.
+     */
+    val identitySource: String
+        get() = when {
+            hardwareSerial() != null -> "serial"
+            androidId() != null -> "android_id"
+            else -> "random"
+        }
+
+    private fun androidId(): String? {
+        val value = try {
+            Settings.Secure.getString(appContext.contentResolver, Settings.Secure.ANDROID_ID)
+        } catch (_: Exception) {
+            null
+        }
+        // That literal is a well-known broken value shipped on a batch of devices; treating
+        // it as real would collapse every one of them onto a single identity.
+        return value?.takeIf { it.isNotBlank() && it != "9774d56d682e549c" }
+    }
+
+    /**
+     * The hardware serial, tried FIRST because it is the only identifier here that survives
+     * a factory reset.
+     *
+     * The previous ordering had ANDROID_ID first and this as a fallback "for factory
+     * resets" -- which never fired, because a reset does not make ANDROID_ID unavailable,
+     * it gives it a NEW value. The first branch always won and the panel came back as a
+     * brand new screen: a duplicate row, another slot off the quota, and its playlist and
+     * play history stranded on a screen that no longer exists.
+     *
+     * Availability, which decides whether a reset is recoverable at all:
+     *   API 26-28  READ_PHONE_STATE is enough (declared in the manifest).
+     *   API 29+    restricted to device-owner and privileged apps. This player IS the
+     *              device owner on a zero-touch provisioned panel, which is the deployment
+     *              this matters for; a sideloaded install on Android 10+ gets a
+     *              SecurityException and falls through to ANDROID_ID.
+     *
+     * Deliberately does NOT mix in Build.MODEL. Every panel in an estate is usually the
+     * same model, so it adds no uniqueness -- and including it means a firmware update that
+     * edits the model string silently changes the identity of the whole fleet at once.
+     */
+    private fun hardwareSerial(): String? = try {
+        @Suppress("DEPRECATION")
+        val raw = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            android.os.Build.getSerial()
+        } else {
+            android.os.Build.SERIAL
+        }
+        raw?.takeIf {
+            it.isNotBlank() && !it.equals(android.os.Build.UNKNOWN, ignoreCase = true)
+        }
+    } catch (_: Exception) {
+        // SecurityException on API 29+ without device-owner privilege is the normal path
+        // on a sideloaded install, not an error worth surfacing.
+        null
+    }
+
+    val deviceModel: String
+        get() = android.os.Build.MODEL ?: "Android TV"
+
+    val manufacturer: String
+        get() = android.os.Build.MANUFACTURER ?: "Android"
+
+    val hardwareName: String
         get() {
-            val androidId = try {
-                Settings.Secure.getString(appContext.contentResolver, Settings.Secure.ANDROID_ID)
-            } catch (_: Exception) {
-                null
-            }
-            return androidId?.takeIf { it.isNotBlank() && it != "9774d56d682e549c" } ?: deviceId
+            val m = manufacturer.trim()
+            val mod = deviceModel.trim()
+            return if (mod.startsWith(m, ignoreCase = true)) mod else "$m $mod"
         }
 
     val isPaired: Boolean
         get() = preferences.getBoolean(KEY_IS_PAIRED, false)
 
     val screenName: String?
-        get() = preferences.getString(KEY_SCREEN_NAME, null)
+        get() = preferences.getString(KEY_SCREEN_NAME, null) ?: hardwareName
 
     val apiBaseUrlOverride: String?
         get() = preferences.getString(KEY_API_BASE_URL, null)
@@ -68,6 +148,22 @@ class DeviceState(context: Context) {
         preferences.edit().putString(KEY_MAINTENANCE_PIN, pin).commit()
     }
 
+    /**
+     * This screen's own credential, issued once by the route that bound it.
+     *
+     * Null on a screen paired by an older build of the app; the server still accepts those
+     * while ALLOW_LEGACY_DEVICE_AUTH is on, and they pick a secret up the next time they
+     * are paired or signed in.
+     */
+    val deviceSecret: String?
+        get() = preferences.getString(KEY_DEVICE_SECRET, null)
+
+    fun setDeviceSecret(secret: String) {
+        // commit, not apply: this is the credential the screen needs to come back after a
+        // power cut, and losing it to an unflushed write means a manual re-pair on site.
+        preferences.edit().putString(KEY_DEVICE_SECRET, secret).commit()
+    }
+
     fun markPaired(screenName: String?) {
         preferences.edit()
             .putBoolean(KEY_IS_PAIRED, true)
@@ -77,6 +173,15 @@ class DeviceState(context: Context) {
                 }
             }
             // Pairing is tiny, critical state: persist it before reporting success.
+            .commit()
+    }
+
+    fun clearPairing() {
+        preferences.edit()
+            .putBoolean(KEY_IS_PAIRED, false)
+            .remove(KEY_SCREEN_NAME)
+            .remove(KEY_MAINTENANCE_PIN)
+            .remove(KEY_DEVICE_SECRET)
             .commit()
     }
 
@@ -91,6 +196,7 @@ class DeviceState(context: Context) {
         const val KEY_SCREEN_NAME = "screen_name"
         const val KEY_API_BASE_URL = "api_base_url"
         const val KEY_MAINTENANCE_PIN = "maintenance_pin"
+        const val KEY_DEVICE_SECRET = "device_secret"
         const val DEFAULT_SCREEN_NAME = "OLRAC Screen"
         // Applies only before the first successful sync; the server's per-screen pin
         // replaces it and every paired screen gets a distinct one.

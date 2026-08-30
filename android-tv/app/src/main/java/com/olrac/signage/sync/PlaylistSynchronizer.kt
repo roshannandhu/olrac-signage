@@ -47,14 +47,12 @@ class PlaylistSynchronizer(context: Context) {
             val currentInterval = SyncBackoffPolicy.serverIntervalSeconds(
                 preferences.getInt(KEY_SYNC_INTERVAL_SECONDS, 60)
             )
-            val deviceId = preferences.getString(KEY_DEVICE_ID, null)
-                ?: return@withContext SyncOutcome(
-                    successful = false,
-                    retryable = false,
-                    changed = false,
-                    intervalSeconds = currentInterval,
-                    error = "Device is not registered"
-                )
+            // Via DeviceState, which derives and persists the id on first access. Reading
+            // the preference raw returned null on a fresh install whenever the service
+            // started before MainActivity ever ran -- which is exactly what BootReceiver
+            // does -- and this reported "Device is not registered" with retryable = false,
+            // so sync stayed dead until someone opened the app by hand.
+            val deviceId = DeviceState(appContext).deviceId
 
             cleanupStaleDownloads()
             try {
@@ -92,6 +90,21 @@ class PlaylistSynchronizer(context: Context) {
                     error = "Sync response was empty"
                 )
                 val interval = saveInterval(syncData.sync_interval_seconds ?: responseInterval)
+
+                if (syncData.screen_id != null || syncData.organization_id != null) {
+                    preferences.edit().apply {
+                        syncData.screen_id?.let { putInt("screen_id", it) }
+                        syncData.organization_id?.let { putInt("organization_id", it) }
+                        apply()
+                    }
+                }
+
+                syncData.pending_command?.let { cmd ->
+                    if (cmd == "bring_to_front" || cmd == "launch_app") {
+                        android.util.Log.i("PlaylistSynchronizer", "Received $cmd command from sync; bringing app to front")
+                        com.olrac.signage.boot.PlayerLauncher.launch(appContext, delayMs = 500L, reason = "sync_command")
+                    }
+                }
 
                 syncData.app_version?.let { version ->
                     if (version.version_code > BuildConfig.VERSION_CODE && !version.apk_url.isNullOrBlank()) {

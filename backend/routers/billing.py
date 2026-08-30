@@ -46,13 +46,30 @@ def list_plans(scope: TenantScope = Depends(get_tenant_scope)):
 
 @router.get("/summary", response_model=schemas.BillingSummaryResponse)
 def billing_summary(scope: TenantScope = Depends(get_tenant_scope)):
+    from ..billing import ensure_billing_catalog
     organization = scope.db.query(models.Organization).filter(
         models.Organization.id == scope.organization_id
     ).one()
-    plan = scope.db.query(models.Plan).filter(models.Plan.id == organization.plan_id).one()
+    plan_id = organization.plan_id or 1
+    plan = scope.db.query(models.Plan).filter(models.Plan.id == plan_id).first()
+    if not plan:
+        ensure_billing_catalog(scope.db)
+        scope.db.commit()
+        plan = scope.db.query(models.Plan).filter(models.Plan.id == plan_id).first() or scope.db.query(models.Plan).order_by(models.Plan.id.asc()).first()
+    
     subscription = scope.db.query(models.Subscription).filter(
         models.Subscription.organization_id == scope.organization_id
-    ).one()
+    ).first()
+    if not subscription and plan:
+        subscription = models.Subscription(
+            organization_id=scope.organization_id,
+            plan_id=plan.id,
+            status="active",
+            billing_period="monthly",
+        )
+        scope.db.add(subscription)
+        scope.db.commit()
+        scope.db.refresh(subscription)
     storage_used = scope.query(models.Content).with_entities(
         func.coalesce(func.sum(models.Content.file_size_bytes), 0)
     ).scalar()

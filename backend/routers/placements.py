@@ -150,6 +150,48 @@ def list_placements(
     return [_serialize(scope, p) for p in query.order_by(models.AdPlacement.created_at.desc()).all()]
 
 
+def ensure_ad_slot_quota(scope: TenantScope) -> None:
+    """Reject the caller when the organisation is already at its ad-slot limit.
+
+    Two tiers, in the same order and with the same "0 means unlimited" rule that
+    screens.ensure_screen_quota uses for screens:
+
+    1. The per-org limit a platform administrator set (Organization.max_ad_slots).
+    2. The package the org is on (Plan.max_ad_slots), as the fallback.
+
+    Only tier 1 existed, so a tenant on a package with an ad limit and no hand-set override
+    was silently unlimited -- and every organisation defaults to max_ad_slots=0.
+
+    "Active" means anything not yet finished, including a booking that has not started, so
+    a future campaign holds its slot rather than being sellable twice.
+    """
+    org = scope.db.query(models.Organization).filter(
+        models.Organization.id == scope.organization_id
+    ).first()
+    if not org:
+        return
+
+    limit = org.max_ad_slots or 0
+    if limit <= 0 and org.plan_id:
+        plan = scope.db.query(models.Plan).filter(models.Plan.id == org.plan_id).first()
+        limit = (plan.max_ad_slots or 0) if plan else 0
+    if limit <= 0:
+        return
+
+    active_ads = scope.db.query(models.AdPlacement).filter(
+        models.AdPlacement.organization_id == scope.organization_id,
+        models.AdPlacement.ends_at >= models.utcnow(),
+    ).count()
+    if active_ads >= limit:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Ad slot quota reached ({active_ads}/{limit}). "
+                f"Contact your platform administrator to increase your ad limit."
+            ),
+        )
+
+
 @router.post("/", response_model=schemas.PlacementResponse, status_code=201)
 def create_placement(
     payload: schemas.PlacementCreate,
@@ -157,6 +199,8 @@ def create_placement(
 ):
     if not scope.get(models.Content, payload.content_id):
         raise HTTPException(status_code=404, detail="Content not found")
+
+    ensure_ad_slot_quota(scope)
 
     placement = models.AdPlacement(
         organization_id=scope.organization_id,
@@ -354,7 +398,7 @@ def build_booking_report(scope: TenantScope, placement: models.AdPlacement) -> d
         }
 
     window = [
-        models.PlayLogHourlyRollup.organization_id == scope.organization_id,
+        models.PlayLogHourlyRollup.organization_id == placement.organization_id,
         models.PlayLogHourlyRollup.media_id == placement.content_id,
         models.PlayLogHourlyRollup.screen_id.in_(screen_ids),
         models.PlayLogHourlyRollup.date_hour >= placement.starts_at,

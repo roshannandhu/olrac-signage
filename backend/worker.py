@@ -27,6 +27,21 @@ if not shutil.which("ffmpeg"):
         os.environ["PATH"] += os.pathsep + str(ffmpeg_bin)
 
 
+# Two, not four. Every rendition is another object kept for the life of the asset, and
+# four of them plus the retained source came to roughly 280MB for a 100MB upload --
+# fifty videos overran a 10GB bucket on their own. A full-size master plus one small
+# rendition covers the real spread of panels.
+#
+# Module level so media_selection can be tested against the set actually produced.
+# select_rendition used to look up the literal name "720p" as its safe default, which
+# silently returned nothing the moment this set changed -- and its own tests passed
+# throughout, because they built their own renditions rather than these.
+RENDITION_RESOLUTIONS = {
+    "1080p": (1920, 1080),
+    "480p": (854, 480),
+}
+
+
 def run_command_sync(cmd):
     result = subprocess.run(cmd, capture_output=True, text=True, check=True)
     return result.stdout
@@ -110,12 +125,7 @@ def process_media_sync(content_id: int):
         # flat 10 seconds, which truncates every advert longer than that.
         content.duration_ms = info.get("duration_ms") or None
         
-        resolutions = {
-            "1080p": (1920, 1080),
-            "720p": (1280, 720),
-            "540p": (960, 540),
-            "360p": (640, 360)
-        }
+        resolutions = RENDITION_RESOLUTIONS
         
         # Scratch, not the uploads tree: nothing is published until it transcodes
         # cleanly and is stored deliberately below.
@@ -162,6 +172,10 @@ def process_media_sync(content_id: int):
         
         run_command_sync(cmd)
         
+        # Kept so the source can be replaced by the largest rendition below.
+        stored_urls: dict[str, str] = {}
+        stored_sizes: dict[str, int] = {}
+
         for name, (out_filename, out_filepath) in out_files.items():
             
             rend_info = probe_file(out_filepath)
@@ -187,6 +201,8 @@ def process_media_sync(content_id: int):
                 ),
             )
             db.add(rendition)
+            stored_urls[name] = rendition.file_url
+            stored_sizes[name] = rend_size
             
         # extract thumbnail if missing
         if not content.thumbnail:
@@ -213,8 +229,37 @@ def process_media_sync(content_id: int):
                 # marked ready and nothing anywhere recorded that this step had failed.
                 logger.exception("thumbnail generation failed for content %s", content.id)
         
+        # The source is redundant once the renditions exist: the largest is a full-size
+        # copy, so keeping both doubles what every video costs in the bucket for a file
+        # nothing ever serves.
+        #
+        # Off unless asked for, because it cannot be undone -- with the source gone a
+        # future codec change means re-uploading rather than re-transcoding. Turned on
+        # where storage is the binding constraint; see DISCARD_SOURCE_AFTER_TRANSCODE.
+        discard_source = os.getenv(
+            "DISCARD_SOURCE_AFTER_TRANSCODE", "false"
+        ).strip().lower() in ("1", "true", "yes")
+        source_url = content.file_url
+        master_url = stored_urls.get("1080p")
+        # master_url != source_url guards the retry case: once the source has been
+        # replaced by a rendition, a later re-run must not delete the only copy it has.
+        replacing_source = bool(discard_source and master_url and master_url != source_url)
+
+        if replacing_source:
+            content.file_url = master_url
+            content.file_size_bytes = stored_sizes.get("1080p", content.file_size_bytes)
+
         content.status = "ready"
         db.commit()
+
+        # Deliberately after the commit. If this fails the row already points at the
+        # rendition, so the cost is an orphaned object -- recoverable -- rather than a
+        # content row referring to bytes that are no longer there.
+        if replacing_source:
+            try:
+                media_storage.delete(source_url)
+            except Exception:
+                logger.exception("could not remove source for content %s", content_id)
             
     except Exception as e:
         db.rollback()
@@ -378,16 +423,10 @@ async def _publish_alert(redis, organization_id: int, event: str, alert) -> None
         print(f"Failed to publish alert to redis: {e}")
 
 
-async def aggregate_play_logs(ctx):
-    db = SessionLocal()
+def aggregate_play_logs_sync(db: SessionLocal) -> int:
+    """Atomic aggregation of unaggregated play_logs into play_log_hourly_rollups."""
+    from sqlalchemy import text
     try:
-        from sqlalchemy import text
-        # Atomic aggregation: 
-        # 1. Update unaggregated rows and return them
-        # 2. Group them by org/campaign/screen/media/hour
-        # 3. Update existing rollups
-        # 4. Insert new rollups for those that didn't exist
-        
         db.execute(text("""
             WITH to_aggregate AS (
                 UPDATE play_logs
@@ -439,11 +478,18 @@ async def aggregate_play_logs(ctx):
               AND agg.media_id IS NOT DISTINCT FROM u.media_id
             WHERE u.organization_id IS NULL;
         """))
-        
         db.commit()
+        return 1
     except Exception as e:
         db.rollback()
         print(f"Error aggregating play logs: {e}")
+        return 0
+
+
+async def aggregate_play_logs(ctx):
+    db = SessionLocal()
+    try:
+        aggregate_play_logs_sync(db)
     finally:
         db.close()
 
@@ -452,7 +498,12 @@ async def prune_play_logs(ctx):
     db = SessionLocal()
     try:
         from sqlalchemy import text
-        retention_days = int(os.getenv("PLAY_LOG_RETENTION_DAYS", "180"))
+        # 180 days was the old default and it could never be reached: 100 always-on
+        # screens at the 10s default item duration write ~864k rows/day, and with this
+        # table's nine index structures that is ~300MB/day. A 500MB database is full in
+        # under two days, so the prune never ran on anything. The rollups keep the
+        # reporting history; these raw rows only need to outlive a billing dispute.
+        retention_days = int(os.getenv("PLAY_LOG_RETENTION_DAYS", "7"))
         total_deleted = 0
         chunk_size = 5000
         
@@ -483,6 +534,52 @@ async def prune_play_logs(ctx):
     finally:
         db.close()
 
+
+
+async def prune_play_log_rollups(ctx):
+    """Age out the hourly rollups.
+
+    Nothing deleted from this table -- no cron, no endpoint, no retention setting. It
+    grows by one row per (organisation, campaign, screen, media, hour) forever, which is
+    roughly 36k rows a day for a hundred screens, so it fills a 500MB database on its own
+    in about two months even once the raw log is being pruned properly.
+
+    The default keeps more than a year so that year-on-year reporting still works; this is
+    the aggregated history, and it is small per row, so there is no reason to be mean with
+    it. Chunked like prune_play_logs so a first run against a long backlog cannot hold a
+    lock over the whole table.
+    """
+    db = SessionLocal()
+    try:
+        from sqlalchemy import text
+        retention_days = int(os.getenv("ROLLUP_RETENTION_DAYS", "400"))
+        total_deleted = 0
+        chunk_size = 5000
+
+        while True:
+            result = db.execute(text("""
+                DELETE FROM play_log_hourly_rollups
+                WHERE id IN (
+                    SELECT id
+                    FROM play_log_hourly_rollups
+                    WHERE date_hour < NOW() - CAST(:days || ' days' AS INTERVAL)
+                    LIMIT :chunk_size
+                )
+            """).bindparams(days=str(retention_days), chunk_size=chunk_size))
+
+            deleted_count = result.rowcount
+            total_deleted += deleted_count
+            db.commit()
+
+            if deleted_count < chunk_size:
+                break
+
+        print(f"Pruned {total_deleted} play-log rollups older than {retention_days} days.")
+    except Exception as e:
+        db.rollback()
+        print(f"Error pruning play-log rollups: {e}")
+    finally:
+        db.close()
 
 
 async def prune_screenshots(ctx):
@@ -533,7 +630,21 @@ class WorkerSettings:
         # Every minute: an operator should hear about a dead screen in about the
         # time it takes to notice one in the room.
         cron(reconcile_alerts, minute=set(range(60))),
-        cron(prune_play_logs, hour=3, minute=0),
+        # Hourly, not nightly. The table grows at ~316MB/day for a hundred screens
+        # (measured, not estimated), so a once-a-day prune lets it peak at retention plus
+        # a whole extra day of rows just before it fires -- which overruns a small database
+        # even with retention set to its 1-day floor. Each run is a chunked, bounded
+        # delete, so running it 24x more often costs little and caps the peak at an hour.
+        cron(prune_play_logs, minute={0}),
         cron(prune_screenshots, hour=3, minute=30),
+        # Once a day is plenty: rollups accrue at ~36k rows/day, not 864k, and the
+        # retention window is over a year. Off the hour to stay clear of the raw prune.
+        cron(prune_play_log_rollups, hour=4, minute=0),
     ]
     redis_settings = REDIS_SETTINGS
+
+    # arq defaults to 10 concurrent jobs. Every media job spawns ffmpeg, which is
+    # CPU-bound and memory-hungry, so ten at once will thrash a small VM and can take it
+    # out entirely -- and the transcodes finish no sooner for competing over one core.
+    # Raise it only alongside the cores to run them on.
+    max_jobs = int(os.getenv("WORKER_MAX_JOBS", "2"))

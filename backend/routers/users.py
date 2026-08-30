@@ -21,6 +21,26 @@ def deny_platform_account(user: models.User) -> None:
 
 
 
+def active_owner_count(scope: TenantScope, organization_id: int) -> int:
+    """How many active owners the given organisation has.
+
+    Counted against an explicit organization_id rather than through scope.query(), which
+    drops the tenant filter entirely for a super admin -- so the "at least one active
+    owner" guard was counting owners across every organisation on the platform, and would
+    happily let the last owner of one workspace be demoted because another workspace still
+    had one.
+    """
+    return (
+        scope.db.query(models.User)
+        .filter(
+            models.User.organization_id == organization_id,
+            models.User.role == "owner",
+            models.User.is_active.is_(True),
+        )
+        .count()
+    )
+
+
 @router.get("/", response_model=list[schemas.UserResponse])
 def list_users(scope: TenantScope = Depends(require_tenant_roles("owner", writable=False))):
     return (
@@ -63,11 +83,11 @@ def update_user(user_id: int, payload: schemas.UserUpdate, scope: TenantScope = 
         raise HTTPException(status_code=403, detail="Cannot grant a platform role")
 
     if payload.role is not None and user.role == "owner" and payload.role != "owner":
-        owner_count = scope.query(models.User).filter(models.User.role == "owner", models.User.is_active.is_(True)).count()
+        owner_count = active_owner_count(scope, user.organization_id)
         if owner_count <= 1:
             raise HTTPException(status_code=400, detail="At least one active owner is required")
     if payload.is_active is False and user.role == "owner" and user.is_active:
-        owner_count = scope.query(models.User).filter(models.User.role == "owner", models.User.is_active.is_(True)).count()
+        owner_count = active_owner_count(scope, user.organization_id)
         if owner_count <= 1:
             raise HTTPException(status_code=400, detail="At least one active owner is required")
 
@@ -90,7 +110,7 @@ def delete_user(user_id: int, scope: TenantScope = Depends(require_tenant_roles(
         raise HTTPException(status_code=404, detail="User not found")
     deny_platform_account(user)
     if user.role == "owner":
-        owner_count = scope.query(models.User).filter(models.User.role == "owner", models.User.is_active.is_(True)).count()
+        owner_count = active_owner_count(scope, user.organization_id)
         if owner_count <= 1:
             raise HTTPException(status_code=400, detail="At least one active owner is required")
 

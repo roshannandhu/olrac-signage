@@ -24,12 +24,13 @@ import type { Role, TenantRole } from '@/lib/types'
 // member. The API filters those rows out of this list, and the backend refuses to create
 // or edit one here, so the team page has no reason to describe it.
 const roleDescription: Record<TenantRole, string> = {
+  manager: 'Approvals and fleet management',
   owner: 'Full access, including team management',
   editor: 'Can publish and manage signage content',
   viewer: 'Read-only access to network status',
 }
 
-const TENANT_ROLES: TenantRole[] = ['owner', 'editor', 'viewer']
+const TENANT_ROLES: TenantRole[] = ['manager', 'owner', 'editor', 'viewer']
 
 /** Narrow an API-supplied role for display; a platform account should never appear. */
 const asTenantRole = (role: Role): TenantRole => (role === 'super_admin' ? 'viewer' : role)

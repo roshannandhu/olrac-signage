@@ -34,7 +34,7 @@ android {
             buildConfigField(
                 "String",
                 "API_BASE_URL",
-                quotedBuildConfig(configuredApiBaseUrl.orNull ?: "http://signage.local:8000/")
+                quotedBuildConfig(configuredApiBaseUrl.orNull ?: "http://127.0.0.1:8000/")
             )
         }
         create("production") {
@@ -92,6 +92,9 @@ dependencies {
     // TV Compose
     implementation("androidx.tv:tv-foundation:1.0.0-alpha10")
     implementation("androidx.tv:tv-material:1.0.0-alpha10")
+
+    // Browser Custom Tabs
+    implementation("androidx.browser:browser:1.8.0")
 
     // Room
     val room_version = "2.6.1"

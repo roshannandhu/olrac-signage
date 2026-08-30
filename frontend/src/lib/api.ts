@@ -1,17 +1,31 @@
 import { useAuthStore } from './store'
-import type { AlertSummary, FleetAlert, BookingReport, Placement, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
+import type { Package, PackageWrite, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, FleetAlert, BookingReport, Placement, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
 
 const configuredUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '')
 let API_BASE = `${configuredUrl}/api`
 export let API_HOST = configuredUrl
 
-// If accessed on a mobile device over the local network, replace localhost with the actual IP.
+// A configured localhost API is only ever right for the machine running the dev server.
+// Anyone else reaching this page -- a phone on the LAN, a viewer through an HTTPS tunnel --
+// must be pointed somewhere they can actually reach.
 if (typeof window !== 'undefined') {
   try {
     const url = new URL(API_BASE)
     if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-      url.hostname = window.location.hostname
-      API_BASE = url.href.replace(/\/$/, '')
+      if (window.location.protocol === 'https:') {
+        // Served over TLS, so the API has to be same-origin. Swapping only the hostname
+        // left the protocol at http: and the port at :8000 -- the browser blocks that as
+        // mixed content, and nothing is listening on :8000 through a tunnel anyway. Every
+        // request failed as "Failed to fetch", and a session restored from localStorage
+        // then bounced straight back to /login when /auth/me could not be reached.
+        // Same-origin also routes through the /api proxy in next.config.ts.
+        API_BASE = `${window.location.origin}/api`
+      } else {
+        // Plain HTTP: a LAN device reaching the dev machine by IP, where the API really is
+        // on its own port. Host swap only, port preserved.
+        url.hostname = window.location.hostname
+        API_BASE = url.href.replace(/\/$/, '')
+      }
       API_HOST = API_BASE.replace(/\/api$/, '')
     }
   } catch {
@@ -91,6 +105,12 @@ export const api = {
       return { google: false, password: true }
     }
   },
+  // Asks the server where to send the browser for Google sign-in. Returns { url: null }
+  // when this deployment has no Google credentials, which is a supported state -- the
+  // caller hides the button rather than starting a flow that cannot finish.
+  googleAuthUrl: (redirectUri: string) =>
+    fetchWithAuth<{ url: string | null }>(`/auth/google/url?redirect_uri=${encodeURIComponent(redirectUri)}`),
+
   loginWithGoogle: async (code: string, redirectUri: string) => {
     const response = await fetch(`${API_BASE}/auth/google`, {
       method: 'POST',
@@ -328,6 +348,7 @@ export const api = {
     
   getScreenshots: (screenId: number) => fetchWithAuth<Screenshot[]>(`/screenshots/${screenId}/screenshots`),
   requestScreenshot: (screenId: number) => fetchWithAuth(`/screenshots/${screenId}/request-screenshot`, { method: 'POST' }),
+  bringToFront: (screenId: number) => fetchWithAuth(`/screens/${screenId}/bring-to-front`, { method: 'POST' }),
 
   getCampaigns: () => fetchWithAuth<Campaign[]>('/analytics/campaigns'),
   getCampaign: (id: number) => fetchWithAuth<CampaignInfo>(`/analytics/campaigns/${id}`),
@@ -360,3 +381,73 @@ export const api = {
   promoteRelease: (versionCode: number, rolloutState: RolloutState) =>
     fetchWithAuth<AppRelease>(`/releases/${versionCode}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rollout_state: rolloutState }) }),
 }
+
+/**
+ * Platform-operator calls. Separate object from `api` so it is obvious at the call site
+ * that these are cross-tenant, and so a tenant page cannot reach for one by accident.
+ *
+ * Everything here goes through the same authFetch as the rest of the app, which matters
+ * for two reasons the previous admin pages got wrong: they used bare fetch() with a
+ * hand-built Authorization header, so an expired token showed an empty table instead of
+ * redirecting to login; and they used RELATIVE `/api/...` URLs, which only resolve through
+ * the dev-only rewrite in next.config.ts -- in production those requests hit the Vercel
+ * origin and 404, so the whole approvals screen was dead once deployed.
+ */
+export const adminApi = {
+  listTenants: (status?: string) =>
+    fetchWithAuth<TenantSummary[]>(`/admin/tenants${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  getTenant: (id: number) => fetchWithAuth<TenantSummary>(`/admin/tenants/${id}`),
+  getTenantScreens: (id: number) => fetchWithAuth<TenantScreen[]>(`/admin/tenants/${id}/screens`),
+  getTenantContent: (id: number) => fetchWithAuth<TenantContent[]>(`/admin/tenants/${id}/content`),
+  getTenantUsers: (id: number) => fetchWithAuth<TenantUser[]>(`/admin/tenants/${id}/users`),
+
+  approveTenant: (id: number, body: { plan_id?: number; max_screens?: number; max_ad_slots?: number }) =>
+    fetchWithAuth<TenantSummary>(`/admin/tenants/${id}/approve`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }),
+  rejectTenant: (id: number, reason: string) =>
+    fetchWithAuth<TenantSummary>(`/admin/tenants/${id}/reject`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }),
+    }),
+  suspendTenant: (id: number) =>
+    fetchWithAuth<TenantSummary>(`/admin/tenants/${id}/suspend`, { method: 'POST' }),
+  reinstateTenant: (id: number) =>
+    fetchWithAuth<TenantSummary>(`/admin/tenants/${id}/reinstate`, { method: 'POST' }),
+  updateQuota: (id: number, body: { plan_id?: number; max_screens?: number; max_ad_slots?: number }) =>
+    fetchWithAuth<TenantSummary>(`/admin/tenants/${id}/quota`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }),
+
+  listPackages: () => fetchWithAuth<Package[]>('/admin/plans'),
+  createPackage: (body: PackageWrite) =>
+    fetchWithAuth<Package>('/admin/plans', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }),
+  updatePackage: (id: number, body: Partial<PackageWrite>) =>
+    fetchWithAuth<Package>(`/admin/plans/${id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }),
+  deletePackage: (id: number) =>
+    fetchWithAuth<{ status: string; detail?: string }>(`/admin/plans/${id}`, { method: 'DELETE' }),
+
+  getDemoVideo: () => fetchWithAuth<{ url: string; description?: string }>('/admin/demo-video'),
+  setDemoVideo: (url: string, description?: string) =>
+    fetchWithAuth<{ status: string; url: string }>('/admin/demo-video', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, description }),
+    }),
+  uploadDemoVideo: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return fetchWithAuth<{ status: string; url: string; message: string }>('/admin/demo-video/upload', {
+      method: 'POST', body: form,
+    })
+  },
+
+  updateUserRole: (userId: number, role: 'super_admin' | 'owner' | 'editor' | 'viewer') =>
+    fetchWithAuth<{ status: string; user_id: number; username: string; role: string; message: string }>(`/admin/users/${userId}/role`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    }),
+}
+

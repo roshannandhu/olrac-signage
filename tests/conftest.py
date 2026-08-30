@@ -28,6 +28,10 @@ ISOLATED_SCRIPTS = {
     "test_play_log_attribution.py",
     "test_account_profile.py",
     "test_screen_approval.py",
+    "test_platform_admin.py",
+    "test_reinstall_reconnect.py",
+    "test_role_separation.py",
+    "test_signup_lifecycle.py",
     "test_analytics.py",
     "test_p6_websockets.py",
     "test_media_selection.py",
@@ -45,6 +49,15 @@ ISOLATED_SCRIPTS = {
     # Google sign-in: authorisation, a case-insensitive lookup and a tenant guard.
     # Owns a database, so it belongs here rather than in pytest.ini.
     "test_google_signin.py",
+    # Proves a websocket does not pin a pooled database connection.
+    "test_ws_connection_pool.py",
+    # Exercises the S3 branch that test_storage_cleanup disables.
+    "test_r2_cleanup.py",
+    "test_storage_budget.py",
+    "test_bring_to_front.py",
+    "test_ad_counting_detail.py",
+    "test_counting_integrity.py",
+    "test_all_five_areas_e2e.py",
 }
 
 # Pure-logic tests: no database, no import-time engine, safe to run in-process.
@@ -57,6 +70,7 @@ PURE_MODULES = {
     "test_media_storage.py",
     "test_alerting.py",
     "test_maps_link.py",
+    "test_rendition_defaults.py",
 }
 
 
@@ -91,6 +105,8 @@ NEEDS_POSTGRES = ISOLATED_SCRIPTS - {
     # Falls back to SQLite when no server is listening; nothing it checks is
     # dialect-specific, so it still runs on a machine with no database.
     "test_google_signin.py",
+    # Skips itself when Redis is absent; falls back to SQLite otherwise.
+    "test_ws_connection_pool.py",
 }
 
 

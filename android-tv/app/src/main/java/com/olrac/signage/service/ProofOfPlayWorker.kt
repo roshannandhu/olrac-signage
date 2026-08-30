@@ -34,12 +34,64 @@ data class PlayEventDto(
 
 data class PlayLogBatchRequest(
     // The device id identifies the player; screen_id and organization_id come back from
-    // the heartbeat and are cross-checked server side against the device's own screen.
+    // the heartbeat/sync and are verified server side against the device's authenticated screen.
     val device_id: String,
-    val screen_id: Int,
-    val organization_id: Int,
+    val screen_id: Int?,
+    val organization_id: Int?,
     val events: List<PlayEventDto>
 )
+
+// Internal rather than private: ProofOfPlayReporter drains the same table on the same
+// contract, and its own copy of this mapping had already drifted -- it passed a
+// `clock_offset_ms` argument that exists on neither the DTO nor the server schema, so
+// the app did not compile, and it skipped the offset correction below entirely.
+internal fun PlayEventEntity.toDto(currentOffsetMs: Long): PlayEventDto {
+    // An event carrying no offset was stamped before this device had ever reached the
+    // server, so its "corrected" times are a device clock that may be hours out. Redo
+    // the correction with the offset since learned. An event that recorded its own
+    // offset was already stamped against a known-good clock and is left untouched --
+    // re-correcting it with a newer offset would move a timestamp that was right.
+    if (clockOffsetMs != null) {
+        return PlayEventDto(
+            event_id = eventId,
+            media_id = mediaId,
+            playlist_id = playlistId,
+            campaign_id = campaignId,
+            device_started_at = deviceStartedAt,
+            device_finished_at = deviceFinishedAt,
+            corrected_started_at = correctedStartedAt,
+            corrected_finished_at = correctedFinishedAt,
+            duration_ms = durationMs,
+            status = status,
+            error_message = errorMessage
+        )
+    }
+    return PlayEventDto(
+        event_id = eventId,
+        media_id = mediaId,
+        playlist_id = playlistId,
+        campaign_id = campaignId,
+        device_started_at = deviceStartedAt,
+        device_finished_at = deviceFinishedAt,
+        corrected_started_at = shift(deviceStartedAt, currentOffsetMs),
+        corrected_finished_at = shift(deviceFinishedAt, currentOffsetMs),
+        duration_ms = durationMs,
+        status = status,
+        error_message = errorMessage
+    )
+}
+
+private fun isoFormatter() =
+    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }
+
+
+internal fun shift(timestamp: String, offsetMs: Long): String {
+    val parsed = runCatching { isoFormatter().parse(timestamp) }.getOrNull() ?: return timestamp
+    return isoFormatter().format(Date(parsed.time + offsetMs))
+}
+
 
 class ProofOfPlayWorker(
     appContext: Context,
@@ -48,14 +100,13 @@ class ProofOfPlayWorker(
 
     override suspend fun doWork(): Result {
         val prefs = applicationContext.getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
-        val deviceId = prefs.getString("device_id", null) ?: return Result.failure()
+        // Result.failure() is terminal: WorkManager never retries that request again, so a
+        // single early run on a fresh install permanently disabled proof-of-play upload for
+        // the life of the install. Reading through DeviceState means the id is always
+        // available; retry() is the correct answer for anything transient.
+        val deviceId = com.olrac.signage.data.DeviceState(applicationContext).deviceId
         val screenId = prefs.getInt("screen_id", -1)
         val orgId = prefs.getInt("organization_id", -1)
-
-        if (screenId == -1 || orgId == -1) {
-            // Cannot upload without screen context, wait for next heartbeat
-            return Result.retry()
-        }
 
         val database = AppDatabase.getDatabase(applicationContext)
         val playEventDao = database.playEventDao()
@@ -85,8 +136,8 @@ class ProofOfPlayWorker(
             val dtos = pendingEvents.map { it.toDto(currentOffsetMs) }
             val request = PlayLogBatchRequest(
                 device_id = deviceId,
-                screen_id = screenId,
-                organization_id = orgId,
+                screen_id = screenId.takeIf { it > 0 },
+                organization_id = orgId.takeIf { it > 0 },
                 events = dtos
             )
 
@@ -132,47 +183,6 @@ class ProofOfPlayWorker(
         return Result.success()
     }
 
-    private fun PlayEventEntity.toDto(currentOffsetMs: Long): PlayEventDto {
-        // An event carrying no offset was stamped before this device had ever reached the
-        // server, so its "corrected" times are a device clock that may be hours out. Redo
-        // the correction with the offset since learned. An event that recorded its own
-        // offset was already stamped against a known-good clock and is left untouched --
-        // re-correcting it with a newer offset would move a timestamp that was right.
-        if (clockOffsetMs != null) {
-            return PlayEventDto(
-                event_id = eventId,
-                media_id = mediaId,
-                playlist_id = playlistId,
-                campaign_id = campaignId,
-                device_started_at = deviceStartedAt,
-                device_finished_at = deviceFinishedAt,
-                corrected_started_at = correctedStartedAt,
-                corrected_finished_at = correctedFinishedAt,
-                duration_ms = durationMs,
-                status = status,
-                error_message = errorMessage
-            )
-        }
-        return PlayEventDto(
-            event_id = eventId,
-            media_id = mediaId,
-            playlist_id = playlistId,
-            campaign_id = campaignId,
-            device_started_at = deviceStartedAt,
-            device_finished_at = deviceFinishedAt,
-            corrected_started_at = shift(deviceStartedAt, currentOffsetMs),
-            corrected_finished_at = shift(deviceFinishedAt, currentOffsetMs),
-            duration_ms = durationMs,
-            status = status,
-            error_message = errorMessage
-        )
-    }
-
-    private fun shift(timestamp: String, offsetMs: Long): String {
-        val parsed = runCatching { isoFormatter().parse(timestamp) }.getOrNull() ?: return timestamp
-        return isoFormatter().format(Date(parsed.time + offsetMs))
-    }
-
     private enum class BatchOutcome { ACCEPTED, DISCARD, RETRY_LATER }
 
     companion object {
@@ -205,9 +215,5 @@ class ProofOfPlayWorker(
                 .enqueueUniqueWork(UNIQUE_WORK_NAME, ExistingWorkPolicy.REPLACE, request)
         }
 
-        private fun isoFormatter() =
-            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
-                timeZone = TimeZone.getTimeZone("UTC")
-            }
     }
 }

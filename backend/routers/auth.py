@@ -167,12 +167,23 @@ def sign_in_with_google(
     body: schemas.GoogleWebSignInRequest,
     db: Session = Depends(database.get_db),
 ):
-    """Sign in to the dashboard with a Google account.
+    """Sign in to the dashboard with a Google account, or sign up for a new workspace.
 
-    Google authenticates a person; it does not authorise them. The verified address must
-    already belong to an OLRAC user, exactly as the TV flow requires -- otherwise anyone
-    holding any Gmail address could sign in to somebody's workspace. This route therefore
-    creates nothing.
+    Google authenticates a person; it does not authorise them. That distinction is the
+    whole design here:
+
+      - A verified address that already belongs to an OLRAC user signs that user in.
+      - One that does not gets a NEW organisation, created with status="pending_approval"
+        and no approved_at, plus an owner account inside it. Both exist immediately, but
+        get_tenant_scope refuses every tenant route while the organisation sits in that
+        status, so the account can see the pending screen and nothing else until a
+        platform operator approves it from /admin/approvals.
+
+    This docstring used to end "This route therefore creates nothing", which stopped being
+    true when self-signup was added and is worth stating plainly rather than leaving a
+    comment that reads as a security guarantee it no longer makes. Nothing is unguarded --
+    the gate simply moved from "cannot sign up" to "signs up into a workspace that can do
+    nothing until approved".
     """
     # An authorization code is the ONLY accepted input. This used to read:
     #

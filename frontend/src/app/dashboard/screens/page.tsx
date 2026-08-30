@@ -21,6 +21,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useBulkSelection } from '@/hooks/use-bulk-selection'
 import { api } from '@/lib/api'
 import { relativeTime } from '@/lib/format'
+import { canEditTenantContent } from '@/lib/roles'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import type { Screen, ScreenGroup } from '@/lib/types'
@@ -55,7 +56,7 @@ function useStoredView(): ViewMode {
 export default function ScreensPage() {
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
-  const canEdit = user?.role === 'owner' || user?.role === 'editor' || user?.role === 'super_admin'
+  const canEdit = canEditTenantContent(user)
 
   // Screens report in on their own cadence; a slow poll keeps the wall of thumbnails
   // roughly live without hammering the API at 500 screens.

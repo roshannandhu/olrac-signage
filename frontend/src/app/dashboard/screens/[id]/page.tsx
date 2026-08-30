@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import { relativeTime } from '@/lib/format'
+import { canEditTenantContent } from '@/lib/roles'
 import { useAuthStore } from '@/lib/store'
 import type { Screen } from '@/lib/types'
 
@@ -29,7 +30,7 @@ export default function ScreenDetailPage() {
   const params = useParams()
   const screenId = Number(params.id)
   const user = useAuthStore((state) => state.user)
-  const canEdit = user?.role === 'owner' || user?.role === 'editor' || user?.role === 'super_admin'
+  const canEdit = canEditTenantContent(user)
 
   const screensQuery = useQuery({ queryKey: ['screens'], queryFn: api.getScreens })
   const screens = useMemo(() => screensQuery.data || [], [screensQuery.data])

@@ -1638,5 +1638,35 @@
     "mtime": 1788101557.0589507,
     "ast_hash": "55badcc4b98ef9847fbac626c866c9ce",
     "semantic_hash": ""
+  },
+  "scripts/query_tablet_play_logs.py": {
+    "mtime": 1788102847.9309576,
+    "ast_hash": "bdf5b24b0779ea65a6851d7f3e0785db",
+    "semantic_hash": ""
+  },
+  "scripts/setup_tablet_live_test.py": {
+    "mtime": 1788102663.816404,
+    "ast_hash": "58b4f33e82316ab3b7f340b28c237be6",
+    "semantic_hash": ""
+  },
+  "scripts/test_live_bring_to_front.py": {
+    "mtime": 1788102902.2840836,
+    "ast_hash": "14a943cecf782a5e31a7deda188f36e2",
+    "semantic_hash": ""
+  },
+  "scripts/test_live_hardware_dedup.py": {
+    "mtime": 1788103082.7063093,
+    "ast_hash": "14a177c34666effbd4f0b6845d7847bc",
+    "semantic_hash": ""
+  },
+  "scripts/test_live_offline_counting_drain.py": {
+    "mtime": 1788102928.553687,
+    "ast_hash": "28180d55bb48c8bbc3f4a118a9aa4ac7",
+    "semantic_hash": ""
+  },
+  "scripts/test_live_super_admin_flow.py": {
+    "mtime": 1788103114.4364538,
+    "ast_hash": "0502bc7667d6ec9bb6d0740ffd999279",
+    "semantic_hash": ""
   }
 }

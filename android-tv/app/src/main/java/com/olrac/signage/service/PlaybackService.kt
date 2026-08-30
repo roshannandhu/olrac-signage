@@ -88,10 +88,12 @@ class PlaybackService : Service() {
 
     private fun startRealtimeClient() {
         realtimeClient = RealtimeClient(this) { msg ->
-            when (msg.optString("type")) {
-                "request_screenshot" -> ScreenshotManager.requestScreenshot()
-                "launch_app", "bring_to_front" -> launchPlayer()
-                "sync_now", "reload_playlist" -> immediateSyncSignals.trySend(Unit)
+            val type = msg.optString("type")
+            val command = msg.optString("command")
+            when {
+                type == "request_screenshot" || command == "request_screenshot" -> ScreenshotManager.requestScreenshot()
+                type == "launch_app" || type == "bring_to_front" || command == "launch_app" || command == "bring_to_front" -> launchPlayer()
+                type == "sync_now" || type == "reload_playlist" || command == "sync_now" || command == "reload_playlist" -> immediateSyncSignals.trySend(Unit)
             }
         }
         realtimeClient?.start()

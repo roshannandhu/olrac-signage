@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { api } from '@/lib/api'
+import { destinationFor } from '@/lib/roles'
 import { useAuthStore } from '@/lib/store'
 import type { User } from '@/lib/types'
 
@@ -32,11 +33,7 @@ import type { User } from '@/lib/types'
  * dashboard, where the nav is gated on `role === 'owner'` and therefore showed them
  * nothing, and /admin was reachable only by typing the URL.
  */
-export function destinationFor(user: User | null | undefined): string {
-  if (user?.role === 'super_admin') return '/admin'
-  if (user?.organization_status === 'pending_approval') return '/dashboard/pending'
-  return '/dashboard/screens'
-}
+export { destinationFor }
 
 export default function LoginPage() {
   const router = useRouter()

@@ -10,6 +10,7 @@ from typing import Optional
 import boto3
 from fastapi import Query, APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 
 logger = logging.getLogger(__name__)
 
@@ -24,33 +25,16 @@ router = APIRouter()
 
 
 def queue_processing(db, content: models.Content) -> None:
-    """Hand a video to the transcode worker, or mark it failed if we cannot.
+    """Hand a video to the transcode worker, ensuring it is processed immediately.
 
-    The previous version fired the enqueue into a background task and swallowed every
-    exception, so an unreachable Redis left the row at "processing" forever and the
-    library showed a spinner that would never resolve. Silent and permanent is the worst
-    failure mode available, so a queue that cannot be reached is now a visible failure the
-    operator can retry.
+    In standalone or single-host deployments where an external arq worker process may not
+    be active, we launch process_media_sync in a daemon thread so video processing and
+    renditions are generated immediately without hanging on 'processing'.
     """
-    import asyncio
+    import threading
+    from ..worker import process_media_sync
 
-    async def _enqueue():
-        pool = await create_pool(REDIS_SETTINGS)
-        try:
-            await pool.enqueue_job("process_media", content.id)
-        finally:
-            await pool.close()
-
-    try:
-        # Route handlers here are sync, so FastAPI runs them in a worker thread with no
-        # event loop of their own — asyncio.run is safe and, unlike create_task, actually
-        # propagates the failure back to us.
-        asyncio.run(_enqueue())
-    except Exception as exc:
-        logger.warning("Could not queue via Redis for content %s (%s). Running via background thread worker.", content.id, exc)
-        import threading
-        from ..worker import process_media_sync
-        threading.Thread(target=process_media_sync, args=(content.id,), daemon=True).start()
+    threading.Thread(target=process_media_sync, args=(content.id,), daemon=True).start()
 
 UPLOAD_DIR = os.path.join(pathlib.Path(__file__).parent.parent.parent.absolute(), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -247,7 +231,11 @@ def get_all_content(
     limit: int = Query(500, ge=1, le=2000),
     scope: TenantScope = Depends(get_tenant_scope),
 ):
-    query = scope.query(models.Content)
+    # expires_at walks playlist_items, so without this the library page pays one extra
+    # query per row. Requested here rather than on the relationship because eager-loading
+    # it globally closes a cycle with PlaylistItem.content and slows the playlist editor
+    # instead -- see the note on the model.
+    query = scope.query(models.Content).options(selectinload(models.Content.playlist_items))
     if search:
         query = query.filter(models.Content.name.ilike(f"%{search}%"))
     if tag:

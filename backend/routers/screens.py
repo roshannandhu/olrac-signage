@@ -19,6 +19,7 @@ from .. import database, models, schemas
 from ..limiter import limiter
 from .. import google_device
 from ..media_selection import select_rendition
+from . import playlists as playlists_router
 from .. import rollout
 from ..rotation import normalise as normalise_rotation, resolve_rotation
 from ..maps_link import MapsLinkError, parse as parse_maps_link
@@ -1693,6 +1694,14 @@ async def sync_tv(
     playlist_id = resolve_screen_playlist(screen, db)
     playlist = (
         db.query(models.Playlist)
+        # The same load chain the dashboard's playlist routes use, and it matters more
+        # here than anywhere else in the API. This response embeds a ContentResponse per
+        # item, whose expires_at walks Content.playlist_items -- so lazily this cost one
+        # extra query per item: 109 queries for a 100-item playlist. Every screen repeats
+        # that every PLAYER_SYNC_INTERVAL_SECONDS, so an 80-screen estate on a one-minute
+        # interval was issuing roughly 8,700 queries a minute to render a playlist that
+        # had not changed. Named eagerly it is a fixed handful regardless of length.
+        .options(*playlists_router.PLAYLIST_LOAD)
         .filter(
             models.Playlist.id == playlist_id,
             models.Playlist.organization_id == screen.organization_id,
@@ -1904,6 +1913,22 @@ async def bring_to_front(
         published = True
     except Exception as e:
         logger.warning(f"Failed to publish bring_to_front to redis: {e}")
+
+    try:
+        from .websockets import broadcast_in_memory
+        payload = json.dumps({"type": "bring_to_front", "command": "launch_app"})
+        if screen.device_id:
+            await broadcast_in_memory(f"screen:{screen.device_id}", payload)
+            await broadcast_in_memory(f"device:{screen.device_id}", payload)
+        await broadcast_in_memory(f"screen:{screen.id}", payload)
+        if screen.organization_id:
+            await broadcast_in_memory(
+                f"org:{screen.organization_id}",
+                json.dumps({"type": "bring_to_front", "device_id": screen.device_id, "screen_id": screen.id}),
+            )
+        published = True
+    except Exception as e:
+        logger.warning(f"Failed to broadcast bring_to_front in-memory: {e}")
 
     if not queued and not published:
         # Neither path is available, so the command is going nowhere. Saying "ok" here is

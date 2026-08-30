@@ -32,6 +32,13 @@ async def request_screenshot(
         await redis.publish(f"screen:{screen.device_id}", json.dumps({"type": "request_screenshot"}))
     except Exception as e:
         logger.warning(f"Failed to publish request_screenshot to redis: {e}")
+
+    try:
+        from .websockets import broadcast_in_memory
+        if screen.device_id:
+            await broadcast_in_memory(f"screen:{screen.device_id}", json.dumps({"type": "request_screenshot"}))
+    except Exception:
+        pass
         
     return {"status": "ok", "message": "Screenshot requested"}
 

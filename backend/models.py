@@ -186,7 +186,10 @@ class ScreenGroup(Base):
     updated_at = Column(UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
     playlist = relationship("Playlist", back_populates="groups")
-    screens = relationship("Screen", back_populates="group")
+    # serialize_group reports screen_count as len(group.screens), so listing groups loaded
+    # every screen of every group one group at a time. Batched, that is one query for the
+    # whole page instead of one per row.
+    screens = relationship("Screen", back_populates="group", lazy="selectin")
     organization = relationship("Organization", back_populates="groups")
     children = relationship("ScreenGroup", backref=backref('parent', remote_side=[id]))
 
@@ -366,9 +369,31 @@ class Content(Base):
     processing_retries = Column(Integer, nullable=False, default=0)
     failed_reason = Column(String, nullable=True)
 
+    # Both of these are eager on purpose, and it is the single biggest thing separating a
+    # fast library page from a slow one.
+    #
+    # ContentResponse serialises `renditions` directly and `expires_at` below, which walks
+    # `playlist_items`. Left lazy, building one response therefore cost TWO extra queries
+    # per row -- so GET /api/content/ ran 53 queries for 25 items instead of 3. On a
+    # co-located database that is invisible; against a managed one a region away at ~114 ms
+    # a round trip it is six seconds on the page /dashboard redirects to.
+    #
+    # Set here rather than with .options(selectinload(...)) at each call site because the
+    # cost is created by the SCHEMA, not by any one route: the playlist editor and the TV's
+    # /sync both embed ContentResponse too, and each would have had to remember the same
+    # hint. "selectin" issues one extra IN query per batch of parents no matter how many
+    # there are, so this is O(1) queries, not O(rows).
+    # Deliberately NOT eager, unlike renditions. PlaylistItem.content is eager, so making
+    # this eager too closes a cycle (item -> content -> items) that SQLAlchemy resolves by
+    # falling back to one query per parent -- which put the per-row cost straight back into
+    # the playlist editor. The library route, which is the one that needs expires_at for a
+    # whole page, asks for it explicitly with selectinload instead.
     playlist_items = relationship("PlaylistItem", back_populates="content")
     organization = relationship("Organization", back_populates="content")
-    renditions = relationship("MediaRendition", back_populates="content", cascade="all, delete-orphan")
+    renditions = relationship(
+        "MediaRendition", back_populates="content", cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     @property
     def expires_at(self):
@@ -416,6 +441,9 @@ class Playlist(Base):
         back_populates="playlist",
         order_by="PlaylistItem.order",
         cascade="all, delete-orphan",
+        # PlaylistResponse always serialises its items, so a lazy load here was one query
+        # per playlist and nothing ever wanted a playlist without them.
+        lazy="selectin",
     )
 
 
@@ -437,12 +465,18 @@ class PlaylistItem(Base):
     rotation = Column(Integer, nullable=True)
 
     playlist = relationship("Playlist", back_populates="items")
-    content = relationship("Content", back_populates="playlist_items")
+    # The item IS the content as far as every response is concerned -- PlaylistItemResponse
+    # embeds a full ContentResponse -- so this was loaded one row at a time, and each of
+    # those loads then triggered Content's own two. That compounding is why the playlist
+    # editor cost 244 queries for 60 items where the library cost 5: four per row rather
+    # than one. Batching here is what lets Content's selectin loaders batch as well.
+    content = relationship("Content", back_populates="playlist_items", lazy="selectin")
     schedule = relationship(
         "Schedule",
         back_populates="playlist_item",
         uselist=False,
         cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
 

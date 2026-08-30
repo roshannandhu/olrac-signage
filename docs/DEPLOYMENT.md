@@ -96,5 +96,33 @@ adb shell dumpsys deviceidle whitelist +com.olrac.signage
 adb shell dumpsys deviceidle whitelist +com.ablesign.bootlauncher
 ```
 
+### Grant the overlay appop (REQUIRED — "Open app" does nothing without it)
+
+```bash
+adb shell appops set com.olrac.signage SYSTEM_ALERT_WINDOW allow
+```
+
+Not optional, and not cosmetic. Since Android 12 an app in the background may not start its
+own activity, and that applies to every path the player has: a direct `startActivity`, a
+full-screen-intent notification, and an `AlarmManager` PendingIntent are all refused.
+Holding SYSTEM_ALERT_WINDOW is what puts the app on the system's background-activity-start
+allowlist.
+
+Verified by A/B on a Lenovo TB-8505F (Android 13): with the appop denied the dashboard's
+"Open app" button leaves the player in the background and logcat shows
+
+    W ActivityTaskManager: Background activity start [callingPackage: com.olrac.signage;
+      ... allowBackgroundActivityStart: false]
+
+With it allowed, the same request brings MainActivity to the foreground every time. The
+player logs a warning naming this command whenever the appop is missing, so a panel in that
+state is greppable rather than mysterious:
+
+    W PlayerLauncher: SYSTEM_ALERT_WINDOW is not granted (reason=sync_command).
+
+Confirm per panel with `adb shell appops get com.olrac.signage SYSTEM_ALERT_WINDOW`; the
+answer must be `allow`. `default` means it was never granted.
+
+
 ### Verification
 Reboot the TV (`adb shell reboot`). The Android OS will start, wait ~12 seconds to settle, and the Watchdog will automatically bring `com.olrac.signage` to the foreground.

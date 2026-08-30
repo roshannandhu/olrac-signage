@@ -6,18 +6,19 @@ import { useTheme } from 'next-themes'
 import { Badge } from '@/components/ui/badge'
 import { useGoogleMaps } from '@/hooks/use-google-maps'
 
-// Voyager, not Carto's dark_all, and not OSM's default.
+// OpenStreetMap standard tiles — free, no API key needed, universally recognised.
 //
-// This is the map shown when no Google key is configured, so it should read as close to
-// the Google map it stands in for as a keyless basemap can: light background, coloured
-// road classes, POI labels. Matching the dark dashboard instead was the wrong instinct --
-// an operator recognises a map by looking like the map they already know, and a black
-// slab reads as broken rather than as themed.
+// CARTO basemaps now require a paid API key and display watermarks without one, so we
+// switched away from them. The standard OSM raster tiles are hosted by the OSM
+// Foundation and carry only a fair-use policy (see
+// https://operations.osmfoundation.org/policies/tiles/). For dark mode we use Stadia's
+// Alidade Smooth Dark which is free up to generous limits and keys by referrer rather
+// than explicit token.
 const TILES = {
-  dark: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-  light: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+  dark: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
+  light: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
 }
-const ATTRIBUTION = '&copy; OpenStreetMap &copy; CARTO'
+const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 /** Pan beyond this and the map has stopped showing what it was opened to show. */
 const STRAYED_METRES = 400
 

@@ -2,33 +2,23 @@
 
 import { useEffect } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '@/lib/api'
+import { isSuperAdmin } from '@/lib/roles'
 import { useAuthStore } from '@/lib/store'
 import {
   ShieldCheck, Users, Film, LogOut, ChevronRight, LayoutDashboard,
-  BarChart3, Package, Bell
+  BarChart3, Package, Bell, Rocket, QrCode
 } from 'lucide-react'
 
-/**
- * Platform-operator check. Role only.
- *
- * This used to also accept a hardcoded list of three email addresses -- one of four such
- * lists in the codebase, and they had already drifted: this copy omitted an address the
- * BACKEND trusted, so that operator was bounced out of /admin by the frontend while the
- * API happily served them. The role now comes from the database, promoted once by the
- * accompanying migration, so access is granted and revoked without a redeploy.
- */
-function isSuperAdmin(user: { role?: string } | null) {
-  return user?.role === 'super_admin'
-}
-
-// Every entry here has a page. Four of the five previously did not: /admin, /admin/approvals,
-// /admin/releases and /admin/demo-video had no route file at all, so the sidebar was mostly
-// 404s -- including /admin itself, which is where login now lands a platform operator.
+// Platform operator navigation items
 const navItems = [
   { href: '/admin', label: 'Overview', icon: LayoutDashboard, exact: true },
   { href: '/admin/approvals', label: 'Approvals Queue', icon: ShieldCheck },
   { href: '/admin/tenants', label: 'All Tenants', icon: Users },
   { href: '/admin/packages', label: 'Packages', icon: Package },
+  { href: '/admin/releases', label: 'App Releases', icon: Rocket },
+  { href: '/admin/provisioning', label: 'Zero-Touch Provisioning', icon: QrCode },
   { href: '/admin/demo-video', label: 'Demo Video', icon: Film },
 ]
 
@@ -36,21 +26,36 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { token, user, hydrated, clearSession } = useAuthStore()
   const router = useRouter()
   const pathname = usePathname()
+  // The server's answer, not the browser's memory of it.
+  //
+  // This guard used to read `user` alone, which is whatever was written to localStorage at
+  // the last sign-in. A platform operator whose cached copy predated the role column -- or
+  // who was promoted to super_admin during a live session -- therefore failed the check and
+  // was redirected to /dashboard/screens, a tenant workspace they do not belong in, while
+  // the API served /api/admin/* to them perfectly well. The dashboard layout already
+  // resolved this the right way (`meQuery.data?.role || user?.role`); the two guards simply
+  // disagreed, and the one guarding /admin was the stale one.
+  const meQuery = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: hydrated && Boolean(token) })
+  const account = meQuery.data ?? user
+  // Undefined until the first answer arrives, so the redirect below waits rather than
+  // bouncing a legitimate operator out on a cache miss.
+  const resolved = meQuery.isSuccess || !meQuery.isFetching
 
   useEffect(() => {
     if (!hydrated) return
     if (!token) { router.replace('/login'); return }
-    if (!isSuperAdmin(user)) {
-      if (user?.organization_status === 'pending_approval') {
+    if (!resolved) return
+    if (!isSuperAdmin(account)) {
+      if (account?.organization_status === 'pending_approval') {
         router.replace('/dashboard/pending')
       } else {
         router.replace('/dashboard/screens')
       }
       return
     }
-  }, [hydrated, token, user, router])
+  }, [hydrated, token, account, resolved, router])
 
-  if (!hydrated || !token || !isSuperAdmin(user)) {
+  if (!hydrated || !token || !resolved || !isSuperAdmin(account)) {
     return <div className="bg-background min-h-screen" />
   }
 

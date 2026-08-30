@@ -28,7 +28,10 @@ def run():
         db.query(models.PlayLog).delete()
         db.query(models.Screen).filter(models.Screen.name.like("BTF Screen%")).delete()
         db.query(models.User).filter(models.User.email == "btf_admin@olrac.com").delete()
-        db.query(models.Organization).filter(models.Organization.name == "BTF Test Org").delete()
+        org_to_clean = db.query(models.Organization).filter(models.Organization.name == "BTF Test Org").first()
+        if org_to_clean:
+            db.query(models.Subscription).filter(models.Subscription.organization_id == org_to_clean.id).delete()
+            db.delete(org_to_clean)
         db.commit()
 
         org = models.Organization(name="BTF Test Org", slug="btf-test-org", status="active")

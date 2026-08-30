@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
+import { canEditTenantContent } from '@/lib/roles'
 import { useAuthStore } from '@/lib/store'
 import type { Placement, PlacementTarget, Screen, ScreenGroup } from '@/lib/types'
 
@@ -35,7 +36,7 @@ function runState(placement: Placement): { label: string; tone: 'success' | 'war
 export function AdBookings({ contentId }: { contentId: number }) {
   const queryClient = useQueryClient()
   const user = useAuthStore((state) => state.user)
-  const canEdit = user?.role === 'owner' || user?.role === 'editor' || user?.role === 'super_admin'
+  const canEdit = canEditTenantContent(user)
 
   const placementsQuery = useQuery({ queryKey: ['placements', contentId], queryFn: () => api.getPlacements(contentId) })
   const screensQuery = useQuery({ queryKey: ['screens'], queryFn: api.getScreens })

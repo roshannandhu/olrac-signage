@@ -32,25 +32,22 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { api } from '@/lib/api'
+import { isSuperAdmin as roleIsSuperAdmin } from '@/lib/roles'
 import { useAuthStore } from '@/lib/store'
 import { useFleetAlerts } from '@/lib/use-fleet-alerts'
 import { cn } from '@/lib/utils'
 
-// The four things an operator touches daily. Everything else is one level down, under
-// Admin or the account menu, so the bar stays readable at a glance.
 const primaryLinks = [
   { href: '/dashboard/content', label: 'Content', icon: ImageIcon },
   { href: '/dashboard/screens', label: 'Screens', icon: MonitorPlay },
   { href: '/dashboard/groups', label: 'Groups', icon: Layers3 },
 ]
 
-const adminLinks = [
+const toolLinks = [
   { href: '/dashboard/campaigns', label: 'Playback report', icon: BarChart3, ownerOnly: false },
   { href: '/dashboard/alerts', label: 'Alerts', icon: Bell, ownerOnly: false },
   { href: '/dashboard/files', label: 'File management', icon: FolderCheck, ownerOnly: false },
   { href: '/dashboard/emergency', label: 'Emergency broadcast', icon: RadioTower, ownerOnly: false },
-  { href: '/dashboard/releases', label: 'App releases', icon: Package, ownerOnly: true },
-  { href: '/dashboard/provisioning', label: 'Provisioning', icon: QrCode, ownerOnly: true },
 ]
 
 const accountLinks = [
@@ -75,7 +72,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // is gated on role === 'owner' -- so a super_admin landing here (from a bookmark, or the
   // old post-login redirect) got a dashboard with an empty Admin menu and no way to reach
   // the console. Send them where their tools actually are.
-  const isSuperAdmin = (meQuery.data?.role || user?.role) === 'super_admin'
+  const isSuperAdmin = roleIsSuperAdmin(meQuery.data ?? user)
 
   useEffect(() => {
     if (hydrated && !token) {
@@ -96,11 +93,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [meQuery.data, setUser])
 
   const isOwner = user?.role === 'owner'
-  const adminItems = adminLinks.filter((item) => !item.ownerOnly || isOwner)
+  const toolItems = toolLinks.filter((item) => !item.ownerOnly || isOwner)
   const accountItems = accountLinks.filter((item) => !item.ownerOnly || isOwner)
 
   const isActive = (href: string) => pathname.startsWith(href)
-  const adminActive = adminItems.some((item) => isActive(item.href))
+  const toolsActive = toolItems.some((item) => isActive(item.href))
   const logout = () => {
     clearSession()
     router.replace('/login')
@@ -149,12 +146,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <DropdownMenu>
               <DropdownMenuTrigger className={cn(
                 'focus-visible:ring-ring flex h-10 cursor-pointer items-center gap-1 rounded-lg px-3 text-[15px] transition-colors focus-visible:ring-2 focus-visible:outline-none',
-                adminActive ? 'text-primary dark:text-brand font-semibold' : 'text-muted-foreground hover:text-foreground font-medium',
+                toolsActive ? 'text-primary dark:text-brand font-semibold' : 'text-muted-foreground hover:text-foreground font-medium',
               )}>
-                Admin <ChevronDown className="size-4" aria-hidden="true" />
+                Tools <ChevronDown className="size-4" aria-hidden="true" />
               </DropdownMenuTrigger>
               <DropdownMenuContent>
-                {adminItems.map(({ href, label, icon: Icon }) => (
+                {toolItems.map(({ href, label, icon: Icon }) => (
                   <DropdownMenuLinkItem key={href} href={href} render={<Link href={href} />}>
                     <Icon aria-hidden="true" /> {label}
                   </DropdownMenuLinkItem>
@@ -189,8 +186,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     <Icon aria-hidden="true" /> {label}
                   </DropdownMenuLinkItem>
                 ))}
-                <DropdownMenuLinkItem href="/dashboard/provisioning" render={<Link href="/dashboard/provisioning" />}>
-                  <Settings2 aria-hidden="true" /> Add new screen
+                <DropdownMenuLinkItem href="/dashboard/screens" render={<Link href="/dashboard/screens" />}>
+                  <Settings2 aria-hidden="true" /> Manage screens
                 </DropdownMenuLinkItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={logout}>

@@ -2,10 +2,28 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from sqlalchemy.orm import selectinload
+
 from .. import models, schemas
 from ..tenancy import TenantScope, get_tenant_scope, require_tenant_roles
 
 router = APIRouter()
+
+
+# PlaylistResponse embeds a full ContentResponse per item, and ContentResponse exposes
+# expires_at, which walks Content.playlist_items. Left to lazy loading that is one query
+# per item on top of the content load itself -- the playlist editor cost 244 queries for
+# 60 items. Naming the whole chain once collapses it to a fixed handful.
+#
+# Spelled out here rather than as lazy="selectin" on Content.playlist_items because that
+# relationship is reached from many directions and eager-loading it globally closes a
+# cycle with PlaylistItem.content; an explicit path is bounded and only costs the routes
+# that actually serialise a playlist.
+PLAYLIST_LOAD = (
+    selectinload(models.Playlist.items)
+    .selectinload(models.PlaylistItem.content)
+    .selectinload(models.Content.playlist_items),
+)
 
 
 def bump_playlist(playlist: models.Playlist) -> None:
@@ -44,7 +62,12 @@ def create_playlist(
 def get_playlists(
     scope: TenantScope = Depends(get_tenant_scope),
 ):
-    return scope.query(models.Playlist).order_by(models.Playlist.updated_at.desc()).all()
+    return (
+        scope.query(models.Playlist)
+        .options(*PLAYLIST_LOAD)
+        .order_by(models.Playlist.updated_at.desc())
+        .all()
+    )
 
 
 @router.get("/{playlist_id}", response_model=schemas.PlaylistResponse)
@@ -52,7 +75,12 @@ def get_playlist(
     playlist_id: int,
     scope: TenantScope = Depends(get_tenant_scope),
 ):
-    db_playlist = scope.get(models.Playlist, playlist_id)
+    db_playlist = (
+        scope.query(models.Playlist)
+        .options(*PLAYLIST_LOAD)
+        .filter(models.Playlist.id == playlist_id)
+        .first()
+    )
     if not db_playlist:
         raise HTTPException(status_code=404, detail="Playlist not found")
     return db_playlist

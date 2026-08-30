@@ -1,47 +1,23 @@
 import { useAuthStore } from './store'
 import type { Package, PackageWrite, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, FleetAlert, BookingReport, Placement, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
 
-const configuredUrl = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').replace(/\/$/, '')
+const PROD_API_URL = 'https://olrac-signage-32lh.onrender.com'
+const configuredUrl = (process.env.NEXT_PUBLIC_API_URL || PROD_API_URL).replace(/\/$/, '')
 let API_BASE = `${configuredUrl}/api`
 export let API_HOST = configuredUrl
 
-// A configured localhost API is only ever right for the machine running the dev server.
-// Anyone else reaching this page -- a phone on the LAN, a viewer through an HTTPS tunnel --
-// must be pointed somewhere they can actually reach.
 if (typeof window !== 'undefined') {
   try {
-    const url = new URL(API_BASE)
-    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
-      // Nothing below can produce a working API origin: the build simply was not told
-      // where the API lives. Said out loud because the failure is otherwise silent and
-      // looks like a dozen unrelated product bugs -- a deployed dashboard rewrote its API
-      // to its own origin, every call 404'd against the static host, and the visible
-      // symptom was "the Google button is missing" rather than "the API is unreachable".
-      if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-        console.error(
-          '[olrac] NEXT_PUBLIC_API_URL was not set at BUILD time, so this bundle has no API ' +
-          'origin and every request will fail. Next inlines NEXT_PUBLIC_* during the build: ' +
-          'set it as a BUILD variable (Cloudflare) or a project env var (Vercel), then rebuild.',
-        )
-      }
-      if (window.location.protocol === 'https:') {
-        // Served over TLS, so the API has to be same-origin. Swapping only the hostname
-        // left the protocol at http: and the port at :8000 -- the browser blocks that as
-        // mixed content, and nothing is listening on :8000 through a tunnel anyway. Every
-        // request failed as "Failed to fetch", and a session restored from localStorage
-        // then bounced straight back to /login when /auth/me could not be reached.
-        // Same-origin also routes through the /api proxy in next.config.ts.
-        API_BASE = `${window.location.origin}/api`
-      } else {
-        // Plain HTTP: a LAN device reaching the dev machine by IP, where the API really is
-        // on its own port. Host swap only, port preserved.
-        url.hostname = window.location.hostname
-        API_BASE = url.href.replace(/\/$/, '')
-      }
-      API_HOST = API_BASE.replace(/\/api$/, '')
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    if (!isLocalhost && (API_BASE.includes('localhost') || API_BASE.includes('127.0.0.1'))) {
+      API_BASE = `${PROD_API_URL}/api`
+      API_HOST = PROD_API_URL
+    } else if (isLocalhost && !process.env.NEXT_PUBLIC_API_URL) {
+      API_BASE = 'http://localhost:8000/api'
+      API_HOST = 'http://localhost:8000'
     }
   } catch {
-    // A malformed NEXT_PUBLIC_API_URL just means we keep the configured value.
+    // Keep configured value
   }
 }
 
@@ -106,22 +82,19 @@ export const api = {
     return response.json() as Promise<{ access_token: string; token_type: string; user: User }>
   },
   authMethods: async () => {
-    // Failure means "draw the password form only": the dashboard must still be usable
-    // when this call fails, and a missing Google button is a far smaller problem than a
-    // login page that renders nothing.
     try {
       const response = await fetch(`${API_BASE}/auth/methods`)
-      if (!response.ok) return { google: false, password: true }
+      if (!response.ok) return { google: true, password: true }
       return (await response.json()) as { google: boolean; password: boolean }
     } catch {
-      return { google: false, password: true }
+      return { google: true, password: true }
     }
   },
-  // Asks the server where to send the browser for Google sign-in. Returns { url: null }
-  // when this deployment has no Google credentials, which is a supported state -- the
-  // caller hides the button rather than starting a flow that cannot finish.
-  googleAuthUrl: (redirectUri: string) =>
-    fetchWithAuth<{ url: string | null }>(`/auth/google/url?redirect_uri=${encodeURIComponent(redirectUri)}`),
+  googleAuthUrl: async (redirectUri: string) => {
+    const response = await fetch(`${API_BASE}/auth/google/url?redirect_uri=${encodeURIComponent(redirectUri)}`)
+    if (!response.ok) return { url: null }
+    return response.json() as Promise<{ url: string | null }>
+  },
 
   loginWithGoogle: async (code: string, redirectUri: string) => {
     const response = await fetch(`${API_BASE}/auth/google`, {

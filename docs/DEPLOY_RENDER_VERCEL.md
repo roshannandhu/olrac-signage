@@ -1,14 +1,18 @@
-# Deploying to Render + Vercel
+# Deploying to Render + Cloudflare (or Vercel)
 
-The path for a first real-hardware test: API and worker on Render, dashboard on Vercel,
-database on Supabase, media on Cloudflare R2, Redis on Upstash.
+The path for a first real-hardware test: API and worker on Render, dashboard on Cloudflare
+Workers or Vercel, database on Supabase, media on Cloudflare R2, Redis on Upstash.
 
 `DEPLOYMENT.md` is the all-in-one Docker Compose stack and `DEPLOYMENT_CLOUD.md` is the
 Oracle VM split. Follow ONE of the three; they differ in ways that matter.
 
-**Order matters.** Render needs Vercel's URL for CORS and Vercel needs Render's URL for the
-API, so the sequence is Render, then Vercel, then back to Render. Do not try to do it in one
-pass.
+**Order matters.** Render needs the dashboard's origin for CORS and the dashboard needs
+Render's URL for the API, so the sequence is Render, then the dashboard, then back to
+Render. Do not try to do it in one pass.
+
+**If the deploying account does not own the repository**, see "Connecting a repository you
+do not own" at the end before starting: both Render and Cloudflare connect through a GitHub
+App, and only a repository's owner can install one.
 
 ---
 
@@ -128,7 +132,58 @@ Deploy, and note the URL: `https://<your-api>.onrender.com`.
 
 ---
 
-## 2. Vercel: the dashboard
+## 2. The dashboard: Cloudflare Workers, or Vercel
+
+Pick one. Cloudflare is the better fit if the media is already on R2; Vercel is fewer steps.
+
+### 2a. Cloudflare Workers (via OpenNext)
+
+It is a **Worker**, not a Pages project, and that is not a preference. The Pages adapter
+(`@cloudflare/next-on-pages`) stops at Next 15.5.2 and cannot build this app; OpenNext is
+what Cloudflare maintains for Next now, and it emits a Worker plus a static asset bundle.
+Everything Pages gave you -- Git-connected deploys, preview URLs, the free tier -- is on
+Workers too. See `frontend/open-next.config.ts` and `frontend/wrangler.jsonc`, both already
+committed.
+
+**Workers & Pages -> Create -> Workers -> Import a repository.**
+
+| Field | Value |
+|---|---|
+| Repository | `olrac-signage` |
+| **Root directory** | **`frontend`** |
+| Build command | `npx opennextjs-cloudflare build` |
+| Deploy command | `npx wrangler deploy` |
+
+The Worker name comes from `wrangler.jsonc` (`olrac-signage`), so leave the name field
+alone rather than fighting it.
+
+**Build variables** (Settings -> Variables -> *Build* variables, not runtime):
+
+```
+NEXT_PUBLIC_API_URL              https://<your-api>.onrender.com
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY  <optional>
+```
+
+`NEXT_PUBLIC_*` is inlined by Next at **build** time. Set as a runtime variable it arrives
+too late, the bundle keeps its fallback of `http://localhost:8000`, and every request dies
+on the visitor's own machine. `wrangler.jsonc` carries a comment saying exactly this.
+
+To deploy by hand instead of from Git:
+
+```bash
+cd frontend
+NEXT_PUBLIC_API_URL=https://<your-api>.onrender.com npm run cf:deploy
+```
+
+Your URL is `https://olrac-signage.<subdomain>.workers.dev`.
+
+Free tier: 100,000 requests/day, and static assets do not count against it. The one limit
+worth knowing is **10 ms CPU per invocation**. This dashboard is client-rendered, so almost
+every hit is a static asset and never runs the Worker -- but the `[id]` routes do server
+render, and if they start returning CPU-limit errors the fix is the $5/month Workers Paid
+plan, not a code change.
+
+### 2b. Vercel
 
 **Add New -> Project -> import the repository.**
 
@@ -137,31 +192,18 @@ Deploy, and note the URL: `https://<your-api>.onrender.com`.
 | **Root Directory** | **`frontend`** |
 | Framework | Next.js (detected) |
 
-### Environment
-
-```
-NEXT_PUBLIC_API_URL              https://<your-api>.onrender.com
-NEXT_PUBLIC_GOOGLE_MAPS_API_KEY  <optional>
-```
-
-`NEXT_PUBLIC_API_URL` is required. Without it the client falls back to
-`http://localhost:8000`, which on a visitor's machine means *their* computer, so every
-request fails before it leaves the browser.
+Same two environment variables as above; on Vercel they are ordinary project variables.
 
 There is no `vercel.json` in this repository on purpose. It previously held a
 `services`/microfrontends configuration, which is not what this is: one Next app in a
-subdirectory, selected with Root Directory above.
-
-Deploy, and note the URL: `https://<your-app>.vercel.app`.
-
----
+subdirectory, selected with Root Directory.
 
 ## 3. Back to Render
 
 Correct the two placeholders and redeploy:
 
 ```
-CORS_ORIGINS      https://<your-app>.vercel.app
+CORS_ORIGINS      https://olrac-signage.<subdomain>.workers.dev   (or your Vercel URL)
 PUBLIC_BASE_URL   https://<your-api>.onrender.com
 ```
 
@@ -241,3 +283,31 @@ See `DEPLOYMENT.md` for why, and for the rest of the per-panel provisioning.
 - **Existing local media does not migrate.** Rows already pointing at `/uploads/...` will
   404 after switching to R2 unless the files are copied into the bucket and the rows
   rewritten. Not an issue on a fresh database.
+
+---
+
+## Connecting a repository you do not own
+
+Render and Cloudflare both connect through a **GitHub App**, and on a **personal**
+repository only the owner can install one. A collaborator with `write` cannot: GitHub's
+`admin` and `maintain` roles exist only on organisation-owned repositories, so the import
+screen offers a *request*, not a deploy button.
+
+Two ways through it.
+
+**The owner approves, once per service.** The collaborator starts the import and clicks
+through to request access; the owner then approves at
+<https://github.com/settings/installations>, granting the app access to this repository
+only. Faster still, the owner can install both apps first and skip the waiting:
+<https://github.com/apps/render> and the Cloudflare Workers app, each with
+*Only select repositories -> olrac-signage*.
+
+**Or the collaborator forks it.** A fork is owned by the person who made it, so they can
+install apps and deploy with no approval at all, and can keep it current with
+`gh repo sync <them>/olrac-signage --source <owner>/olrac-signage`. This is also the
+cheapest way for two people to each hold full control of their own environment: two forks,
+two free deployments, nothing shared.
+
+Do **not** move the repository into a GitHub organisation just to solve this. It looks
+tidy, but Vercel's free tier refuses organisation-owned repositories, so it converts a
+permissions annoyance into a bill. (Cloudflare Workers has no such restriction.)

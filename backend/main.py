@@ -151,9 +151,12 @@ allowed_origins = [
 # LAN address, not localhost, so that origin has to be allowed too or every request is
 # blocked by the browser before it leaves the device. Private ranges only — this never
 # opens the API to the public internet.
-_LAN_ORIGIN = re.compile(
+_ALLOWED_ORIGIN_REGEX = re.compile(
     r"^https?://("
     r"localhost|127\.0\.0\.1|"
+    r".*?\.workers\.dev|"
+    r".*?\.pages\.dev|"
+    r".*?\.onrender\.com|"
     r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
     r"192\.168\.\d{1,3}\.\d{1,3}|"
     r"172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}"
@@ -162,7 +165,7 @@ _LAN_ORIGIN = re.compile(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=_LAN_ORIGIN.pattern,
+    allow_origin_regex=_ALLOWED_ORIGIN_REGEX.pattern,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

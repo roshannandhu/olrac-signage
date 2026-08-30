@@ -1,0 +1,115 @@
+# Render Blueprint — https://render.com/docs/blueprint-spec
+#
+# Use this instead of filling the web form: New -> Blueprint -> pick this repo. Every
+# setting below is one that a hand-made service gets wrong silently.
+#
+# The two that actually broke a first deploy:
+#
+#   dockerfilePath  Render defaults to ./Dockerfile, and this repo has none at the root
+#                   (there is backend/Dockerfile and frontend/Dockerfile). The default
+#                   fails with "failed to read dockerfile: open Dockerfile: no such file
+#                   or directory" before a single layer is built.
+#
+#   dockerContext   Must be the repository root. backend/Dockerfile copies backend/ as a
+#                   PACKAGE (`COPY backend/ ./backend/`) so that `uvicorn backend.main:app`
+#                   can resolve `from . import database`. Point the context at ./backend
+#                   and the image builds but every container crash-loops on
+#                   "attempted relative import with no known parent package".
+#
+# Docker, not the native Python runtime: the media worker shells out to ffmpeg and
+# ffprobe, which the Python image does not carry, so every video upload would fail at the
+# transcode step while images kept working -- a confusing half-broken state.
+
+services:
+  - type: web
+    name: olrac-signage-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true
+
+    # Free spins down after ~15 minutes idle and gives 512 MB / 0.1 CPU.
+    #
+    # Fine for testing with IMAGES, which skip the worker entirely and are stored ready.
+    # Not enough for VIDEO: libx264 will be OOM-killed at 512 MB. Move to `starter` before
+    # testing transcoding.
+    #
+    # Spin-down matters less than it sounds for a live fleet: a paired screen polls every
+    # PLAYER_SYNC_INTERVAL_SECONDS (60), which keeps the service awake. It sleeps when no
+    # screen is connected, and the next request then pays a ~50s cold start.
+    plan: free
+
+    # No Render region matches Supabase's ap-northeast-2 (Seoul); singapore is the closest.
+    # This pairing is worth more than any query tuning -- latency here is round-trip COUNT
+    # times distance, so a co-located pair is ~100x closer than a cross-region one. If the
+    # database is moved, move this too.
+    region: singapore
+
+    envVars:
+      # Secrets and per-deployment values: `sync: false` makes Render prompt for them and
+      # keeps them out of the repository.
+      - key: DATABASE_URL          # Supabase TRANSACTION POOLER, port 6543 (not 5432)
+        sync: false
+      - key: REDIS_URL             # Upstash rediss:// — mandatory, see below
+        sync: false
+      - key: AWS_ACCESS_KEY_ID     # R2 token; any value other than "mock" enables R2
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_ENDPOINT_URL       # https://<account-id>.r2.cloudflarestorage.com
+        sync: false
+      - key: S3_BUCKET_NAME        # must match the bucket exactly, or uploads 500
+        sync: false
+      - key: CORS_ORIGINS          # the dashboard's origin, e.g. https://<x>.workers.dev
+        sync: false
+      - key: PUBLIC_BASE_URL       # this service's own https URL, stamped into media links
+        sync: false
+
+      # Generated once by Render and never seen by anyone. Every issued token is signed
+      # with it, so a guessable value makes them all forgeable.
+      - key: SECRET_KEY
+        generateValue: true
+
+      # One web service means no separate worker process. Without a worker running
+      # somewhere, uploads never reach status=ready so nothing reaches a TV, and the
+      # rollup job never runs so every dashboard count reads zero forever.
+      - key: RUN_WORKER_IN_PROCESS
+        value: "true"
+
+      # Each media job spawns ffmpeg. Raise only alongside the CPU to run it on.
+      - key: WORKER_MAX_JOBS
+        value: "2"
+
+      - key: AWS_REGION            # R2 requires the literal string "auto"
+        value: auto
+
+      # 100 screens write ~864k play-log rows a day, ~316 MB with indexes. One day of raw
+      # rows is what keeps that inside Supabase's 500 MB free tier; the hourly rollups
+      # keep the reporting history, so nothing an operator looks at is lost.
+      - key: PLAY_LOG_RETENTION_DAYS
+        value: "1"
+      - key: ROLLUP_RETENTION_DAYS
+        value: "400"
+
+      - key: PAYMENT_PROVIDER      # "mock" until Razorpay keys are configured
+        value: mock
+
+# Deliberately NOT set here:
+#
+#   preDeployCommand: alembic -c backend/alembic.ini upgrade head
+#
+# Pre-deploy commands need a paid instance type. On free it would be ignored silently,
+# which is worse than absent. It is not needed for the FIRST deploy either: backend/main.py
+# builds the schema and stamps it at head on a database Alembic does not yet manage, so a
+# brand-new Supabase project comes up complete.
+#
+# It IS needed for every deploy that adds a migration afterwards. Either add the line above
+# once on a paid plan, or run it by hand against the production database:
+#
+#     DATABASE_URL="<supabase url>" alembic -c backend/alembic.ini upgrade head
+#
+# Redis is not optional at any tier. Without it uploads fail outright, nothing is pushed to
+# a screen, and all six scheduled jobs stop. Note that Upstash's free tier allows 10k
+# commands a day and each screen spends ~4,300 (sync + heartbeat, ~3 ops a minute), so it
+# supports roughly two screens before it needs upgrading or self-hosting.

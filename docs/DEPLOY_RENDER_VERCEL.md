@@ -63,7 +63,15 @@ Supabase's 500 MB.
 
 ## 1. Render: the API and worker
 
-**New -> Web Service -> connect the repository.**
+### The short way: the blueprint
+
+`render.yaml` at the repository root encodes every setting below. **New -> Blueprint ->**
+pick this repo, and Render prompts only for the eight secrets. Skip to step 2.
+
+The rest of this section is the same thing through the web form, which is worth reading
+once because two of its fields fail in ways that do not name themselves.
+
+### The long way: New -> Web Service -> connect the repository.
 
 | Field | Value |
 |---|---|
@@ -82,6 +90,14 @@ Two of those are not preferences:
 - **Build context `.`, not `./backend`.** The Dockerfile copies `backend/` as a *package*
   from the repository root. Point the context at `./backend` and the container crash-loops
   on `attempted relative import with no known parent package`.
+- **Dockerfile Path must be set**, and it is the field a first deploy usually misses.
+  Render defaults to `./Dockerfile`; this repo has none at the root, so the build dies in
+  under ten seconds with
+
+        error: failed to solve: failed to read dockerfile:
+        open Dockerfile: no such file or directory
+
+  If you see that, this field is the cause -- not the Dockerfile, which is fine.
 
 **Not the free tier.** It sleeps after about 15 minutes idle, which stops the cron jobs, and
 the two prunes are what keep `play_logs` inside Supabase's 500 MB. That table grows roughly

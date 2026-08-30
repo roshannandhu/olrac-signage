@@ -310,8 +310,8 @@
     "semantic_hash": "e367c9fb4bfb6589fbdf7c046bd51c55"
   },
   "frontend/src/app/dashboard/layout.tsx": {
-    "mtime": 1788110240.6902266,
-    "ast_hash": "d29dd872de2a13286948824978446f89",
+    "mtime": 1788110563.907213,
+    "ast_hash": "fb4215b31a7208db5c6f8f55e30c94f2",
     "semantic_hash": ""
   },
   "frontend/src/app/dashboard/loading.tsx": {
@@ -730,8 +730,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/dashboard/releases/page.tsx": {
-    "mtime": 1787384363.3203604,
-    "ast_hash": "0d12c9c1ffa71d46a294b83c6cca1ac5",
+    "mtime": 1788110644.609586,
+    "ast_hash": "dc66282697d55e01a666574def00306d",
     "semantic_hash": ""
   },
   "frontend/src/app/dashboard/screens/[id]/page.tsx": {
@@ -795,8 +795,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/dashboard/provisioning/page.tsx": {
-    "mtime": 1786930406.2764387,
-    "ast_hash": "d54634c533d9eee1e4c493ac36202e8f",
+    "mtime": 1788110653.9274392,
+    "ast_hash": "ec86cd4e13507e5a0e1c575c70ff964a",
     "semantic_hash": ""
   },
   "tests/test_sqlite_utc.py": {
@@ -870,8 +870,8 @@
     "semantic_hash": ""
   },
   "docs/DEPLOYMENT.md": {
-    "mtime": 1788083577.6225736,
-    "ast_hash": "0e6af7a1e9d5841ca4edb2d350139205",
+    "mtime": 1788110621.2422676,
+    "ast_hash": "a00d4ca5147562626b4dc047b8d25cbb",
     "semantic_hash": ""
   },
   "frontend/AGENTS.md": {
@@ -1455,8 +1455,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/admin/layout.tsx": {
-    "mtime": 1788110240.6886737,
-    "ast_hash": "ae8f582ccf778135822c1767de2e471e",
+    "mtime": 1788110577.4924371,
+    "ast_hash": "fac7fc4437bf5073fb7856df5e5ebbf3",
     "semantic_hash": ""
   },
   "frontend/src/app/admin/tenants/page.tsx": {
@@ -1592,6 +1592,16 @@
   "frontend/src/lib/roles.ts": {
     "mtime": 1788110223.580235,
     "ast_hash": "1d5664fa05dea8d60f2a1b691b4e8145",
+    "semantic_hash": ""
+  },
+  "frontend/src/app/admin/provisioning/page.tsx": {
+    "mtime": 1788110615.193669,
+    "ast_hash": "4827db7df3cc98a144f38f3074af9856",
+    "semantic_hash": ""
+  },
+  "frontend/src/app/admin/releases/page.tsx": {
+    "mtime": 1788110590.8206856,
+    "ast_hash": "426e48e36b44ee8e0a49be57834dd378",
     "semantic_hash": ""
   }
 }

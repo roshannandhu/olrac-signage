@@ -14,38 +14,14 @@ from functools import lru_cache
 
 
 def storage_prefix(organization) -> str:
-    """The folder this tenant's objects live under, e.g. "alice-example.com-19".
-
-    Named after the owner's address so the bucket is legible: opening R2 and seeing
-    `19/` tells an operator nothing, while `alice-example.com-19/` identifies the
-    customer without a database lookup.
-
-    The numeric id is kept as a suffix and is what actually guarantees correctness.
-    Addresses are neither unique nor stable here -- two tenants can be created by the
-    same person, and PATCH /api/auth/me lets anyone change their email -- so a
-    name-only folder could collide between tenants or silently move when someone edits
-    their profile. With the id appended, each organisation owns exactly one prefix for
-    its lifetime.
-
-    Existing objects are unaffected by a later rename: every row stores the full key it
-    was written with, so old files keep resolving from the old folder while new uploads
-    land in the new one.
-
-    Note that the prefix appears in presigned URLs, so the address is visible to anyone
-    holding one -- a TV, or a browser's history. That is the tradeoff for legibility; if
-    it is ever unwanted, return str(organization.id) here and nothing else changes.
-    """
-    label = (getattr(organization, "owner_email", None) or "").strip().lower()
-    if label:
-        # Keep the shape of an address readable while staying inside the safe key
-        # characters S3 documents: "@" becomes "-", runs collapse, edges trimmed.
-        safe = "".join(character if character.isalnum() or character in "-_." else "-"
-                       for character in label).strip("-.")
-        while "--" in safe:
-            safe = safe.replace("--", "-")
-        if safe:
-            return f"{safe[:60]}-{organization.id}"
-    return str(organization.id)
+    """Folder in Cloudflare R2 / storage named directly after the account's email."""
+    email = (getattr(organization, "owner_email", None) or "").strip().lower()
+    if email:
+        return email
+    slug = (getattr(organization, "slug", None) or "").strip()
+    if slug:
+        return slug
+    return f"org-{organization.id}"
 
 
 def is_s3_enabled() -> bool:

@@ -62,10 +62,18 @@ R2_BUCKET_DEFAULT = "olrac"
 
 
 def get_s3_config() -> dict[str, str]:
-    endpoint = (os.getenv("S3_ENDPOINT_URL") or R2_ENDPOINT_DEFAULT).strip()
-    key_id = (os.getenv("AWS_ACCESS_KEY_ID") or R2_KEY_ID_DEFAULT).strip()
-    secret = (os.getenv("AWS_SECRET_ACCESS_KEY") or R2_SECRET_DEFAULT).strip()
-    bucket = (os.getenv("S3_BUCKET_NAME") or R2_BUCKET_DEFAULT).strip()
+    raw_key = os.getenv("AWS_ACCESS_KEY_ID", "").strip()
+    key_id = raw_key if (raw_key and raw_key != "mock") else R2_KEY_ID_DEFAULT
+
+    raw_secret = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip()
+    secret = raw_secret if raw_secret else R2_SECRET_DEFAULT
+
+    raw_endpoint = os.getenv("S3_ENDPOINT_URL", "").strip()
+    endpoint = raw_endpoint if raw_endpoint else R2_ENDPOINT_DEFAULT
+
+    raw_bucket = os.getenv("S3_BUCKET_NAME", "").strip()
+    bucket = raw_bucket if raw_bucket else R2_BUCKET_DEFAULT
+
     region = (os.getenv("AWS_REGION") or "auto").strip()
     return {
         "endpoint_url": endpoint,

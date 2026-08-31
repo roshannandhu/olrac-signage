@@ -186,8 +186,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_mainactivity_mainactivity_submitsignin",
-      "community": 4,
-      "community_name": "MainActivity",
+      "community": 3,
+      "community_name": "ApiService.kt",
       "norm_label": ".submitsignin()"
     },
     {
@@ -1999,8 +1999,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_network_apiservice_signinrequest",
-      "community": 4,
-      "community_name": "MainActivity",
+      "community": 3,
+      "community_name": "ApiService.kt",
       "norm_label": "signinrequest"
     },
     {
@@ -2129,8 +2129,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_network_apiservice_heartbeatrequest",
-      "community": 17,
-      "community_name": "PlaybackTelemetry",
+      "community": 3,
+      "community_name": "ApiService.kt",
       "norm_label": "heartbeatrequest"
     },
     {
@@ -4296,7 +4296,7 @@
       "label": "PlayerScreen()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L60",
+      "source_location": "L62",
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_playerscreen",
@@ -4308,7 +4308,7 @@
       "label": "DualSurfacePlayer()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L83",
+      "source_location": "L85",
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer",
@@ -4320,11 +4320,11 @@
       "label": "Player",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L115",
+      "source_location": "L117",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer_object_player_l115",
+      "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer_object_player_l117",
       "community": 90,
       "community_name": "Player",
       "norm_label": "player"
@@ -4344,10 +4344,10 @@
       "label": ".onRenderedFirstFrame()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L116",
+      "source_location": "L118",
       "_callable": true,
       "_origin": "ast",
-      "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer_object_player_l115_onrenderedfirstframe",
+      "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer_object_player_l117_onrenderedfirstframe",
       "community": 90,
       "community_name": "Player",
       "norm_label": ".onrenderedfirstframe()"
@@ -4356,7 +4356,7 @@
       "label": "trimQueueIfOversized()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L510",
+      "source_location": "L516",
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_trimqueueifoversized",
@@ -4379,7 +4379,7 @@
       "label": "writePlayCheckpoint()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L532",
+      "source_location": "L538",
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_writeplaycheckpoint",
@@ -4402,7 +4402,7 @@
       "label": "recoverInterruptedPlay()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L577",
+      "source_location": "L583",
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_recoverinterruptedplay",
@@ -4414,7 +4414,7 @@
       "label": "clearPlayCheckpoint()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L628",
+      "source_location": "L634",
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_clearplaycheckpoint",
@@ -4426,7 +4426,7 @@
       "label": "DecoderSnapshot",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L641",
+      "source_location": "L647",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
@@ -4439,7 +4439,7 @@
       "label": "isImageDecodable()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L643",
+      "source_location": "L649",
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_isimagedecodable",
@@ -4451,7 +4451,7 @@
       "label": "PlaybackSurface()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L652",
+      "source_location": "L658",
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_playbacksurface",
@@ -4466,9 +4466,20 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_kt_exoplayer",
+      "community": 90,
+      "community_name": "Player",
+      "norm_label": "exoplayer"
+    },
+    {
+      "label": "Dp",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "dp",
       "community": 81,
       "community_name": "PlayerScreen.kt",
-      "norm_label": "exoplayer"
+      "norm_label": "dp"
     },
     {
       "label": "Modifier",
@@ -4485,7 +4496,7 @@
       "label": "transitionLayer()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L700",
+      "source_location": "L711",
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_transitionlayer",
@@ -4497,7 +4508,7 @@
       "label": "preparePlayer()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L743",
+      "source_location": "L754",
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_prepareplayer",
@@ -4509,23 +4520,23 @@
       "label": "awaitPlayerReady()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L767",
+      "source_location": "L778",
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready",
-      "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community": 90,
+      "community_name": "Player",
       "norm_label": "awaitplayerready()"
     },
     {
       "label": "Player",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L771",
+      "source_location": "L782",
       "_callable": true,
       "_callable_class": true,
       "_origin": "ast",
-      "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l771",
+      "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l782",
       "community": 90,
       "community_name": "Player",
       "norm_label": "player"
@@ -4534,10 +4545,10 @@
       "label": ".onPlaybackStateChanged()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L772",
+      "source_location": "L783",
       "_callable": true,
       "_origin": "ast",
-      "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l771_onplaybackstatechanged",
+      "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l782_onplaybackstatechanged",
       "community": 90,
       "community_name": "Player",
       "norm_label": ".onplaybackstatechanged()"
@@ -4546,10 +4557,10 @@
       "label": ".onPlayerError()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L779",
+      "source_location": "L790",
       "_callable": true,
       "_origin": "ast",
-      "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l771_onplayererror",
+      "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l782_onplayererror",
       "community": 90,
       "community_name": "Player",
       "norm_label": ".onplayererror()"
@@ -6297,8 +6308,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_init",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "backend/__init__.py"
     },
     {
@@ -6308,8 +6319,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_init_rationale_1",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "olrac signage backend package. explicit package marker. without it `backend` is..."
     },
     {
@@ -6319,8 +6330,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_alembic_env",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 166,
+      "community_name": "env.py",
       "norm_label": "env.py"
     },
     {
@@ -6331,8 +6342,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_alembic_env_run_migrations_offline",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 166,
+      "community_name": "env.py",
       "norm_label": "run_migrations_offline()"
     },
     {
@@ -6343,8 +6354,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_alembic_env_run_migrations_online",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 166,
+      "community_name": "env.py",
       "norm_label": "run_migrations_online()"
     },
     {
@@ -6354,8 +6365,8 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "backend_alembic_env_rationale_43",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 166,
+      "community_name": "env.py",
       "norm_label": "run migrations in 'offline' mode. this configures the context with just a url..."
     },
     {
@@ -6365,8 +6376,8 @@
       "source_location": "L67",
       "_origin": "ast",
       "id": "backend_alembic_env_rationale_67",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 166,
+      "community_name": "env.py",
       "norm_label": "run migrations in 'online' mode. in this scenario we need to create an engine..."
     },
     {
@@ -7761,8 +7772,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_billing",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "backend/billing.py"
     },
     {
@@ -7774,7 +7785,7 @@
       "_origin": "ast",
       "id": "backend_billing_ensure_billing_catalog",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "ensure_billing_catalog()"
     },
     {
@@ -7785,7 +7796,7 @@
       "_origin": "ast",
       "id": "backend_billing_py_session",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "session"
     },
     {
@@ -7797,7 +7808,7 @@
       "_origin": "ast",
       "id": "backend_billing_plan_features",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "plan_features()"
     },
     {
@@ -7808,7 +7819,7 @@
       "_origin": "ast",
       "id": "backend_billing_py_plan",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "plan"
     },
     {
@@ -7819,7 +7830,7 @@
       "_origin": "ast",
       "id": "backend_database",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "database.py"
     },
     {
@@ -7830,8 +7841,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_database_get_db",
-      "community": 95,
-      "community_name": "utcnow",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "get_db()"
     },
     {
@@ -7842,8 +7853,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_database_pool_for_current_loop",
-      "community": 148,
-      "community_name": "screens.py",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "_pool_for_current_loop()"
     },
     {
@@ -7853,8 +7864,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "connectionpool",
-      "community": 148,
-      "community_name": "screens.py",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "connectionpool"
     },
     {
@@ -7900,8 +7911,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "runtimeerror",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": "runtimeerror"
     },
     {
@@ -8143,8 +8154,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_limiter",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 100,
+      "community_name": "test_platform_admin.py",
       "norm_label": "limiter.py"
     },
     {
@@ -8155,8 +8166,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_limiter_client_key",
-      "community": 197,
-      "community_name": "client_key",
+      "community": 100,
+      "community_name": "test_platform_admin.py",
       "norm_label": "client_key()"
     },
     {
@@ -8166,8 +8177,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_limiter_py_request",
-      "community": 197,
-      "community_name": "client_key",
+      "community": 100,
+      "community_name": "test_platform_admin.py",
       "norm_label": "request"
     },
     {
@@ -8177,8 +8188,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "backend_limiter_rationale_16",
-      "community": 197,
-      "community_name": "client_key",
+      "community": 100,
+      "community_name": "test_platform_admin.py",
       "norm_label": "who to count this request against. slowapi's get_remote_address returns..."
     },
     {
@@ -8189,7 +8200,7 @@
       "_origin": "ast",
       "id": "backend_main",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "main.py"
     },
     {
@@ -8201,7 +8212,7 @@
       "_origin": "ast",
       "id": "backend_main_ensure_schema",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "_ensure_schema()"
     },
     {
@@ -8213,7 +8224,7 @@
       "_origin": "ast",
       "id": "backend_main_run_worker_in_process",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "_run_worker_in_process()"
     },
     {
@@ -8225,7 +8236,7 @@
       "_origin": "ast",
       "id": "backend_main_lifespan",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "lifespan()"
     },
     {
@@ -8235,8 +8246,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "fastapi",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "fastapi"
     },
     {
@@ -8248,7 +8259,7 @@
       "_origin": "ast",
       "id": "backend_main_redact",
       "community": 149,
-      "community_name": "health_check",
+      "community_name": "redacted_validation_error",
       "norm_label": "_redact()"
     },
     {
@@ -8259,7 +8270,7 @@
       "_origin": "ast",
       "id": "exception_handler",
       "community": 149,
-      "community_name": "health_check",
+      "community_name": "redacted_validation_error",
       "norm_label": "exception_handler"
     },
     {
@@ -8271,7 +8282,7 @@
       "_origin": "ast",
       "id": "backend_main_redacted_validation_error",
       "community": 149,
-      "community_name": "health_check",
+      "community_name": "redacted_validation_error",
       "norm_label": "redacted_validation_error()"
     },
     {
@@ -8282,7 +8293,7 @@
       "_origin": "ast",
       "id": "backend_main_py_request",
       "community": 149,
-      "community_name": "health_check",
+      "community_name": "redacted_validation_error",
       "norm_label": "request"
     },
     {
@@ -8293,7 +8304,7 @@
       "_origin": "ast",
       "id": "requestvalidationerror",
       "community": 149,
-      "community_name": "health_check",
+      "community_name": "redacted_validation_error",
       "norm_label": "requestvalidationerror"
     },
     {
@@ -8304,7 +8315,7 @@
       "_origin": "ast",
       "id": "backend_main_py_get",
       "community": 149,
-      "community_name": "health_check",
+      "community_name": "redacted_validation_error",
       "norm_label": "get"
     },
     {
@@ -8315,8 +8326,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_main_health_check",
-      "community": 149,
-      "community_name": "health_check",
+      "community": 49,
+      "community_name": "websockets.py",
       "norm_label": "health_check()"
     },
     {
@@ -8326,8 +8337,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_main_py_session",
-      "community": 149,
-      "community_name": "health_check",
+      "community": 49,
+      "community_name": "websockets.py",
       "norm_label": "session"
     },
     {
@@ -8339,7 +8350,7 @@
       "_origin": "ast",
       "id": "backend_main_login_page",
       "community": 149,
-      "community_name": "health_check",
+      "community_name": "redacted_validation_error",
       "norm_label": "login_page()"
     },
     {
@@ -8351,7 +8362,7 @@
       "_origin": "ast",
       "id": "backend_main_read_root",
       "community": 149,
-      "community_name": "health_check",
+      "community_name": "redacted_validation_error",
       "norm_label": "read_root()"
     },
     {
@@ -8362,7 +8373,7 @@
       "_origin": "ast",
       "id": "backend_main_rationale_27",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "build the schema on a brand-new database, and stamp it so alembic can take..."
     },
     {
@@ -8373,7 +8384,7 @@
       "_origin": "ast",
       "id": "backend_main_rationale_82",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "whether this api process should also run the arq worker. off by default:..."
     },
     {
@@ -8383,8 +8394,8 @@
       "source_location": "L213",
       "_origin": "ast",
       "id": "backend_main_rationale_213",
-      "community": 149,
-      "community_name": "health_check",
+      "community": 49,
+      "community_name": "websockets.py",
       "norm_label": "liveness, plus which database is actually behind it. this used to answer..."
     },
     {
@@ -8738,8 +8749,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_media_storage",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 50,
+      "community_name": "media_storage.py",
       "norm_label": "media_storage.py"
     },
     {
@@ -8750,8 +8761,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_storage_client",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 50,
+      "community_name": "media_storage.py",
       "norm_label": "_client()"
     },
     {
@@ -8763,7 +8774,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_storage_key_for",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "storage_key_for()"
     },
     {
@@ -8775,7 +8786,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_is_remote",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "is_remote()"
     },
     {
@@ -8787,7 +8798,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_fetch_to",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "fetch_to()"
     },
     {
@@ -8798,7 +8809,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_py_path",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "path"
     },
     {
@@ -8809,8 +8820,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_storage_store",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 50,
+      "community_name": "media_storage.py",
       "norm_label": "store()"
     },
     {
@@ -8832,8 +8843,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_media_storage_rationale_1",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 50,
+      "community_name": "media_storage.py",
       "norm_label": "reading and writing media wherever it happens to live. the transcoder needs a..."
     },
     {
@@ -8844,7 +8855,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_rationale_43",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "the backend-relative key inside a stored location. both schemes carry the same..."
     },
     {
@@ -8855,7 +8866,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_rationale_59",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "put the bytes of `stored_url` at `destination` and return it. a local file is..."
     },
     {
@@ -8865,8 +8876,8 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "backend_media_storage_rationale_81",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 50,
+      "community_name": "media_storage.py",
       "norm_label": "persist `local_path` under `key` and return the location to save on the row...."
     },
     {
@@ -8887,8 +8898,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_media_urls",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "media_urls.py"
     },
     {
@@ -8911,8 +8922,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_get_s3_config",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "get_s3_config()"
     },
     {
@@ -8923,8 +8934,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_is_s3_enabled",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "is_s3_enabled()"
     },
     {
@@ -8935,8 +8946,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_detect_lan_host",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "_detect_lan_host()"
     },
     {
@@ -8947,8 +8958,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_media_base_url",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "media_base_url()"
     },
     {
@@ -8959,8 +8970,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_resolve_media_url",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "resolve_media_url()"
     },
     {
@@ -8971,8 +8982,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_delete_stored_file",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "delete_stored_file()"
     },
     {
@@ -8982,8 +8993,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_media_urls_rationale_1",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "turning a stored media location into something a browser or a tv can fetch...."
     },
     {
@@ -9004,8 +9015,8 @@
       "source_location": "L86",
       "_origin": "ast",
       "id": "backend_media_urls_rationale_86",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "best-effort lan address of this machine, so devices on the network can reach..."
     },
     {
@@ -9015,8 +9026,8 @@
       "source_location": "L103",
       "_origin": "ast",
       "id": "backend_media_urls_rationale_103",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "origin that players and browsers should fetch media from."
     },
     {
@@ -9026,8 +9037,8 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "backend_media_urls_rationale_117",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "absolute, fetchable url for a stored media location."
     },
     {
@@ -9037,8 +9048,8 @@
       "source_location": "L147",
       "_origin": "ast",
       "id": "backend_media_urls_rationale_147",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "remove the local file a stored location points at. returns true if it went...."
     },
     {
@@ -9059,7 +9070,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_models",
-      "community": 20,
+      "community": 7,
       "community_name": "models.py",
       "norm_label": "models.py"
     },
@@ -9071,7 +9082,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_models_utcnow",
-      "community": 95,
+      "community": 140,
       "community_name": "utcnow",
       "norm_label": "utcnow()"
     },
@@ -9082,7 +9093,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_models_py_datetime",
-      "community": 95,
+      "community": 140,
       "community_name": "utcnow",
       "norm_label": "datetime"
     },
@@ -9143,8 +9154,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_plan",
-      "community": 21,
-      "community_name": "Organization",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "plan"
     },
     {
@@ -9154,8 +9165,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "base",
-      "community": 21,
-      "community_name": "Organization",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "base"
     },
     {
@@ -9167,7 +9178,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_organization",
-      "community": 21,
+      "community": 177,
       "community_name": "Organization",
       "norm_label": "organization"
     },
@@ -9192,8 +9203,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_systemsetting",
-      "community": 27,
-      "community_name": "admin.py",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "systemsetting"
     },
     {
@@ -9205,8 +9216,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_subscription",
-      "community": 18,
-      "community_name": "routers/billing.py",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "subscription"
     },
     {
@@ -9218,8 +9229,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_webhookevent",
-      "community": 18,
-      "community_name": "routers/billing.py",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "webhookevent"
     },
     {
@@ -9231,8 +9242,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_user",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "user"
     },
     {
@@ -9243,8 +9254,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_models_user_organization_name",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": ".organization_name()"
     },
     {
@@ -9255,8 +9266,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_models_user_organization_status",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": ".organization_status()"
     },
     {
@@ -9268,8 +9279,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_screenshotlog",
-      "community": 21,
-      "community_name": "Organization",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "screenshotlog"
     },
     {
@@ -9282,7 +9293,7 @@
       "_origin": "ast",
       "id": "backend_models_screengroup",
       "community": 132,
-      "community_name": "test_p6_websockets.py",
+      "community_name": "create_access_token",
       "norm_label": "screengroup"
     },
     {
@@ -9295,7 +9306,7 @@
       "_origin": "ast",
       "id": "backend_models_screen",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "screen"
     },
     {
@@ -9307,7 +9318,7 @@
       "_origin": "ast",
       "id": "backend_models_screen_effective_playlist_id",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": ".effective_playlist_id()"
     },
     {
@@ -9320,7 +9331,7 @@
       "_origin": "ast",
       "id": "backend_models_apprelease",
       "community": 95,
-      "community_name": "utcnow",
+      "community_name": "test_release_rollout.py",
       "norm_label": "apprelease"
     },
     {
@@ -9333,7 +9344,7 @@
       "_origin": "ast",
       "id": "backend_models_campaign",
       "community": 7,
-      "community_name": "get_password_hash",
+      "community_name": "models.py",
       "norm_label": "campaign"
     },
     {
@@ -9346,7 +9357,7 @@
       "_origin": "ast",
       "id": "backend_models_content",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "content"
     },
     {
@@ -9358,7 +9369,7 @@
       "_origin": "ast",
       "id": "backend_models_content_expires_at",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": ".expires_at()"
     },
     {
@@ -9370,8 +9381,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_mediarendition",
-      "community": 21,
-      "community_name": "Organization",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "mediarendition"
     },
     {
@@ -9384,7 +9395,7 @@
       "_origin": "ast",
       "id": "backend_models_playlist",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "playlist"
     },
     {
@@ -9397,7 +9408,7 @@
       "_origin": "ast",
       "id": "backend_models_playlistitem",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "playlistitem"
     },
     {
@@ -9409,8 +9420,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_emergencybroadcast",
-      "community": 21,
-      "community_name": "Organization",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "emergencybroadcast"
     },
     {
@@ -9422,8 +9433,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_schedule",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "schedule"
     },
     {
@@ -9435,8 +9446,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_enrollmenttoken",
-      "community": 192,
-      "community_name": "timedelta",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "enrollmenttoken"
     },
     {
@@ -9461,8 +9472,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_adplacementtarget",
-      "community": 24,
-      "community_name": "TenantScope",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "adplacementtarget"
     },
     {
@@ -9475,7 +9486,7 @@
       "_origin": "ast",
       "id": "backend_models_playlog",
       "community": 7,
-      "community_name": "get_password_hash",
+      "community_name": "models.py",
       "norm_label": "playlog"
     },
     {
@@ -9487,8 +9498,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_alert",
-      "community": 194,
-      "community_name": "reconcile_alerts",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "alert"
     },
     {
@@ -9500,7 +9511,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_playloghourlyrollup",
-      "community": 20,
+      "community": 7,
       "community_name": "models.py",
       "norm_label": "playloghourlyrollup"
     },
@@ -9511,7 +9522,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "backend_models_rationale_12",
-      "community": 95,
+      "community": 140,
       "community_name": "utcnow",
       "norm_label": "return a timezone-aware utc timestamp."
     },
@@ -9544,8 +9555,8 @@
       "source_location": "L171",
       "_origin": "ast",
       "id": "backend_models_rationale_171",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "exposed so userresponse can show the tenant by name instead of a bare id."
     },
     {
@@ -9566,8 +9577,8 @@
       "source_location": "L586",
       "_origin": "ast",
       "id": "backend_models_rationale_586",
-      "community": 24,
-      "community_name": "TenantScope",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "one place a booked advert runs, and the playlist item it put there. exactly one..."
     },
     {
@@ -9577,8 +9588,8 @@
       "source_location": "L654",
       "_origin": "ast",
       "id": "backend_models_rationale_654",
-      "community": 194,
-      "community_name": "reconcile_alerts",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "something wrong with the fleet, recorded so it can be delivered and reviewed...."
     },
     {
@@ -9588,8 +9599,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_payments_init",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": "payments/__init__.py"
     },
     {
@@ -9599,8 +9610,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_payments_provider",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": "provider.py"
     },
     {
@@ -9612,8 +9623,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_payments_provider_checkoutsession",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": "checkoutsession"
     },
     {
@@ -9625,8 +9636,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_payments_provider_paymentprovider",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": "paymentprovider"
     },
     {
@@ -9636,8 +9647,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "protocol",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": "protocol"
     },
     {
@@ -9648,8 +9659,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_payments_provider_paymentprovider_create_subscription",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": ".create_subscription()"
     },
     {
@@ -9661,8 +9672,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_payments_provider_razorpayprovider",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": "razorpayprovider"
     },
     {
@@ -9673,8 +9684,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_payments_provider_razorpayprovider_init",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": ".__init__()"
     },
     {
@@ -9685,8 +9696,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_payments_provider_razorpayprovider_create_subscription",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": ".create_subscription()"
     },
     {
@@ -9698,8 +9709,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_payments_provider_mockpaymentprovider",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": "mockpaymentprovider"
     },
     {
@@ -9710,8 +9721,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_payments_provider_mockpaymentprovider_create_subscription",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": ".create_subscription()"
     },
     {
@@ -9722,8 +9733,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_payments_provider_get_payment_provider",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": "get_payment_provider()"
     },
     {
@@ -9836,8 +9847,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_rollout",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 144,
+      "community_name": "test_rollout_policy.py",
       "norm_label": "rollout.py"
     },
     {
@@ -9848,8 +9859,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_rollout_eligible_for_fallback",
-      "community": 148,
-      "community_name": "screens.py",
+      "community": 144,
+      "community_name": "test_rollout_policy.py",
       "norm_label": "eligible_for_fallback()"
     },
     {
@@ -9872,8 +9883,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_rollout_repin",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 144,
+      "community_name": "test_rollout_policy.py",
       "norm_label": "repin()"
     },
     {
@@ -9883,8 +9894,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_rollout_rationale_1",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 144,
+      "community_name": "test_rollout_policy.py",
       "norm_label": "staged player rollout: which build a screen is offered, and when to give up on..."
     },
     {
@@ -9894,8 +9905,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "backend_rollout_rationale_45",
-      "community": 148,
-      "community_name": "screens.py",
+      "community": 144,
+      "community_name": "test_rollout_policy.py",
       "norm_label": "restrict an apprelease query to builds that unpinned screens may be offered."
     },
     {
@@ -9916,8 +9927,8 @@
       "source_location": "L105",
       "_origin": "ast",
       "id": "backend_rollout_rationale_105",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 144,
+      "community_name": "test_rollout_policy.py",
       "norm_label": "point a screen at a build, clearing any state from the previous attempt...."
     },
     {
@@ -9995,8 +10006,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_routers_init",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "routers/__init__.py"
     },
     {
@@ -10443,8 +10454,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_admin_delete_plan",
-      "community": 24,
-      "community_name": "TenantScope",
+      "community": 27,
+      "community_name": "admin.py",
       "norm_label": "delete_plan()"
     },
     {
@@ -10491,8 +10502,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_admin_upload_universal_demo_video",
-      "community": 51,
-      "community_name": "_post",
+      "community": 27,
+      "community_name": "admin.py",
       "norm_label": "upload_universal_demo_video()"
     },
     {
@@ -10502,8 +10513,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_admin_py_uploadfile",
-      "community": 51,
-      "community_name": "_post",
+      "community": 27,
+      "community_name": "admin.py",
       "norm_label": "uploadfile"
     },
     {
@@ -10637,8 +10648,8 @@
       "source_location": "L515",
       "_origin": "ast",
       "id": "backend_routers_admin_rationale_515",
-      "community": 24,
-      "community_name": "TenantScope",
+      "community": 27,
+      "community_name": "admin.py",
       "norm_label": "retire a package. deactivated, never deleted, when tenants are on it:..."
     },
     {
@@ -10670,8 +10681,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_routers_alerts",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "alerts.py"
     },
     {
@@ -10901,7 +10912,7 @@
       "_origin": "ast",
       "id": "backend_routers_auth",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "auth.py"
     },
     {
@@ -10936,8 +10947,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_auth_get_password_hash",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "get_password_hash()"
     },
     {
@@ -10948,7 +10959,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_auth_create_access_token",
-      "community": 176,
+      "community": 132,
       "community_name": "create_access_token",
       "norm_label": "create_access_token()"
     },
@@ -10959,8 +10970,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "timedelta",
-      "community": 192,
-      "community_name": "timedelta",
+      "community": 36,
+      "community_name": "test_alerting.py",
       "norm_label": "timedelta"
     },
     {
@@ -10970,8 +10981,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_auth_py_limit",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "limit"
     },
     {
@@ -10982,8 +10993,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_auth_login_for_access_token",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "login_for_access_token()"
     },
     {
@@ -10993,8 +11004,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_auth_py_request",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "request"
     },
     {
@@ -11004,8 +11015,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "oauth2passwordrequestform",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "oauth2passwordrequestform"
     },
     {
@@ -11015,8 +11026,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_auth_py_session",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "session"
     },
     {
@@ -11027,8 +11038,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_auth_get_current_user",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "get_current_user()"
     },
     {
@@ -11038,8 +11049,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_auth_py_user",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "user"
     },
     {
@@ -11050,8 +11061,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_auth_get_current_user_ws",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "get_current_user_ws()"
     },
     {
@@ -11063,7 +11074,7 @@
       "_origin": "ast",
       "id": "backend_routers_auth_require_roles",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "require_roles()"
     },
     {
@@ -11073,8 +11084,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_auth_py_get",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "get"
     },
     {
@@ -11085,8 +11096,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_auth_auth_methods",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "auth_methods()"
     },
     {
@@ -11109,8 +11120,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_auth_sign_in_with_google",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "sign_in_with_google()"
     },
     {
@@ -11121,8 +11132,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_auth_read_current_user",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "read_current_user()"
     },
     {
@@ -11132,8 +11143,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_auth_py_patch",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "patch"
     },
     {
@@ -11144,8 +11155,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_auth_update_current_user",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "update_current_user()"
     },
     {
@@ -11156,8 +11167,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_auth_change_own_password",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "change_own_password()"
     },
     {
@@ -11169,7 +11180,7 @@
       "_origin": "ast",
       "id": "backend_routers_auth_get_or_create_default_organization",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "get_or_create_default_organization()"
     },
     {
@@ -11181,7 +11192,7 @@
       "_origin": "ast",
       "id": "backend_routers_auth_ensure_initial_owner",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "ensure_initial_owner()"
     },
     {
@@ -11191,8 +11202,8 @@
       "source_location": "L140",
       "_origin": "ast",
       "id": "backend_routers_auth_rationale_140",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "which sign-in buttons the dashboard should draw. the tv has its own copy of..."
     },
     {
@@ -11213,8 +11224,8 @@
       "source_location": "L170",
       "_origin": "ast",
       "id": "backend_routers_auth_rationale_170",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "sign in to the dashboard with a google account, or sign up for a new workspace...."
     },
     {
@@ -11224,8 +11235,8 @@
       "source_location": "L287",
       "_origin": "ast",
       "id": "backend_routers_auth_rationale_287",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "self-service profile edit, for the account menu. separate from put..."
     },
     {
@@ -11235,8 +11246,8 @@
       "source_location": "L326",
       "_origin": "ast",
       "id": "backend_routers_auth_rationale_326",
-      "community": 130,
-      "community_name": "sign_in_with_google",
+      "community": 29,
+      "community_name": "google_device.py",
       "norm_label": "change your own password. requires the current password. put /api/users/{id}..."
     },
     {
@@ -11247,7 +11258,7 @@
       "_origin": "ast",
       "id": "backend_routers_auth_rationale_354",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "create the first real owner only when explicit bootstrap credentials are..."
     },
     {
@@ -11258,7 +11269,7 @@
       "_origin": "ast",
       "id": "backend_routers_billing",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "routers/billing.py"
     },
     {
@@ -11270,7 +11281,7 @@
       "_origin": "ast",
       "id": "backend_routers_billing_serialize_plan",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "serialize_plan()"
     },
     {
@@ -11281,7 +11292,7 @@
       "_origin": "ast",
       "id": "backend_routers_billing_py_plan",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "plan"
     },
     {
@@ -11293,7 +11304,7 @@
       "_origin": "ast",
       "id": "backend_routers_billing_serialize_subscription",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "serialize_subscription()"
     },
     {
@@ -11304,7 +11315,7 @@
       "_origin": "ast",
       "id": "subscription",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "subscription"
     },
     {
@@ -11315,7 +11326,7 @@
       "_origin": "ast",
       "id": "backend_routers_billing_py_get",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "get"
     },
     {
@@ -11327,7 +11338,7 @@
       "_origin": "ast",
       "id": "backend_routers_billing_list_plans",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "list_plans()"
     },
     {
@@ -11339,7 +11350,7 @@
       "_origin": "ast",
       "id": "backend_routers_billing_billing_summary",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "billing_summary()"
     },
     {
@@ -11350,8 +11361,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_billing_create_checkout",
-      "community": 18,
-      "community_name": "routers/billing.py",
+      "community": 1,
+      "community_name": "schemas.py",
       "norm_label": "create_checkout()"
     },
     {
@@ -11363,7 +11374,7 @@
       "_origin": "ast",
       "id": "backend_routers_billing_razorpay_webhook",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "razorpay_webhook()"
     },
     {
@@ -11374,7 +11385,7 @@
       "_origin": "ast",
       "id": "backend_routers_billing_py_request",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "request"
     },
     {
@@ -11386,7 +11397,7 @@
       "_origin": "ast",
       "id": "backend_routers_billing_timestamp_to_datetime",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "timestamp_to_datetime()"
     },
     {
@@ -11397,7 +11408,7 @@
       "_origin": "ast",
       "id": "backend_routers_billing_py_datetime",
       "community": 18,
-      "community_name": "routers/billing.py",
+      "community_name": "tenancy.py",
       "norm_label": "datetime"
     },
     {
@@ -11604,8 +11615,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_routers_emergency",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "emergency.py"
     },
     {
@@ -11697,8 +11708,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_routers_enrollment_tokens",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "enrollment_tokens.py"
     },
     {
@@ -11709,8 +11720,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_enrollment_tokens_token_to_dict",
-      "community": 51,
-      "community_name": "_post",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "_token_to_dict()"
     },
     {
@@ -11720,8 +11731,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "enrollmenttoken",
-      "community": 51,
-      "community_name": "_post",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "enrollmenttoken"
     },
     {
@@ -11731,8 +11742,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_enrollment_tokens_py_get",
-      "community": 51,
-      "community_name": "_post",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "get"
     },
     {
@@ -11743,8 +11754,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_enrollment_tokens_list_tokens",
-      "community": 51,
-      "community_name": "_post",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "list_tokens()"
     },
     {
@@ -11755,8 +11766,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_enrollment_tokens_create_token",
-      "community": 51,
-      "community_name": "_post",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "create_token()"
     },
     {
@@ -11767,8 +11778,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_enrollment_tokens_revoke_token",
-      "community": 148,
-      "community_name": "screens.py",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "revoke_token()"
     },
     {
@@ -11778,8 +11789,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_routers_groups",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "groups.py"
     },
     {
@@ -12474,8 +12485,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_routers_provisioning",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "provisioning.py"
     },
     {
@@ -12487,8 +12498,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_routers_provisioning_provisioningrequest",
-      "community": 51,
-      "community_name": "_post",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "provisioningrequest"
     },
     {
@@ -12498,8 +12509,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_provisioning_py_basemodel",
-      "community": 51,
-      "community_name": "_post",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "basemodel"
     },
     {
@@ -12510,8 +12521,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_provisioning_generate_provisioning_qr",
-      "community": 51,
-      "community_name": "_post",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "generate_provisioning_qr()"
     },
     {
@@ -12521,8 +12532,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_routers_releases",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "releases.py"
     },
     {
@@ -12532,8 +12543,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_releases_py_get",
-      "community": 24,
-      "community_name": "TenantScope",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "get"
     },
     {
@@ -12544,8 +12555,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_releases_list_releases",
-      "community": 24,
-      "community_name": "TenantScope",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "list_releases()"
     },
     {
@@ -12567,8 +12578,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_releases_py_patch",
-      "community": 24,
-      "community_name": "TenantScope",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "patch"
     },
     {
@@ -12579,8 +12590,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_releases_promote_release",
-      "community": 24,
-      "community_name": "TenantScope",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "promote_release()"
     },
     {
@@ -12590,8 +12601,8 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "backend_routers_releases_rationale_73",
-      "community": 24,
-      "community_name": "TenantScope",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "move a build along the rollout ring: draft -> canary -> released. promoting to..."
     },
     {
@@ -12813,8 +12824,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_screens_legacy_device_auth_allowed",
-      "community": 148,
-      "community_name": "screens.py",
+      "community": 49,
+      "community_name": "websockets.py",
       "norm_label": "legacy_device_auth_allowed()"
     },
     {
@@ -13010,8 +13021,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_screens_google_device_start",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 148,
+      "community_name": "screens.py",
       "norm_label": "google_device_start()"
     },
     {
@@ -13292,8 +13303,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_screens_clear_direct_assignment",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 148,
+      "community_name": "screens.py",
       "norm_label": "clear_direct_assignment()"
     },
     {
@@ -13430,8 +13441,8 @@
       "source_location": "L214",
       "_origin": "ast",
       "id": "backend_routers_screens_rationale_214",
-      "community": 148,
-      "community_name": "screens.py",
+      "community": 49,
+      "community_name": "websockets.py",
       "norm_label": "whether a screen holding no device secret may still call the device endpoints...."
     },
     {
@@ -13507,8 +13518,8 @@
       "source_location": "L773",
       "_origin": "ast",
       "id": "backend_routers_screens_rationale_773",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 148,
+      "community_name": "screens.py",
       "norm_label": "begin a google sign-in for this tv and hand back the code to put on screen."
     },
     {
@@ -13628,8 +13639,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_routers_screenshots",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "screenshots.py"
     },
     {
@@ -13640,8 +13651,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_screenshots_request_screenshot",
-      "community": 148,
-      "community_name": "screens.py",
+      "community": 51,
+      "community_name": "_post",
       "norm_label": "request_screenshot()"
     },
     {
@@ -13652,8 +13663,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_screenshots_upload_device_screenshot",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "upload_device_screenshot()"
     },
     {
@@ -13663,8 +13674,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_screenshots_py_uploadfile",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "uploadfile"
     },
     {
@@ -13674,8 +13685,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_screenshots_py_session",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "session"
     },
     {
@@ -13685,8 +13696,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_screenshots_py_httpauthorizationcredentials",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 21,
+      "community_name": "resolve_media_url",
       "norm_label": "httpauthorizationcredentials"
     },
     {
@@ -13696,8 +13707,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_screenshots_py_get",
-      "community": 148,
-      "community_name": "screens.py",
+      "community": 51,
+      "community_name": "_post",
       "norm_label": "get"
     },
     {
@@ -13708,8 +13719,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_screenshots_list_screenshots",
-      "community": 180,
-      "community_name": "content.py",
+      "community": 51,
+      "community_name": "_post",
       "norm_label": "list_screenshots()"
     },
     {
@@ -13719,8 +13730,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_routers_users",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 175,
+      "community_name": "users.py",
       "norm_label": "users.py"
     },
     {
@@ -13732,7 +13743,7 @@
       "_origin": "ast",
       "id": "backend_routers_users_deny_platform_account",
       "community": 175,
-      "community_name": "update_user",
+      "community_name": "users.py",
       "norm_label": "deny_platform_account()"
     },
     {
@@ -13743,7 +13754,7 @@
       "_origin": "ast",
       "id": "backend_routers_users_py_user",
       "community": 175,
-      "community_name": "update_user",
+      "community_name": "users.py",
       "norm_label": "user"
     },
     {
@@ -13755,7 +13766,7 @@
       "_origin": "ast",
       "id": "backend_routers_users_active_owner_count",
       "community": 175,
-      "community_name": "update_user",
+      "community_name": "users.py",
       "norm_label": "active_owner_count()"
     },
     {
@@ -13766,7 +13777,7 @@
       "_origin": "ast",
       "id": "backend_routers_users_py_get",
       "community": 175,
-      "community_name": "update_user",
+      "community_name": "users.py",
       "norm_label": "get"
     },
     {
@@ -13778,7 +13789,7 @@
       "_origin": "ast",
       "id": "backend_routers_users_list_users",
       "community": 175,
-      "community_name": "update_user",
+      "community_name": "users.py",
       "norm_label": "list_users()"
     },
     {
@@ -13790,7 +13801,7 @@
       "_origin": "ast",
       "id": "backend_routers_users_create_user",
       "community": 175,
-      "community_name": "update_user",
+      "community_name": "users.py",
       "norm_label": "create_user()"
     },
     {
@@ -13801,7 +13812,7 @@
       "_origin": "ast",
       "id": "backend_routers_users_py_put",
       "community": 175,
-      "community_name": "update_user",
+      "community_name": "users.py",
       "norm_label": "put"
     },
     {
@@ -13813,7 +13824,7 @@
       "_origin": "ast",
       "id": "backend_routers_users_update_user",
       "community": 175,
-      "community_name": "update_user",
+      "community_name": "users.py",
       "norm_label": "update_user()"
     },
     {
@@ -13825,7 +13836,7 @@
       "_origin": "ast",
       "id": "backend_routers_users_delete_user",
       "community": 175,
-      "community_name": "update_user",
+      "community_name": "users.py",
       "norm_label": "delete_user()"
     },
     {
@@ -13836,7 +13847,7 @@
       "_origin": "ast",
       "id": "backend_routers_users_rationale_25",
       "community": 175,
-      "community_name": "update_user",
+      "community_name": "users.py",
       "norm_label": "how many active owners the given organisation has. counted against an explicit..."
     },
     {
@@ -13846,8 +13857,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_routers_websockets",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 49,
+      "community_name": "websockets.py",
       "norm_label": "websockets.py"
     },
     {
@@ -13858,8 +13869,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_websockets_verify_device_token",
-      "community": 195,
-      "community_name": "verify_device_token",
+      "community": 49,
+      "community_name": "websockets.py",
       "norm_label": "verify_device_token()"
     },
     {
@@ -13869,8 +13880,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_websockets_py_session",
-      "community": 195,
-      "community_name": "verify_device_token",
+      "community": 49,
+      "community_name": "websockets.py",
       "norm_label": "session"
     },
     {
@@ -13880,8 +13891,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_websockets_py_screen",
-      "community": 195,
-      "community_name": "verify_device_token",
+      "community": 49,
+      "community_name": "websockets.py",
       "norm_label": "screen"
     },
     {
@@ -13893,7 +13904,7 @@
       "_origin": "ast",
       "id": "backend_routers_websockets_register_ws",
       "community": 49,
-      "community_name": "dashboard_websocket",
+      "community_name": "websockets.py",
       "norm_label": "register_ws()"
     },
     {
@@ -13904,7 +13915,7 @@
       "_origin": "ast",
       "id": "backend_routers_websockets_py_websocket",
       "community": 49,
-      "community_name": "dashboard_websocket",
+      "community_name": "websockets.py",
       "norm_label": "websocket"
     },
     {
@@ -13916,7 +13927,7 @@
       "_origin": "ast",
       "id": "backend_routers_websockets_unregister_ws",
       "community": 49,
-      "community_name": "dashboard_websocket",
+      "community_name": "websockets.py",
       "norm_label": "unregister_ws()"
     },
     {
@@ -13939,8 +13950,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_websockets_broadcast_ws_event",
-      "community": 148,
-      "community_name": "screens.py",
+      "community": 49,
+      "community_name": "websockets.py",
       "norm_label": "broadcast_ws_event()"
     },
     {
@@ -13950,8 +13961,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "any",
-      "community": 148,
-      "community_name": "screens.py",
+      "community": 49,
+      "community_name": "websockets.py",
       "norm_label": "any"
     },
     {
@@ -13975,7 +13986,7 @@
       "_origin": "ast",
       "id": "backend_routers_websockets_dashboard_websocket",
       "community": 49,
-      "community_name": "dashboard_websocket",
+      "community_name": "websockets.py",
       "norm_label": "dashboard_websocket()"
     },
     {
@@ -13987,7 +13998,7 @@
       "_origin": "ast",
       "id": "backend_routers_websockets_screen_websocket",
       "community": 49,
-      "community_name": "dashboard_websocket",
+      "community_name": "websockets.py",
       "norm_label": "screen_websocket()"
     },
     {
@@ -13997,8 +14008,8 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "backend_routers_websockets_rationale_19",
-      "community": 195,
-      "community_name": "verify_device_token",
+      "community": 49,
+      "community_name": "websockets.py",
       "norm_label": "identity check for a screen's push socket. kept deliberately identical to..."
     },
     {
@@ -14008,8 +14019,8 @@
       "source_location": "L97",
       "_origin": "ast",
       "id": "backend_routers_websockets_rationale_97",
-      "community": 148,
-      "community_name": "screens.py",
+      "community": 49,
+      "community_name": "websockets.py",
       "norm_label": "broadcast an event to both in-memory sockets and redis pubsub."
     },
     {
@@ -14031,7 +14042,7 @@
       "_origin": "ast",
       "id": "backend_routers_websockets_rationale_147",
       "community": 49,
-      "community_name": "dashboard_websocket",
+      "community_name": "websockets.py",
       "norm_label": "live fleet events for one dashboard user."
     },
     {
@@ -14042,7 +14053,7 @@
       "_origin": "ast",
       "id": "backend_routers_websockets_rationale_206",
       "community": 49,
-      "community_name": "dashboard_websocket",
+      "community_name": "websockets.py",
       "norm_label": "push channel for one screen. held open for the life of the device."
     },
     {
@@ -14239,8 +14250,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_schemas_screensigninrequest",
-      "community": 1,
-      "community_name": "schemas.py",
+      "community": 197,
+      "community_name": "ScreenSignInRequest",
       "norm_label": "screensigninrequest"
     },
     {
@@ -14304,8 +14315,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_schemas_googledevicepollresponse",
-      "community": 1,
-      "community_name": "schemas.py",
+      "community": 195,
+      "community_name": "GoogleDevicePollResponse",
       "norm_label": "googledevicepollresponse"
     },
     {
@@ -14734,8 +14745,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_schemas_registerresponse",
-      "community": 204,
-      "community_name": "RegisterResponse",
+      "community": 1,
+      "community_name": "schemas.py",
       "norm_label": "registerresponse"
     },
     {
@@ -14812,8 +14823,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_schemas_heartbeatrequest",
-      "community": 201,
-      "community_name": "HeartbeatRequest",
+      "community": 12,
+      "community_name": "ValueError",
       "norm_label": "heartbeatrequest"
     },
     {
@@ -14824,8 +14835,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_schemas_heartbeatrequest_clean_last_error",
-      "community": 201,
-      "community_name": "HeartbeatRequest",
+      "community": 12,
+      "community_name": "ValueError",
       "norm_label": ".clean_last_error()"
     },
     {
@@ -14991,8 +15002,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_schemas_enrollmenttokencreate",
-      "community": 51,
-      "community_name": "_post",
+      "community": 1,
+      "community_name": "schemas.py",
       "norm_label": "enrollmenttokencreate"
     },
     {
@@ -15106,8 +15117,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_schemas_placementsplit",
-      "community": 1,
-      "community_name": "schemas.py",
+      "community": 196,
+      "community_name": "PlacementSplit",
       "norm_label": "placementsplit"
     },
     {
@@ -15184,8 +15195,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_schemas_alertsummaryresponse",
-      "community": 1,
-      "community_name": "schemas.py",
+      "community": 194,
+      "community_name": "AlertSummaryResponse",
       "norm_label": "alertsummaryresponse"
     },
     {
@@ -15206,8 +15217,8 @@
       "source_location": "L134",
       "_origin": "ast",
       "id": "backend_schemas_rationale_134",
-      "community": 1,
-      "community_name": "schemas.py",
+      "community": 197,
+      "community_name": "ScreenSignInRequest",
       "norm_label": "credentials typed on the tv itself, so a screen can join without a pairing code."
     },
     {
@@ -15250,8 +15261,8 @@
       "source_location": "L184",
       "_origin": "ast",
       "id": "backend_schemas_rationale_184",
-      "community": 1,
-      "community_name": "schemas.py",
+      "community": 195,
+      "community_name": "GoogleDevicePollResponse",
       "norm_label": "where the approval has got to. `slow_down` is passed through rather than..."
     },
     {
@@ -15294,8 +15305,8 @@
       "source_location": "L545",
       "_origin": "ast",
       "id": "backend_schemas_rationale_545",
-      "community": 204,
-      "community_name": "RegisterResponse",
+      "community": 1,
+      "community_name": "schemas.py",
       "norm_label": "deliberately narrow: /screens/register is unauthenticated, so it must not reuse..."
     },
     {
@@ -15327,8 +15338,8 @@
       "source_location": "L840",
       "_origin": "ast",
       "id": "backend_schemas_rationale_840",
-      "community": 1,
-      "community_name": "schemas.py",
+      "community": 196,
+      "community_name": "PlacementSplit",
       "norm_label": "screens to drop when converting a group booking into per-screen bookings."
     },
     {
@@ -15349,8 +15360,8 @@
       "source_location": "L899",
       "_origin": "ast",
       "id": "backend_schemas_rationale_899",
-      "community": 1,
-      "community_name": "schemas.py",
+      "community": 194,
+      "community_name": "AlertSummaryResponse",
       "norm_label": "counts for the header badge, so it does not have to fetch every alert."
     },
     {
@@ -15361,7 +15372,7 @@
       "_origin": "ast",
       "id": "backend_seed_admin",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "seed_admin.py"
     },
     {
@@ -15372,8 +15383,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_seed_admin_main",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "main()"
     },
     {
@@ -15383,8 +15394,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_tenancy",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "tenancy.py"
     },
     {
@@ -15395,8 +15406,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_tenancy_is_super_admin",
-      "community": 166,
-      "community_name": "get_tenant_scope",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "is_super_admin()"
     },
     {
@@ -15406,8 +15417,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tenancy_py_user",
-      "community": 166,
-      "community_name": "get_tenant_scope",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "user"
     },
     {
@@ -15501,8 +15512,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_tenancy_get_tenant_scope",
-      "community": 166,
-      "community_name": "get_tenant_scope",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "get_tenant_scope()"
     },
     {
@@ -15512,8 +15523,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tenancy_py_session",
-      "community": 166,
-      "community_name": "get_tenant_scope",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "session"
     },
     {
@@ -15524,8 +15535,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_tenancy_require_super_admin",
-      "community": 166,
-      "community_name": "get_tenant_scope",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "require_super_admin()"
     },
     {
@@ -15536,8 +15547,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_tenancy_require_tenant_roles",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "require_tenant_roles()"
     },
     {
@@ -15547,8 +15558,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "backend_tenancy_rationale_15",
-      "community": 166,
-      "community_name": "get_tenant_scope",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "the single source of truth for platform-operator status. this used to be `role..."
     },
     {
@@ -15569,8 +15580,8 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "backend_tenancy_rationale_129",
-      "community": 166,
-      "community_name": "get_tenant_scope",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "platform-operator routes only. every caller of this used to accept `role in..."
     },
     {
@@ -15580,8 +15591,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_worker",
-      "community": 140,
-      "community_name": "worker.py",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "worker.py"
     },
     {
@@ -15592,8 +15603,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_worker_run_command_sync",
-      "community": 140,
-      "community_name": "worker.py",
+      "community": 76,
+      "community_name": "process_media_sync",
       "norm_label": "run_command_sync()"
     },
     {
@@ -15604,8 +15615,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_worker_probe_file",
-      "community": 140,
-      "community_name": "worker.py",
+      "community": 76,
+      "community_name": "process_media_sync",
       "norm_label": "probe_file()"
     },
     {
@@ -15616,8 +15627,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_worker_compute_sha256",
-      "community": 140,
-      "community_name": "worker.py",
+      "community": 76,
+      "community_name": "process_media_sync",
       "norm_label": "compute_sha256()"
     },
     {
@@ -15628,8 +15639,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_worker_process_media_sync",
-      "community": 140,
-      "community_name": "worker.py",
+      "community": 76,
+      "community_name": "process_media_sync",
       "norm_label": "process_media_sync()"
     },
     {
@@ -15640,8 +15651,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_worker_process_media",
-      "community": 140,
-      "community_name": "worker.py",
+      "community": 76,
+      "community_name": "process_media_sync",
       "norm_label": "process_media()"
     },
     {
@@ -15652,8 +15663,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_worker_recover_stuck_processing",
-      "community": 192,
-      "community_name": "timedelta",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "recover_stuck_processing()"
     },
     {
@@ -15664,8 +15675,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_worker_reconcile_alerts",
-      "community": 194,
-      "community_name": "reconcile_alerts",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "reconcile_alerts()"
     },
     {
@@ -15676,8 +15687,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_worker_publish_alert",
-      "community": 140,
-      "community_name": "worker.py",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "_publish_alert()"
     },
     {
@@ -15688,8 +15699,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_worker_aggregate_play_logs_sync",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 156,
+      "community_name": "analytics.py",
       "norm_label": "aggregate_play_logs_sync()"
     },
     {
@@ -15700,7 +15711,7 @@
       "_origin": "ast",
       "id": "sessionlocal",
       "community": 176,
-      "community_name": "create_access_token",
+      "community_name": "SessionLocal",
       "norm_label": "sessionlocal"
     },
     {
@@ -15712,7 +15723,7 @@
       "_origin": "ast",
       "id": "backend_worker_aggregate_play_logs",
       "community": 7,
-      "community_name": "get_password_hash",
+      "community_name": "models.py",
       "norm_label": "aggregate_play_logs()"
     },
     {
@@ -15723,8 +15734,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_worker_prune_play_logs",
-      "community": 140,
-      "community_name": "worker.py",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "prune_play_logs()"
     },
     {
@@ -15735,8 +15746,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_worker_prune_play_log_rollups",
-      "community": 140,
-      "community_name": "worker.py",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "prune_play_log_rollups()"
     },
     {
@@ -15747,8 +15758,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_worker_prune_screenshots",
-      "community": 140,
-      "community_name": "worker.py",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "prune_screenshots()"
     },
     {
@@ -15760,8 +15771,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_worker_workersettings",
-      "community": 21,
-      "community_name": "Organization",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "workersettings"
     },
     {
@@ -15771,8 +15782,8 @@
       "source_location": "L323",
       "_origin": "ast",
       "id": "backend_worker_rationale_323",
-      "community": 194,
-      "community_name": "reconcile_alerts",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "notice what is wrong with the fleet, and what has stopped being wrong. runs..."
     },
     {
@@ -15782,8 +15793,8 @@
       "source_location": "L404",
       "_origin": "ast",
       "id": "backend_worker_rationale_404",
-      "community": 140,
-      "community_name": "worker.py",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "tell any connected dashboard, best effort. wrapped: redis being unavailable..."
     },
     {
@@ -15793,8 +15804,8 @@
       "source_location": "L430",
       "_origin": "ast",
       "id": "backend_worker_rationale_430",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 156,
+      "community_name": "analytics.py",
       "norm_label": "atomic aggregation of unaggregated play_logs into play_log_hourly_rollups."
     },
     {
@@ -15804,8 +15815,8 @@
       "source_location": "L543",
       "_origin": "ast",
       "id": "backend_worker_rationale_543",
-      "community": 140,
-      "community_name": "worker.py",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "age out the hourly rollups. nothing deleted from this table -- no cron, no..."
     },
     {
@@ -15815,8 +15826,8 @@
       "source_location": "L589",
       "_origin": "ast",
       "id": "backend_worker_rationale_589",
-      "community": 140,
-      "community_name": "worker.py",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "keep only the newest captures per screen, and delete their files too. nothing..."
     },
     {
@@ -21536,7 +21547,7 @@
       "_origin": "ast",
       "id": "reset_fresh_start",
       "community": 176,
-      "community_name": "create_access_token",
+      "community_name": "SessionLocal",
       "norm_label": "reset_fresh_start.py"
     },
     {
@@ -21548,7 +21559,7 @@
       "_origin": "ast",
       "id": "reset_fresh_start_fresh_start",
       "community": 176,
-      "community_name": "create_access_token",
+      "community_name": "SessionLocal",
       "norm_label": "fresh_start()"
     },
     {
@@ -21701,8 +21712,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "scripts_cleanup_orphans",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 131,
+      "community_name": "cleanup_orphans.py",
       "norm_label": "cleanup_orphans.py"
     },
     {
@@ -21714,7 +21725,7 @@
       "_origin": "ast",
       "id": "scripts_cleanup_orphans_referenced_paths",
       "community": 131,
-      "community_name": "find_orphans",
+      "community_name": "cleanup_orphans.py",
       "norm_label": "referenced_paths()"
     },
     {
@@ -21726,7 +21737,7 @@
       "_origin": "ast",
       "id": "scripts_cleanup_orphans_find_orphans",
       "community": 131,
-      "community_name": "find_orphans",
+      "community_name": "cleanup_orphans.py",
       "norm_label": "find_orphans()"
     },
     {
@@ -21737,7 +21748,7 @@
       "_origin": "ast",
       "id": "scripts_cleanup_orphans_py_path",
       "community": 131,
-      "community_name": "find_orphans",
+      "community_name": "cleanup_orphans.py",
       "norm_label": "path"
     },
     {
@@ -21749,7 +21760,7 @@
       "_origin": "ast",
       "id": "scripts_cleanup_orphans_main",
       "community": 131,
-      "community_name": "find_orphans",
+      "community_name": "cleanup_orphans.py",
       "norm_label": "main()"
     },
     {
@@ -21759,8 +21770,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "scripts_cleanup_orphans_rationale_1",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 131,
+      "community_name": "cleanup_orphans.py",
       "norm_label": "find upload files that no database row points at. reports by default and..."
     },
     {
@@ -21771,7 +21782,7 @@
       "_origin": "ast",
       "id": "scripts_cleanup_orphans_rationale_26",
       "community": 131,
-      "community_name": "find_orphans",
+      "community_name": "cleanup_orphans.py",
       "norm_label": "every upload path any row still points at, relative to the uploads root."
     },
     {
@@ -21805,7 +21816,7 @@
       "_origin": "ast",
       "id": "scripts_migrate_org_approvals",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "migrate_org_approvals.py"
     },
     {
@@ -21817,7 +21828,7 @@
       "_origin": "ast",
       "id": "scripts_migrate_org_approvals_main",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "main()"
     },
     {
@@ -21921,7 +21932,7 @@
       "_origin": "ast",
       "id": "scripts_seed_demo_playlist_new_db",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "seed_demo_playlist_new_db.py"
     },
     {
@@ -21933,7 +21944,7 @@
       "_origin": "ast",
       "id": "scripts_seed_demo_playlist_new_db_main",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "main()"
     },
     {
@@ -21943,8 +21954,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "scripts_seed_new_supabase",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "seed_new_supabase.py"
     },
     {
@@ -21955,8 +21966,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "scripts_seed_new_supabase_main",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "main()"
     },
     {
@@ -21966,7 +21977,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "scripts_set_org_name",
-      "community": 21,
+      "community": 177,
       "community_name": "Organization",
       "norm_label": "set_org_name.py"
     },
@@ -21978,8 +21989,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "scripts_set_org_name_main",
-      "community": 21,
-      "community_name": "Organization",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "main()"
     },
     {
@@ -22000,7 +22011,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "scripts_setup_tablet_live_test",
-      "community": 20,
+      "community": 7,
       "community_name": "models.py",
       "norm_label": "setup_tablet_live_test.py"
     },
@@ -22013,7 +22024,7 @@
       "_origin": "ast",
       "id": "scripts_setup_tablet_live_test_main",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "main()"
     },
     {
@@ -22101,8 +22112,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "scripts_sync_tablet_play_logs",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 156,
+      "community_name": "analytics.py",
       "norm_label": "sync_tablet_play_logs.py"
     },
     {
@@ -22113,8 +22124,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "scripts_sync_tablet_play_logs_main",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 156,
+      "community_name": "analytics.py",
       "norm_label": "main()"
     },
     {
@@ -22125,7 +22136,7 @@
       "_origin": "ast",
       "id": "scripts_test_google_approval_lifecycle",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test_google_approval_lifecycle.py"
     },
     {
@@ -22136,8 +22147,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "scripts_test_google_approval_lifecycle_run_test",
-      "community": 177,
-      "community_name": "Screen",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "run_test()"
     },
     {
@@ -22147,8 +22158,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "scripts_test_live_bring_to_front",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 132,
+      "community_name": "create_access_token",
       "norm_label": "test_live_bring_to_front.py"
     },
     {
@@ -22159,7 +22170,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "scripts_test_live_bring_to_front_capture_screenshot",
-      "community": 176,
+      "community": 132,
       "community_name": "create_access_token",
       "norm_label": "capture_screenshot()"
     },
@@ -22171,7 +22182,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "scripts_test_live_bring_to_front_main",
-      "community": 176,
+      "community": 132,
       "community_name": "create_access_token",
       "norm_label": "main()"
     },
@@ -22183,7 +22194,7 @@
       "_origin": "ast",
       "id": "scripts_test_live_hardware_dedup",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test_live_hardware_dedup.py"
     },
     {
@@ -22194,8 +22205,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "scripts_test_live_hardware_dedup_main",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "main()"
     },
     {
@@ -22205,8 +22216,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "scripts_test_live_offline_counting_drain",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 156,
+      "community_name": "analytics.py",
       "norm_label": "test_live_offline_counting_drain.py"
     },
     {
@@ -22217,8 +22228,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "scripts_test_live_offline_counting_drain_get_tablet_sqlite_count",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 156,
+      "community_name": "analytics.py",
       "norm_label": "get_tablet_sqlite_count()"
     },
     {
@@ -22229,8 +22240,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "scripts_test_live_offline_counting_drain_main",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 156,
+      "community_name": "analytics.py",
       "norm_label": "main()"
     },
     {
@@ -22241,7 +22252,7 @@
       "_origin": "ast",
       "id": "scripts_test_live_super_admin_flow",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test_live_super_admin_flow.py"
     },
     {
@@ -22252,8 +22263,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "scripts_test_live_super_admin_flow_main",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "main()"
     },
     {
@@ -22481,8 +22492,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_e2e_test",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": "e2e_test.py"
     },
     {
@@ -22493,8 +22504,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_e2e_test_auth_headers",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": "auth_headers()"
     },
     {
@@ -22505,8 +22516,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_e2e_test_run_test",
-      "community": 29,
-      "community_name": "google_device.py",
+      "community": 130,
+      "community_name": "get_payment_provider",
       "norm_label": "run_test()"
     },
     {
@@ -22516,8 +22527,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_manual_pipeline_check",
-      "community": 21,
-      "community_name": "Organization",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "manual_pipeline_check.py"
     },
     {
@@ -22528,8 +22539,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_manual_pipeline_check_setup_db",
-      "community": 21,
-      "community_name": "Organization",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "setup_db()"
     },
     {
@@ -22540,8 +22551,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_manual_pipeline_check_run",
-      "community": 21,
-      "community_name": "Organization",
+      "community": 176,
+      "community_name": "SessionLocal",
       "norm_label": "run()"
     },
     {
@@ -22552,7 +22563,7 @@
       "_origin": "ast",
       "id": "tests_test_account_profile",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test_account_profile.py"
     },
     {
@@ -22563,8 +22574,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_account_profile_token",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "_token()"
     },
     {
@@ -22575,8 +22586,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_account_profile_run",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "run()"
     },
     {
@@ -22587,7 +22598,7 @@
       "_origin": "ast",
       "id": "tests_test_account_profile_rationale_1",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "self-service account endpoints behind the dashboard's profile menu. covers the..."
     },
     {
@@ -22598,7 +22609,7 @@
       "_origin": "ast",
       "id": "tests_test_ad_counting_detail",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test_ad_counting_detail.py"
     },
     {
@@ -22610,7 +22621,7 @@
       "_origin": "ast",
       "id": "tests_test_ad_counting_detail_run",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "run()"
     },
     {
@@ -22621,7 +22632,7 @@
       "_origin": "ast",
       "id": "tests_test_ad_placements",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test_ad_placements.py"
     },
     {
@@ -22633,7 +22644,7 @@
       "_origin": "ast",
       "id": "tests_test_ad_placements_playlist_marker",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "playlist_marker()"
     },
     {
@@ -22645,7 +22656,7 @@
       "_origin": "ast",
       "id": "tests_test_ad_placements_items",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "items()"
     },
     {
@@ -22656,7 +22667,7 @@
       "_origin": "ast",
       "id": "tests_test_ad_placements_rationale_1",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "selling an advert places it; un-selling one place removes exactly that one...."
     },
     {
@@ -22667,7 +22678,7 @@
       "_origin": "ast",
       "id": "tests_test_ad_placements_rationale_71",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "what sync_tv actually gates the player on. read fresh: the api wrote it."
     },
     {
@@ -23095,8 +23106,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "test_all_five_areas_e2e.py"
     },
     {
@@ -23108,7 +23119,7 @@
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_seed_super_admin",
       "community": 176,
-      "community_name": "create_access_token",
+      "community_name": "SessionLocal",
       "norm_label": "seed_super_admin()"
     },
     {
@@ -23119,8 +23130,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_test_area_1_counting_online_and_offline",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "test_area_1_counting_online_and_offline()"
     },
     {
@@ -23131,8 +23142,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_test_area_2_bring_to_front_command",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "test_area_2_bring_to_front_command()"
     },
     {
@@ -23144,7 +23155,7 @@
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_test_area_3_reinstall_deduplication",
       "community": 176,
-      "community_name": "create_access_token",
+      "community_name": "SessionLocal",
       "norm_label": "test_area_3_reinstall_deduplication()"
     },
     {
@@ -23156,7 +23167,7 @@
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_test_area_4_role_promotion_and_approval_lifecycle",
       "community": 176,
-      "community_name": "create_access_token",
+      "community_name": "SessionLocal",
       "norm_label": "test_area_4_role_promotion_and_approval_lifecycle()"
     },
     {
@@ -23167,8 +23178,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_test_area_5_hybrid_presence_and_system_health",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "test_area_5_hybrid_presence_and_system_health()"
     },
     {
@@ -23178,8 +23189,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_rationale_1",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "five cross-cutting flows, end to end: python tests/test_all_five_areas_e2e.py..."
     },
     {
@@ -23190,7 +23201,7 @@
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_rationale_65",
       "community": 176,
-      "community_name": "create_access_token",
+      "community_name": "SessionLocal",
       "norm_label": "the platform operator area 4 acts as. seeded rather than assumed."
     },
     {
@@ -23200,8 +23211,8 @@
       "source_location": "L102",
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_rationale_102",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "area 1: test ad counting, offline buffering, batch upload, and rollup..."
     },
     {
@@ -23211,8 +23222,8 @@
       "source_location": "L170",
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_rationale_170",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "area 2: test bring-to-front remote command dispatch and heartbeat delivery."
     },
     {
@@ -23223,7 +23234,7 @@
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_rationale_217",
       "community": 176,
-      "community_name": "create_access_token",
+      "community_name": "SessionLocal",
       "norm_label": "area 3: test 1 tv reinstall concept (hardware deduplication on re-pairing)."
     },
     {
@@ -23234,7 +23245,7 @@
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_rationale_275",
       "community": 176,
-      "community_name": "create_access_token",
+      "community_name": "SessionLocal",
       "norm_label": "area 4: test pending approval on signup, super admin approval, and role..."
     },
     {
@@ -23244,8 +23255,8 @@
       "source_location": "L328",
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_rationale_328",
-      "community": 176,
-      "community_name": "create_access_token",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "area 5: test hybrid presence calculation (redis + last_seen timestamp)."
     },
     {
@@ -23256,7 +23267,7 @@
       "_origin": "ast",
       "id": "tests_test_analytics",
       "community": 7,
-      "community_name": "get_password_hash",
+      "community_name": "models.py",
       "norm_label": "test_analytics.py"
     },
     {
@@ -23268,7 +23279,7 @@
       "_origin": "ast",
       "id": "tests_test_analytics_run",
       "community": 7,
-      "community_name": "get_password_hash",
+      "community_name": "models.py",
       "norm_label": "run()"
     },
     {
@@ -23279,7 +23290,7 @@
       "_origin": "ast",
       "id": "tests_test_analytics_rationale_1",
       "community": 7,
-      "community_name": "get_password_hash",
+      "community_name": "models.py",
       "norm_label": "analytics rollup accuracy and performance: python tests/test_analytics.py seeds..."
     },
     {
@@ -23290,7 +23301,7 @@
       "_origin": "ast",
       "id": "tests_test_booking_report",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test_booking_report.py"
     },
     {
@@ -23301,7 +23312,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_booking_report_rollup",
-      "community": 20,
+      "community": 7,
       "community_name": "models.py",
       "norm_label": "rollup()"
     },
@@ -23313,7 +23324,7 @@
       "_origin": "ast",
       "id": "tests_test_booking_report_rationale_1",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "a client report must count that client's window and that client's screens...."
     },
     {
@@ -23324,7 +23335,7 @@
       "_origin": "ast",
       "id": "tests_test_bring_to_front",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test_bring_to_front.py"
     },
     {
@@ -23335,8 +23346,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_bring_to_front_run",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "run()"
     },
     {
@@ -23347,7 +23358,7 @@
       "_origin": "ast",
       "id": "tests_test_counting_integrity",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test_counting_integrity.py"
     },
     {
@@ -23358,8 +23369,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_counting_integrity_run",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "run()"
     },
     {
@@ -23370,7 +23381,7 @@
       "_origin": "ast",
       "id": "tests_test_counting_integrity_rationale_1",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "counting integrity and metric precision tests: python..."
     },
     {
@@ -23381,7 +23392,7 @@
       "_origin": "ast",
       "id": "tests_test_datetime_aware",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test_datetime_aware.py"
     },
     {
@@ -23393,7 +23404,7 @@
       "_origin": "ast",
       "id": "tests_test_datetime_aware_run",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "run()"
     },
     {
@@ -23403,8 +23414,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_feature_parity",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 192,
+      "community_name": "run",
       "norm_label": "test_feature_parity.py"
     },
     {
@@ -23416,7 +23427,7 @@
       "_origin": "ast",
       "id": "tests_test_feature_parity_auth_header",
       "community": 192,
-      "community_name": "timedelta",
+      "community_name": "run",
       "norm_label": "auth_header()"
     },
     {
@@ -23427,7 +23438,7 @@
       "_origin": "ast",
       "id": "tests_test_feature_parity_py_testclient",
       "community": 192,
-      "community_name": "timedelta",
+      "community_name": "run",
       "norm_label": "testclient"
     },
     {
@@ -23439,7 +23450,7 @@
       "_origin": "ast",
       "id": "tests_test_feature_parity_run",
       "community": 192,
-      "community_name": "timedelta",
+      "community_name": "run",
       "norm_label": "run()"
     },
     {
@@ -23451,7 +23462,7 @@
       "_origin": "ast",
       "id": "tests_test_feature_parity_main",
       "community": 192,
-      "community_name": "timedelta",
+      "community_name": "run",
       "norm_label": "main()"
     },
     {
@@ -23461,8 +23472,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_feature_parity_rationale_1",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 192,
+      "community_name": "run",
       "norm_label": "runnable backend parity check: python tests/test_feature_parity.py"
     },
     {
@@ -23956,7 +23967,7 @@
       "_origin": "ast",
       "id": "tests_test_media_report",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test_media_report.py"
     },
     {
@@ -23967,7 +23978,7 @@
       "_origin": "ast",
       "id": "tests_test_media_report_rationale_1",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "per-advert proof-of-play report. uses a throwaway postgres database \u2014 never the..."
     },
     {
@@ -23978,7 +23989,7 @@
       "_origin": "ast",
       "id": "tests_test_media_selection",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "test_media_selection.py"
     },
     {
@@ -23990,7 +24001,7 @@
       "_origin": "ast",
       "id": "tests_test_media_selection_override_get_db",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "override_get_db()"
     },
     {
@@ -24002,7 +24013,7 @@
       "_origin": "ast",
       "id": "tests_test_media_selection_setup_db",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "setup_db()"
     },
     {
@@ -24014,7 +24025,7 @@
       "_origin": "ast",
       "id": "tests_test_media_selection_mock_auth",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "mock_auth()"
     },
     {
@@ -24026,7 +24037,7 @@
       "_origin": "ast",
       "id": "tests_test_media_selection_test_media_selection",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "test_media_selection()"
     },
     {
@@ -24037,7 +24048,7 @@
       "_origin": "ast",
       "id": "tests_test_media_selection_rationale_1",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "p8 media selection checks: python tests/test_media_selection.py"
     },
     {
@@ -24048,7 +24059,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "test_media_storage.py"
     },
     {
@@ -24083,7 +24094,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_local_mode",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "local_mode()"
     },
     {
@@ -24095,7 +24106,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_test_storage_key_for_understands_both_schemes",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "test_storage_key_for_understands_both_schemes()"
     },
     {
@@ -24107,7 +24118,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_test_storage_key_for_rejects_nonsense",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "test_storage_key_for_rejects_nonsense()"
     },
     {
@@ -24119,7 +24130,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_test_is_remote",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "test_is_remote()"
     },
     {
@@ -24131,7 +24142,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_test_local_round_trip",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "test_local_round_trip()"
     },
     {
@@ -24143,7 +24154,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_test_local_fetch_reports_a_missing_file",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "test_local_fetch_reports_a_missing_file()"
     },
     {
@@ -24155,7 +24166,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_test_local_delete",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "test_local_delete()"
     },
     {
@@ -24179,7 +24190,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_test_s3_round_trip",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "test_s3_round_trip()"
     },
     {
@@ -24191,7 +24202,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_test_s3_delete",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "test_s3_delete()"
     },
     {
@@ -24203,7 +24214,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_test_s3_fetch_creates_missing_parent_directories",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "test_s3_fetch_creates_missing_parent_directories()"
     },
     {
@@ -24214,7 +24225,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_rationale_1",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "media storage: fetch and store, on local disk and on object storage. the..."
     },
     {
@@ -24236,7 +24247,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_rationale_65",
       "community": 50,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_storage.py",
       "norm_label": "local disk: aws_access_key_id unset or the literal 'mock'."
     },
     {
@@ -24258,7 +24269,7 @@
       "_origin": "ast",
       "id": "tests_test_media_worker",
       "community": 76,
-      "community_name": "test_media_worker.py",
+      "community_name": "process_media_sync",
       "norm_label": "test_media_worker.py"
     },
     {
@@ -24270,7 +24281,7 @@
       "_origin": "ast",
       "id": "tests_test_media_worker_setup_db",
       "community": 76,
-      "community_name": "test_media_worker.py",
+      "community_name": "process_media_sync",
       "norm_label": "setup_db()"
     },
     {
@@ -24282,7 +24293,7 @@
       "_origin": "ast",
       "id": "tests_test_media_worker_synthesize_video",
       "community": 76,
-      "community_name": "test_media_worker.py",
+      "community_name": "process_media_sync",
       "norm_label": "synthesize_video()"
     },
     {
@@ -24293,7 +24304,7 @@
       "_origin": "ast",
       "id": "tests_test_media_worker_py_path",
       "community": 76,
-      "community_name": "test_media_worker.py",
+      "community_name": "process_media_sync",
       "norm_label": "path"
     },
     {
@@ -24304,7 +24315,7 @@
       "_origin": "ast",
       "id": "tests_test_media_worker_py_fixture",
       "community": 76,
-      "community_name": "test_media_worker.py",
+      "community_name": "process_media_sync",
       "norm_label": "fixture"
     },
     {
@@ -24316,7 +24327,7 @@
       "_origin": "ast",
       "id": "tests_test_media_worker_cleanup_tempdir",
       "community": 76,
-      "community_name": "test_media_worker.py",
+      "community_name": "process_media_sync",
       "norm_label": "cleanup_tempdir()"
     },
     {
@@ -24328,7 +24339,7 @@
       "_origin": "ast",
       "id": "tests_test_media_worker_do_not_process_on_upload",
       "community": 76,
-      "community_name": "test_media_worker.py",
+      "community_name": "process_media_sync",
       "norm_label": "_do_not_process_on_upload()"
     },
     {
@@ -24339,7 +24350,7 @@
       "_origin": "ast",
       "id": "skipif",
       "community": 76,
-      "community_name": "test_media_worker.py",
+      "community_name": "process_media_sync",
       "norm_label": "skipif"
     },
     {
@@ -24351,7 +24362,7 @@
       "_origin": "ast",
       "id": "tests_test_media_worker_test_media_pipeline",
       "community": 76,
-      "community_name": "test_media_worker.py",
+      "community_name": "process_media_sync",
       "norm_label": "test_media_pipeline()"
     },
     {
@@ -24363,7 +24374,7 @@
       "_origin": "ast",
       "id": "tests_test_media_worker_test_source_is_discarded_once_renditions_exist",
       "community": 76,
-      "community_name": "test_media_worker.py",
+      "community_name": "process_media_sync",
       "norm_label": "test_source_is_discarded_once_renditions_exist()"
     },
     {
@@ -24375,7 +24386,7 @@
       "_origin": "ast",
       "id": "tests_test_media_worker_test_media_pipeline_on_object_storage",
       "community": 76,
-      "community_name": "test_media_worker.py",
+      "community_name": "process_media_sync",
       "norm_label": "test_media_pipeline_on_object_storage()"
     },
     {
@@ -24386,7 +24397,7 @@
       "_origin": "ast",
       "id": "tests_test_media_worker_rationale_1",
       "community": 76,
-      "community_name": "test_media_worker.py",
+      "community_name": "process_media_sync",
       "norm_label": "test for media worker and ffmpeg pipeline"
     },
     {
@@ -24397,7 +24408,7 @@
       "_origin": "ast",
       "id": "tests_test_media_worker_rationale_135",
       "community": 76,
-      "community_name": "test_media_worker.py",
+      "community_name": "process_media_sync",
       "norm_label": "stop the upload from transcoding, so only the explicit worker run below does...."
     },
     {
@@ -24408,7 +24419,7 @@
       "_origin": "ast",
       "id": "tests_test_media_worker_rationale_224",
       "community": 76,
-      "community_name": "test_media_worker.py",
+      "community_name": "process_media_sync",
       "norm_label": "discard_source_after_transcode removes the upload and promotes the master. this..."
     },
     {
@@ -24419,7 +24430,7 @@
       "_origin": "ast",
       "id": "tests_test_media_worker_rationale_299",
       "community": 76,
-      "community_name": "test_media_worker.py",
+      "community_name": "process_media_sync",
       "norm_label": "the same pipeline, with the media in a bucket rather than on local disk. this..."
     },
     {
@@ -24430,7 +24441,7 @@
       "_origin": "ast",
       "id": "tests_test_p6_websockets",
       "community": 132,
-      "community_name": "test_p6_websockets.py",
+      "community_name": "create_access_token",
       "norm_label": "test_p6_websockets.py"
     },
     {
@@ -24442,7 +24453,7 @@
       "_origin": "ast",
       "id": "tests_test_p6_websockets_override_get_db",
       "community": 132,
-      "community_name": "test_p6_websockets.py",
+      "community_name": "create_access_token",
       "norm_label": "override_get_db()"
     },
     {
@@ -24454,7 +24465,7 @@
       "_origin": "ast",
       "id": "tests_test_p6_websockets_setup_db",
       "community": 132,
-      "community_name": "test_p6_websockets.py",
+      "community_name": "create_access_token",
       "norm_label": "setup_db()"
     },
     {
@@ -24466,7 +24477,7 @@
       "_origin": "ast",
       "id": "tests_test_p6_websockets_test_hierarchical_playlist_resolution",
       "community": 132,
-      "community_name": "test_p6_websockets.py",
+      "community_name": "create_access_token",
       "norm_label": "test_hierarchical_playlist_resolution()"
     },
     {
@@ -24478,7 +24489,7 @@
       "_origin": "ast",
       "id": "tests_test_p6_websockets_test_websocket_pubsub",
       "community": 132,
-      "community_name": "test_p6_websockets.py",
+      "community_name": "create_access_token",
       "norm_label": "test_websocket_pubsub()"
     },
     {
@@ -24490,7 +24501,7 @@
       "_origin": "ast",
       "id": "tests_test_p6_websockets_test_dashboard_websocket_is_not_shadowed_by_device_route",
       "community": 132,
-      "community_name": "test_p6_websockets.py",
+      "community_name": "create_access_token",
       "norm_label": "test_dashboard_websocket_is_not_shadowed_by_device_route()"
     },
     {
@@ -24502,7 +24513,7 @@
       "_origin": "ast",
       "id": "tests_test_p6_websockets_test_polling_still_converges_without_websocket",
       "community": 132,
-      "community_name": "test_p6_websockets.py",
+      "community_name": "create_access_token",
       "norm_label": "test_polling_still_converges_without_websocket()"
     },
     {
@@ -24514,7 +24525,7 @@
       "_origin": "ast",
       "id": "tests_test_p6_websockets_redis_available",
       "community": 132,
-      "community_name": "test_p6_websockets.py",
+      "community_name": "create_access_token",
       "norm_label": "_redis_available()"
     },
     {
@@ -24526,7 +24537,7 @@
       "_origin": "ast",
       "id": "tests_test_p6_websockets_run",
       "community": 132,
-      "community_name": "test_p6_websockets.py",
+      "community_name": "create_access_token",
       "norm_label": "run()"
     },
     {
@@ -24537,7 +24548,7 @@
       "_origin": "ast",
       "id": "tests_test_p6_websockets_rationale_1",
       "community": 132,
-      "community_name": "test_p6_websockets.py",
+      "community_name": "create_access_token",
       "norm_label": "p6 realtime checks: python tests/test_p6_websockets.py covers hierarchical..."
     },
     {
@@ -24548,7 +24559,7 @@
       "_origin": "ast",
       "id": "tests_test_p6_websockets_rationale_184",
       "community": 132,
-      "community_name": "test_p6_websockets.py",
+      "community_name": "create_access_token",
       "norm_label": "/api/ws/dashboard/ws must reach the dashboard handler, not the device one. both..."
     },
     {
@@ -24559,7 +24570,7 @@
       "_origin": "ast",
       "id": "tests_test_p6_websockets_rationale_208",
       "community": 132,
-      "community_name": "test_p6_websockets.py",
+      "community_name": "create_access_token",
       "norm_label": "push must never be the only path. the spec is explicit: if the socket is down..."
     },
     {
@@ -24662,7 +24673,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_play_log_attribution",
-      "community": 20,
+      "community": 7,
       "community_name": "models.py",
       "norm_label": "test_play_log_attribution.py"
     },
@@ -24674,8 +24685,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_play_log_attribution_event",
-      "community": 192,
-      "community_name": "timedelta",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "_event()"
     },
     {
@@ -24686,8 +24697,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_play_log_attribution_run",
-      "community": 192,
-      "community_name": "timedelta",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "run()"
     },
     {
@@ -24697,7 +24708,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_play_log_attribution_rationale_1",
-      "community": 20,
+      "community": 7,
       "community_name": "models.py",
       "norm_label": "regression tests for proof-of-play attribution and durability. each of these..."
     },
@@ -24709,7 +24720,7 @@
       "_origin": "ast",
       "id": "tests_test_proof_of_play",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test_proof_of_play.py"
     },
     {
@@ -24720,8 +24731,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_proof_of_play_run",
-      "community": 192,
-      "community_name": "timedelta",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "run()"
     },
     {
@@ -24732,7 +24743,7 @@
       "_origin": "ast",
       "id": "tests_test_proof_of_play_rationale_1",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test script for p4 proof of play deduplication and insertion."
     },
     {
@@ -24822,8 +24833,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_r2_cleanup",
-      "community": 21,
-      "community_name": "Organization",
+      "community": 132,
+      "community_name": "create_access_token",
       "norm_label": "test_r2_cleanup.py"
     },
     {
@@ -24834,7 +24845,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_r2_cleanup_main",
-      "community": 21,
+      "community": 177,
       "community_name": "Organization",
       "norm_label": "main()"
     },
@@ -24845,8 +24856,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_r2_cleanup_rationale_1",
-      "community": 21,
-      "community_name": "Organization",
+      "community": 132,
+      "community_name": "create_access_token",
       "norm_label": "deleting an asset must actually remove it from object storage. both reclamation..."
     },
     {
@@ -24857,7 +24868,7 @@
       "_origin": "ast",
       "id": "tests_test_reinstall_dedup",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test_reinstall_dedup.py"
     },
     {
@@ -24868,7 +24879,7 @@
       "_origin": "ast",
       "id": "tests_test_reinstall_dedup_rationale_1",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "a reinstalled player must reclaim its screen, not create a duplicate. throwaway..."
     },
     {
@@ -25041,7 +25052,7 @@
       "_origin": "ast",
       "id": "tests_test_release_rollout",
       "community": 95,
-      "community_name": "utcnow",
+      "community_name": "test_release_rollout.py",
       "norm_label": "test_release_rollout.py"
     },
     {
@@ -25053,7 +25064,7 @@
       "_origin": "ast",
       "id": "tests_test_release_rollout_database_url",
       "community": 95,
-      "community_name": "utcnow",
+      "community_name": "test_release_rollout.py",
       "norm_label": "_database_url()"
     },
     {
@@ -25065,7 +25076,7 @@
       "_origin": "ast",
       "id": "tests_test_release_rollout_override_get_db",
       "community": 95,
-      "community_name": "utcnow",
+      "community_name": "test_release_rollout.py",
       "norm_label": "override_get_db()"
     },
     {
@@ -25077,7 +25088,7 @@
       "_origin": "ast",
       "id": "tests_test_release_rollout_setup_db",
       "community": 95,
-      "community_name": "utcnow",
+      "community_name": "test_release_rollout.py",
       "norm_label": "setup_db()"
     },
     {
@@ -25089,7 +25100,7 @@
       "_origin": "ast",
       "id": "tests_test_release_rollout_bearer",
       "community": 95,
-      "community_name": "utcnow",
+      "community_name": "test_release_rollout.py",
       "norm_label": "bearer()"
     },
     {
@@ -25101,7 +25112,7 @@
       "_origin": "ast",
       "id": "tests_test_release_rollout_screen_row",
       "community": 95,
-      "community_name": "utcnow",
+      "community_name": "test_release_rollout.py",
       "norm_label": "screen_row()"
     },
     {
@@ -25113,7 +25124,7 @@
       "_origin": "ast",
       "id": "tests_test_release_rollout_device_headers",
       "community": 95,
-      "community_name": "utcnow",
+      "community_name": "test_release_rollout.py",
       "norm_label": "device_headers()"
     },
     {
@@ -25125,7 +25136,7 @@
       "_origin": "ast",
       "id": "tests_test_release_rollout_publish",
       "community": 95,
-      "community_name": "utcnow",
+      "community_name": "test_release_rollout.py",
       "norm_label": "publish()"
     },
     {
@@ -25137,7 +25148,7 @@
       "_origin": "ast",
       "id": "tests_test_release_rollout_run",
       "community": 95,
-      "community_name": "utcnow",
+      "community_name": "test_release_rollout.py",
       "norm_label": "run()"
     },
     {
@@ -25148,7 +25159,7 @@
       "_origin": "ast",
       "id": "tests_test_release_rollout_rationale_1",
       "community": 95,
-      "community_name": "utcnow",
+      "community_name": "test_release_rollout.py",
       "norm_label": "player releases: who may publish one, and who it reaches. covers the defect..."
     },
     {
@@ -25159,7 +25170,7 @@
       "_origin": "ast",
       "id": "tests_test_release_rollout_rationale_27",
       "community": 95,
-      "community_name": "utcnow",
+      "community_name": "test_release_rollout.py",
       "norm_label": "postgres when a server is there, sqlite otherwise. production is postgres and..."
     },
     {
@@ -25170,7 +25181,7 @@
       "_origin": "ast",
       "id": "tests_test_release_rollout_rationale_126",
       "community": 95,
-      "community_name": "utcnow",
+      "community_name": "test_release_rollout.py",
       "norm_label": "read the screen straight from the database. there is no get /api/screens/{id};..."
     },
     {
@@ -25442,7 +25453,7 @@
       "_origin": "ast",
       "id": "tests_test_role_separation_seed",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "seed()"
     },
     {
@@ -26070,8 +26081,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_screen_removal",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 140,
+      "community_name": "utcnow",
       "norm_label": "test_screen_removal.py"
     },
     {
@@ -26082,8 +26093,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_screen_removal_check",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 140,
+      "community_name": "utcnow",
       "norm_label": "check()"
     },
     {
@@ -26094,8 +26105,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_screen_removal_run",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 140,
+      "community_name": "utcnow",
       "norm_label": "run()"
     },
     {
@@ -26105,8 +26116,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_screen_removal_rationale_1",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 140,
+      "community_name": "utcnow",
       "norm_label": "removing a tv: python tests/test_screen_removal.py the feature did not exist --..."
     },
     {
@@ -26232,8 +26243,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_sqlite_utc",
-      "community": 200,
-      "community_name": "test_sqlite_utc.py",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "test_sqlite_utc.py"
     },
     {
@@ -26244,8 +26255,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_sqlite_utc_run",
-      "community": 200,
-      "community_name": "test_sqlite_utc.py",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "run()"
     },
     {
@@ -26255,8 +26266,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_sqlite_utc_rationale_1",
-      "community": 200,
-      "community_name": "test_sqlite_utc.py",
+      "community": 7,
+      "community_name": "models.py",
       "norm_label": "sqlite must serve the same instants postgres does. `datetime(timezone=true)` is..."
     },
     {
@@ -26266,8 +26277,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_storage_budget",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 132,
+      "community_name": "create_access_token",
       "norm_label": "test_storage_budget.py"
     },
     {
@@ -26278,8 +26289,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_storage_budget_main",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "main()"
     },
     {
@@ -26289,8 +26300,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_storage_budget_rationale_1",
-      "community": 7,
-      "community_name": "get_password_hash",
+      "community": 132,
+      "community_name": "create_access_token",
       "norm_label": "the two things that decide whether a free-tier deployment survives its own..."
     },
     {
@@ -26301,7 +26312,7 @@
       "_origin": "ast",
       "id": "tests_test_storage_cleanup",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test_storage_cleanup.py"
     },
     {
@@ -26313,7 +26324,7 @@
       "_origin": "ast",
       "id": "tests_test_storage_cleanup_make",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "make()"
     },
     {
@@ -26324,7 +26335,7 @@
       "_origin": "ast",
       "id": "tests_test_storage_cleanup_rationale_1",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "deleting media must free the disk, and screenshots must not grow forever...."
     },
     {
@@ -26591,7 +26602,7 @@
       "_origin": "ast",
       "id": "tests_test_sync_invalidation",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "test_sync_invalidation.py"
     },
     {
@@ -26603,7 +26614,7 @@
       "_origin": "ast",
       "id": "tests_test_sync_invalidation_seed",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "seed()"
     },
     {
@@ -26614,8 +26625,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_sync_invalidation_run",
-      "community": 177,
-      "community_name": "Screen",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "run()"
     },
     {
@@ -26626,7 +26637,7 @@
       "_origin": "ast",
       "id": "tests_test_sync_invalidation_rationale_1",
       "community": 20,
-      "community_name": "models.py",
+      "community_name": "main.py",
       "norm_label": "a screen setting an operator changes must reach the player. the player asks..."
     },
     {
@@ -26636,8 +26647,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_tenant_isolation",
-      "community": 192,
-      "community_name": "timedelta",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "test_tenant_isolation.py"
     },
     {
@@ -26648,8 +26659,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_tenant_isolation_auth_header",
-      "community": 192,
-      "community_name": "timedelta",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "auth_header()"
     },
     {
@@ -26661,7 +26672,7 @@
       "_origin": "ast",
       "id": "tests_test_tenant_isolation_build_org_b",
       "community": 177,
-      "community_name": "Screen",
+      "community_name": "Organization",
       "norm_label": "build_org_b()"
     },
     {
@@ -26672,8 +26683,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_tenant_isolation_run",
-      "community": 192,
-      "community_name": "timedelta",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "run()"
     },
     {
@@ -26683,8 +26694,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_tenant_isolation_rationale_1",
-      "community": 192,
-      "community_name": "timedelta",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "adversarial cross-tenant probe: python tests/test_tenant_isolation.py two..."
     },
     {
@@ -26831,7 +26842,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_ws_connection_pool",
-      "community": 95,
+      "community": 140,
       "community_name": "utcnow",
       "norm_label": "test_ws_connection_pool.py"
     },
@@ -26843,7 +26854,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_ws_connection_pool_database_url",
-      "community": 95,
+      "community": 140,
       "community_name": "utcnow",
       "norm_label": "_database_url()"
     },
@@ -26855,7 +26866,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_ws_connection_pool_override_get_db",
-      "community": 95,
+      "community": 140,
       "community_name": "utcnow",
       "norm_label": "override_get_db()"
     },
@@ -26867,7 +26878,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_ws_connection_pool_redis_reachable",
-      "community": 95,
+      "community": 140,
       "community_name": "utcnow",
       "norm_label": "redis_reachable()"
     },
@@ -26879,7 +26890,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_ws_connection_pool_setup_db",
-      "community": 95,
+      "community": 140,
       "community_name": "utcnow",
       "norm_label": "setup_db()"
     },
@@ -26891,7 +26902,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_ws_connection_pool_run",
-      "community": 95,
+      "community": 140,
       "community_name": "utcnow",
       "norm_label": "run()"
     },
@@ -26902,7 +26913,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_ws_connection_pool_rationale_1",
-      "community": 95,
+      "community": 140,
       "community_name": "utcnow",
       "norm_label": "a websocket must not hold a database connection open for its whole life. both..."
     },
@@ -26913,7 +26924,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "tests_test_ws_connection_pool_rationale_33",
-      "community": 95,
+      "community": 140,
       "community_name": "utcnow",
       "norm_label": "postgres when a server is there, sqlite otherwise -- as the other scripts do."
     },
@@ -26924,8 +26935,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_validation",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 36,
+      "community_name": "test_alerting.py",
       "norm_label": "validation.py"
     },
     {
@@ -26936,8 +26947,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_validation_owner_headers",
-      "community": 196,
-      "community_name": "run",
+      "community": 36,
+      "community_name": "test_alerting.py",
       "norm_label": "owner_headers()"
     },
     {
@@ -26947,8 +26958,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_validation_py_testclient",
-      "community": 196,
-      "community_name": "run",
+      "community": 36,
+      "community_name": "test_alerting.py",
       "norm_label": "testclient"
     },
     {
@@ -26958,8 +26969,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "mock_aws",
-      "community": 196,
-      "community_name": "run",
+      "community": 36,
+      "community_name": "test_alerting.py",
       "norm_label": "mock_aws"
     },
     {
@@ -26970,8 +26981,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_validation_run",
-      "community": 196,
-      "community_name": "run",
+      "community": 36,
+      "community_name": "test_alerting.py",
       "norm_label": "run()"
     },
     {
@@ -26981,8 +26992,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_validation_rationale_1",
-      "community": 20,
-      "community_name": "models.py",
+      "community": 36,
+      "community_name": "test_alerting.py",
       "norm_label": "isolated storage and failure-path validation: python tests/validation.py"
     },
     {
@@ -32088,7 +32099,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L83",
+      "source_location": "L85",
       "weight": 1.0,
       "context": "generic_arg",
       "_origin": "ast",
@@ -32100,7 +32111,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L652",
+      "source_location": "L658",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -32112,7 +32123,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L743",
+      "source_location": "L754",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -32124,7 +32135,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L532",
+      "source_location": "L538",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -32397,7 +32408,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L700",
+      "source_location": "L711",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -35956,7 +35967,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L83",
+      "source_location": "L85",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -35969,7 +35980,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L64",
+      "source_location": "L66",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_playerscreen",
@@ -36236,7 +36247,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L767",
+      "source_location": "L778",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen",
@@ -36247,7 +36258,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L628",
+      "source_location": "L634",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen",
@@ -36258,7 +36269,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L641",
+      "source_location": "L647",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen",
@@ -36269,7 +36280,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L83",
+      "source_location": "L85",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen",
@@ -36280,7 +36291,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L643",
+      "source_location": "L649",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen",
@@ -36291,7 +36302,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L652",
+      "source_location": "L658",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen",
@@ -36302,7 +36313,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L60",
+      "source_location": "L62",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen",
@@ -36313,7 +36324,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L743",
+      "source_location": "L754",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen",
@@ -36324,7 +36335,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L577",
+      "source_location": "L583",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen",
@@ -36335,7 +36346,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L700",
+      "source_location": "L711",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen",
@@ -36346,7 +36357,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L510",
+      "source_location": "L516",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen",
@@ -36357,7 +36368,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L532",
+      "source_location": "L538",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen",
@@ -36369,7 +36380,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L80",
+      "source_location": "L82",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_playerscreen",
@@ -36380,7 +36391,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L60",
+      "source_location": "L62",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -36392,11 +36403,11 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L115",
+      "source_location": "L117",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer",
-      "target": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer_object_player_l115",
+      "target": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer_object_player_l117",
       "confidence_score": 1.0
     },
     {
@@ -36404,7 +36415,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L447",
+      "source_location": "L451",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer",
@@ -36416,7 +36427,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L169",
+      "source_location": "L171",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer",
@@ -36428,7 +36439,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L135",
+      "source_location": "L137",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer",
@@ -36440,7 +36451,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L450",
+      "source_location": "L456",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer",
@@ -36452,7 +36463,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L381",
+      "source_location": "L383",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer",
@@ -36463,21 +36474,21 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L116",
+      "source_location": "L118",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer_object_player_l115",
-      "target": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer_object_player_l115_onrenderedfirstframe",
+      "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer_object_player_l117",
+      "target": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer_object_player_l117_onrenderedfirstframe",
       "confidence_score": 1.0
     },
     {
       "relation": "implements",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L115",
+      "source_location": "L117",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer_object_player_l115",
+      "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer_object_player_l117",
       "target": "player",
       "confidence_score": 1.0
     },
@@ -36485,10 +36496,10 @@
       "relation": "implements",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L771",
+      "source_location": "L782",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l771",
+      "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l782",
       "target": "player",
       "confidence_score": 1.0
     },
@@ -36497,10 +36508,10 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L119",
+      "source_location": "L121",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer_object_player_l115_onrenderedfirstframe",
+      "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer_object_player_l117_onrenderedfirstframe",
       "target": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_decodersnapshot",
       "confidence_score": 1.0
     },
@@ -36508,7 +36519,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L510",
+      "source_location": "L516",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -36520,7 +36531,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L532",
+      "source_location": "L538",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -36532,7 +36543,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L628",
+      "source_location": "L634",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -36544,7 +36555,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L577",
+      "source_location": "L583",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -36557,7 +36568,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L590",
+      "source_location": "L596",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_recoverinterruptedplay",
@@ -36568,7 +36579,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L652",
+      "source_location": "L658",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -36580,7 +36591,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L652",
+      "source_location": "L658",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -36592,7 +36603,19 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L767",
+      "source_location": "L658",
+      "weight": 1.0,
+      "context": "parameter_type",
+      "_origin": "ast",
+      "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_playbacksurface",
+      "target": "dp",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
+      "source_location": "L778",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -36604,7 +36627,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L743",
+      "source_location": "L754",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
@@ -36616,7 +36639,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L700",
+      "source_location": "L711",
       "weight": 1.0,
       "context": "return_type",
       "_origin": "ast",
@@ -36628,44 +36651,44 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L771",
+      "source_location": "L782",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready",
-      "target": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l771",
+      "target": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l782",
       "confidence_score": 1.0
     },
     {
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L772",
+      "source_location": "L783",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l771",
-      "target": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l771_onplaybackstatechanged",
+      "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l782",
+      "target": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l782_onplaybackstatechanged",
       "confidence_score": 1.0
     },
     {
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L779",
+      "source_location": "L790",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l771",
-      "target": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l771_onplayererror",
+      "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l782",
+      "target": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l782_onplayererror",
       "confidence_score": 1.0
     },
     {
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt",
-      "source_location": "L779",
+      "source_location": "L790",
       "weight": 1.0,
       "context": "parameter_type",
       "_origin": "ast",
-      "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l771_onplayererror",
+      "source": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_awaitplayerready_object_player_l782_onplayererror",
       "target": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_kt_playbackexception",
       "confidence_score": 1.0
     },
@@ -95991,5 +96014,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "478693a0dcd5f5b9f30e6069088d1d32cda37d9c"
+  "built_at_commit": "ae1b3db40d8866e919e93c0cc13f5082ad708cfc"
 }

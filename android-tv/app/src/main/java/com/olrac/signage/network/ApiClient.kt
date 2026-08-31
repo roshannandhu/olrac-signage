@@ -68,7 +68,7 @@ object ApiClient {
      * point of issuing it. Screens paired by an older build simply have no secret, send no
      * header, and keep working on the server's legacy path until they are re-paired.
      */
-    private fun buildClient(appContext: Context): okhttp3.OkHttpClient =
+    fun buildClient(appContext: Context): okhttp3.OkHttpClient =
         okhttp3.OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val request = chain.request()
@@ -77,7 +77,14 @@ object ApiClient {
                 if (request.url.encodedPath.endsWith("/api/screens/auth")) {
                     return@addInterceptor chain.proceed(request)
                 }
-                val token = deviceToken(appContext)
+
+                val baseUri = try { URI(effectiveBaseUrl(appContext)) } catch (_: Exception) { null }
+                val isApiHost = baseUri != null && request.url.host.equals(baseUri.host, ignoreCase = true)
+
+                // Only attach the Bearer token to requests destined for our own API server.
+                // Sending Bearer tokens to external object storage (Cloudflare R2 / AWS S3 presigned URLs)
+                // causes AWS Signature v4 errors (HTTP 400).
+                val token = if (isApiHost) deviceToken(appContext) else null
                 val signed = if (token != null) {
                     request.newBuilder().header("Authorization", "Bearer $token").build()
                 } else {
@@ -86,7 +93,7 @@ object ApiClient {
                 val response = chain.proceed(signed)
                 // A rejected token is almost always an expired one; drop it so the next
                 // call re-exchanges rather than repeating the failure until restart.
-                if (response.code == 401 && token != null) clearToken()
+                if (response.code == 401 && token != null && isApiHost) clearToken()
                 response
             }
             .build()

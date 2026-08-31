@@ -50,6 +50,7 @@ class StorageManager(private val context: Context) {
             
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful && response.code != 206) {
+                    Log.e(TAG, "Download failed for ${finalFile.name}: HTTP ${response.code} (url: $url)")
                     if (response.code == 416) temporaryFile.delete() // Range Not Satisfiable
                     return@withContext null
                 }

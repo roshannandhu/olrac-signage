@@ -316,7 +316,7 @@ def auth_methods():
         # only ever answer /google/start with a 503, so the player drew a button whose
         # single outcome was an error -- and, worse, on the dev path it bound the screen to
         # an arbitrary organisation (see google_device_poll).
-        "google": google_device.is_configured(),
+        "google": google_device.is_configured() or google_device.is_web_configured(),
         # Always available. Listed rather than assumed so the player renders from one
         # answer instead of hard-coding two of the three.
         "password": True,

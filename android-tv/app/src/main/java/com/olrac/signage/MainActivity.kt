@@ -443,8 +443,44 @@ class MainActivity : ComponentActivity() {
             )
             pollGoogleSignIn(body)
         } else {
-            launchState = LaunchState.SignIn(busy = false)
+            // The device grant is not configured on this server -- google/start answers 503
+            // "Google sign-in is not enabled" -- while the browser opened above IS, and it
+            // binds the screen server side.
+            //
+            // With nothing polling here, the only route back into the app was the olrac://
+            // deep link, and a TV browser is free to refuse it ("App deeplink blocked" on
+            // TCL). The browser showed "Display Connected" while this dropped straight back
+            // to the sign-in form, and the panel stayed there through every relaunch.
+            awaitBrowserSignIn(deviceId)
         }
+    }
+
+    /**
+     * Wait for the browser half to finish, asking OUR server rather than Google.
+     *
+     * register() reports the binding whoever made it -- the TV's own browser, a phone, or
+     * an operator redeeming a pairing code -- so this needs neither a device grant nor a
+     * deep link the browser is allowed to block.
+     */
+    private suspend fun awaitBrowserSignIn(deviceId: String) {
+        val deadline = System.currentTimeMillis() + BROWSER_SIGN_IN_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            delay(PAIRING_RETRY_MS)
+            // The installer backed out to the form; stop waiting with them.
+            if (launchState !is LaunchState.SignIn) return
+            val registration = try {
+                register(deviceId)
+            } catch (_: Exception) {
+                // A dropped connection is not a refusal -- the browser half may still be
+                // mid-flow on a flaky panel. Keep waiting until the deadline.
+                continue
+            }
+            if (registration.status != LaunchStateResolver.WAITING_PAIRING) {
+                completePairing(registration.screenName, pairCode = null)
+                return
+            }
+        }
+        launchState = LaunchState.SignIn(busy = false)
     }
 
     /** Ask the server whether the phone half has finished, until it has or time runs out. */
@@ -663,6 +699,10 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val PAIRING_RETRY_MS = 5_000L
+
+        // How long to keep watching for the browser half to bind this screen. Generous
+        // because it is a person signing into Google on a TV remote, which is slow.
+        private const val BROWSER_SIGN_IN_TIMEOUT_MS = 10 * 60_000L
         private const val PAIR_CODE_REFRESH_MS = 4 * 60_000L
     }
 }

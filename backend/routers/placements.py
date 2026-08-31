@@ -13,6 +13,7 @@ from sqlalchemy import func, text
 
 from .. import models, schemas
 from ..tenancy import TenantScope, require_tenant_roles
+from .playlists import bump_playlist
 
 logger = logging.getLogger(__name__)
 
@@ -97,6 +98,14 @@ def _place(scope: TenantScope, placement: models.AdPlacement, ref: schemas.Place
     )
     scope.db.add(target)
     scope.db.flush()
+    # The player's sync is CONDITIONAL: sync_tv compares its `since` against a marker
+    # built from screen.assignment_updated_at, playlist.updated_at and group.updated_at,
+    # and answers 204 when nothing is newer. Adding a row to playlist_items moves none of
+    # those on its own, so a booked advert was written to the database, shown correctly on
+    # every dashboard, and never sent to a screen that already had its playlist -- the TV
+    # kept getting 204 and kept playing the old loop. Bookings are not a second scheduler;
+    # they edit the playlist, so they have to mark it edited like every other edit does.
+    bump_playlist(playlist)
     return target
 
 
@@ -107,6 +116,11 @@ def _unplace(scope: TenantScope, target: models.AdPlacementTarget) -> None:
             models.PlaylistItem.id == target.playlist_item_id
         ).first()
         if item:
+            # Before the delete, while the item can still name its playlist. Same reason as
+            # _place: without this the screen is never told, and an advert whose booking was
+            # cancelled or moved keeps playing -- which bills the wrong advertiser.
+            if item.playlist:
+                bump_playlist(item.playlist)
             scope.db.delete(item)
     scope.db.delete(target)
 

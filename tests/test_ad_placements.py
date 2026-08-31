@@ -67,6 +67,13 @@ try:
     auth = {"Authorization": f"Bearer {create_access_token(data={'sub': owner.username})}"}
     now = models.utcnow()
 
+    def playlist_marker():
+        """What sync_tv actually gates the player on. Read fresh: the API wrote it."""
+        db.expire_all()
+        return db.query(models.Playlist).filter(models.Playlist.id == manual_list.id).one().updated_at
+
+    marker_before_booking = playlist_marker()
+
     body = {
         "content_id": ad.id, "advertiser": "Pittappillil", "price_paise": 5000000,
         "is_paid": True,
@@ -88,6 +95,16 @@ try:
     assert all(i.duration == 30 for i in booked), [i.duration for i in booked]
     assert all(i.start_at is not None and i.end_at is not None for i in booked)
     print("  ok  booking on 2 screens + 1 group placed 3 items, each 30s with the paid window")
+
+    # The items above are only half of "the advert runs". sync_tv answers 204 unless one of
+    # its markers is newer than the player's `since`, and appending a playlist_items row
+    # moves none of them by itself -- so a booking was stored, shown correctly on every
+    # dashboard, and silently never sent to any screen that already had its playlist.
+    assert playlist_marker() > marker_before_booking, (
+        "placing an advert must mark the playlist edited, or the player keeps getting 204 "
+        "and the advert never reaches the screen"
+    )
+    print("  ok  booking marked the playlist edited, so the screen fetches it")
 
     # Removing one place removes exactly one item.
     target_b = next(t for t in placement["targets"] if t["screen_id"] == b.id)
@@ -121,11 +138,20 @@ try:
     print("  ok  changing the run window updated every placed item")
 
     # Deleting the booking clears its items and only its items.
+    marker_before_delete = playlist_marker()
     gone = client.delete(f"/api/placements/{placement['id']}", headers=auth)
     assert gone.status_code == 200, gone.text
     remaining = items()
     assert len(remaining) == 1 and remaining[0].id == manual_id, [i.id for i in remaining]
     print("  ok  deleting the booking removed only what it had placed")
+
+    # Same gate on the way out: an advert whose booking ended has to stop playing, and the
+    # screen only learns that when the playlist is marked edited. Left unmarked it keeps
+    # running the loop it last fetched -- billing the wrong advertiser for the airtime.
+    assert playlist_marker() > marker_before_delete, (
+        "removing an advert must mark the playlist edited, or the screen keeps playing it"
+    )
+    print("  ok  removing marked the playlist edited, so the screen drops it")
 
     # Another tenant cannot see or touch it.
     rival_auth = {"Authorization": f"Bearer {create_access_token(data={'sub': intruder.username})}"}

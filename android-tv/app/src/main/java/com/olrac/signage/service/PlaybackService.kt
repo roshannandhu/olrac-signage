@@ -94,6 +94,13 @@ class PlaybackService : Service() {
                 type == "request_screenshot" || command == "request_screenshot" -> ScreenshotManager.requestScreenshot()
                 type == "launch_app" || type == "bring_to_front" || command == "launch_app" || command == "bring_to_front" -> launchPlayer()
                 type == "sync_now" || type == "reload_playlist" || command == "sync_now" || command == "reload_playlist" -> immediateSyncSignals.trySend(Unit)
+                // "deregister" is what the server queues when an operator removes the
+                // screen from their fleet; the others are the manual unlink. Same outcome.
+                type == "deregister" || command == "deregister" ||
+                    type == "reset" || type == "unpair" || command == "reset" || command == "unpair" -> {
+                    android.util.Log.w("PlaybackService", "Received WS reset/unpair command; signing out")
+                    com.olrac.signage.boot.PlayerLauncher.handleUnpairedOrDeleted(this)
+                }
             }
         }
         realtimeClient?.start()

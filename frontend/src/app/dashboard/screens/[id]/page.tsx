@@ -4,8 +4,8 @@ import { useMemo, useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
-import { ArrowLeft, Clock, Info, Monitor, MonitorPlay, PlaySquare, Settings, Smartphone, Tv2 } from 'lucide-react'
+import { useParams, useRouter } from 'next/navigation'
+import { ArrowLeft, Clock, Info, Monitor, MonitorPlay, PlaySquare, Settings, Smartphone, Trash2, Tv2 } from 'lucide-react'
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { ErrorState } from '@/components/dashboard/error-state'
 import { OverlayBadge } from '@/components/dashboard/asset-card'
@@ -16,6 +16,7 @@ import { ScreenMap } from '@/components/dashboard/screen-map'
 import { ScreenSettingsDialog } from '@/components/dashboard/screen-settings-dialog'
 import { AssignPlaylistCard } from '@/components/dashboard/assign-playlist-card'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import { relativeTime } from '@/lib/format'
@@ -28,6 +29,7 @@ const orientationLabel = (degrees: number) =>
 
 export default function ScreenDetailPage() {
   const params = useParams()
+  const router = useRouter()
   const screenId = Number(params.id)
   const user = useAuthStore((state) => state.user)
   const canEdit = canEditTenantContent(user)
@@ -39,10 +41,20 @@ export default function ScreenDetailPage() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [hoursOpen, setHoursOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   const bringToFrontMutation = useMutation({
     mutationFn: () => api.bringToFront(screenId),
     onSuccess: () => toast.success('Command sent: opening signage app on screen.'),
+    onError: (error: Error) => toast.error(error.message),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.deleteScreen(screenId),
+    onSuccess: () => {
+      toast.success('Display removed and unpairing signal sent')
+      router.push('/dashboard/screens')
+    },
     onError: (error: Error) => toast.error(error.message),
   })
 
@@ -139,6 +151,12 @@ export default function ScreenDetailPage() {
                 >
                   <Clock className="size-4" aria-hidden="true" /> Hours
                 </button>
+                <button
+                  onClick={() => setDeleteOpen(true)}
+                  className="text-destructive hover:bg-destructive/10 flex cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium"
+                >
+                  <Trash2 className="size-4" aria-hidden="true" /> Remove
+                </button>
               </div>
             )}
           </div>
@@ -190,6 +208,26 @@ export default function ScreenDetailPage() {
             onOpenChange={setSettingsOpen}
           />
           <ScreenHoursDialog key={`hours-${hoursOpen}`} screen={screen} open={hoursOpen} onOpenChange={setHoursOpen} />
+          <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>Remove {label}?</DialogTitle>
+                <DialogDescription>
+                  This will permanently unpair and remove this display from your workspace. The physical TV will be automatically signed out and return to the pairing screen.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+                <Button
+                  variant="destructive"
+                  disabled={deleteMutation.isPending}
+                  onClick={() => deleteMutation.mutate()}
+                >
+                  {deleteMutation.isPending ? 'Removing…' : 'Remove Display'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
       <ScreenDetailsDrawer screen={screen} open={detailsOpen} onOpenChange={setDetailsOpen} />

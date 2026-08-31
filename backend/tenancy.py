@@ -66,9 +66,24 @@ class TenantScope:
         organization_column = getattr(model, "organization_id", None)
         if organization_column is None:
             raise RuntimeError(f"{model.__name__} is not tenant scoped")
-        if is_super_admin(self.user):
-            return self.db.query(model)
-        return self.db.query(model).filter(organization_column == self.organization_id)
+
+        query = self.db.query(model)
+        if not is_super_admin(self.user):
+            query = query.filter(organization_column == self.organization_id)
+
+        # Archived rows are excluded here rather than at each call site, for the same
+        # reason the organisation filter is: there are forty-odd places that query a
+        # Screen, and a rule enforced in forty places is a rule that will be missed in
+        # one. This funnel is where "rows this user may see" is already decided.
+        #
+        # Deliberately applies to any model carrying `deleted_at`, so a second archivable
+        # table inherits it instead of repeating the mistake. A caller that genuinely
+        # needs archived rows -- reporting over a period that includes a removed screen --
+        # goes through self.db directly and says so.
+        archived_column = getattr(model, "deleted_at", None)
+        if archived_column is not None:
+            query = query.filter(archived_column.is_(None))
+        return query
 
     def get(self, model: type[TenantModel], record_id: int) -> TenantModel | None:
         return self.query(model).filter(model.id == record_id).first()

@@ -61,6 +61,11 @@ object HeartbeatReporter {
         )
         
         val rtt = System.currentTimeMillis() - tSent
+        if (response.code() == 404 || response.code() == 401 || response.code() == 403) {
+            android.util.Log.w("HeartbeatReporter", "Screen deleted or credentials revoked on server (HTTP ${response.code()}); signing out")
+            com.olrac.signage.boot.PlayerLauncher.handleUnpairedOrDeleted(appContext)
+            return false
+        }
         if (response.isSuccessful) {
             response.body()?.let { body ->
                 val edit = preferences.edit()
@@ -76,6 +81,10 @@ object HeartbeatReporter {
                     if (cmd == "bring_to_front" || cmd == "launch_app") {
                         android.util.Log.i("HeartbeatReporter", "Received $cmd command from server; bringing app to front")
                         com.olrac.signage.boot.PlayerLauncher.launch(appContext, delayMs = 500L, reason = "heartbeat_command")
+                    } else if (cmd == "reset" || cmd == "unpair") {
+                        android.util.Log.w("HeartbeatReporter", "Received $cmd command from server; signing out")
+                        com.olrac.signage.boot.PlayerLauncher.handleUnpairedOrDeleted(appContext)
+                        return false
                     }
                 }
 

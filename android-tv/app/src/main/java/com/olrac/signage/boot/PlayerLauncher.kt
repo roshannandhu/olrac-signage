@@ -16,6 +16,10 @@ import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.olrac.signage.R
+import com.olrac.signage.data.AppDatabase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 
 /**
  * Brings the player to the foreground after boot, or on remote "bring_to_front" commands.
@@ -161,6 +165,48 @@ object PlayerLauncher {
             Log.i(TAG, "Direct startActivity accepted (reason=$reason)")
         } catch (exception: Exception) {
             Log.d(TAG, "Direct startActivity refused, relying on full-screen intent/alarm (reason=$reason)")
+        }
+    }
+
+    fun handleUnpairedOrDeleted(context: Context) {
+        val appContext = context.applicationContext
+        Log.w(TAG, "Device unpair/deletion initiated. Clearing state and returning to setup.")
+        try {
+            // 1. Clear pairing state & device secret.
+            //
+            // clearWorkspace rather than clearPairing: this path is also reached when an
+            // operator REMOVES the screen from their fleet, not only when it is unlinked
+            // for re-pairing. clearPairing deliberately keeps the cached playlist so the
+            // same panel resumes after re-linking, which is wrong here -- the screen no
+            // longer belongs to that tenant, and their ads must not keep playing on it.
+            com.olrac.signage.data.DeviceState(appContext).clearWorkspace()
+            com.olrac.signage.network.ApiClient.clearToken()
+
+            // 2. Clear the cached playlist AND the media it points at, in the background.
+            //    Dropping only the rows leaves the downloaded files on disk, where they
+            //    survive until something else happens to sweep them.
+            @Suppress("OPT_IN_USAGE")
+            GlobalScope.launch(Dispatchers.IO) {
+                try {
+                    AppDatabase.getDatabase(appContext).playlistDao().replaceAll(emptyList())
+                    appContext.filesDir.listFiles()
+                        ?.filter { it.name.startsWith("content-") }
+                        ?.forEach { it.delete() }
+                } catch (_: Exception) {}
+            }
+
+            // 3. Stop PlaybackService
+            try {
+                appContext.stopService(Intent(appContext, com.olrac.signage.service.PlaybackService::class.java))
+            } catch (_: Exception) {}
+
+            // 4. Launch MainActivity with clean task flags to show Google Sign-In / Pairing
+            val intent = Intent(appContext, com.olrac.signage.MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            }
+            appContext.startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error while unpairing device", e)
         }
     }
 

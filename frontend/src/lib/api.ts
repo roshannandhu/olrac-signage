@@ -156,6 +156,10 @@ export const api = {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pair_code: pairCode }),
   }),
   revokeScreenDeviceSecret: (screenId: number) => fetchWithAuth(`/screens/${screenId}/device-secret`, { method: 'DELETE' }),
+  // 204, so there is no body to read -- typed void rather than an object the caller would
+  // find undefined at runtime. Archives the screen: play history keeps its attribution and
+  // the panel is signed out of the workspace on its next contact.
+  deleteScreen: (screenId: number) => fetchWithAuth<void>(`/screens/${screenId}`, { method: 'DELETE' }),
   assignPlaylist: (screenId: number, playlistId: number) =>
     fetchWithAuth(`/screens/${screenId}/assign/${playlistId}`, { method: 'POST' }),
   clearScreenAssignment: (screenId: number) =>

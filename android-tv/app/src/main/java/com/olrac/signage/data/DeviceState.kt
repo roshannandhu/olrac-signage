@@ -185,6 +185,33 @@ class DeviceState(context: Context) {
             .commit()
     }
 
+    /**
+     * Forget the workspace entirely, for a screen the operator removed from the fleet.
+     *
+     * Wider than [clearPairing], which an operator uses to re-link the SAME panel and so
+     * deliberately keeps the cached playlist for continuity. Here the screen no longer
+     * belongs to that tenant, so their content must not survive on it: leaving the cached
+     * items behind would keep a removed TV playing a customer's ads, which is the thing
+     * removing it was meant to stop.
+     *
+     * [deviceId] is deliberately NOT cleared. It is derived from the hardware and is what
+     * lets the panel be recognised if it is paired again; clearing it would make every
+     * removal look like a brand-new device and lose the reinstall matching.
+     */
+    fun clearWorkspace() {
+        preferences.edit()
+            .putBoolean(KEY_IS_PAIRED, false)
+            .remove(KEY_SCREEN_NAME)
+            .remove(KEY_MAINTENANCE_PIN)
+            .remove(KEY_DEVICE_SECRET)
+            .remove("screen_id")
+            .remove("organization_id")
+            .remove("playlist_updated_at")
+            .remove("current_item_id")
+            .remove("playback_state")
+            .commit()
+    }
+
     fun setApiBaseUrlOverride(baseUrl: String) {
         preferences.edit().putString(KEY_API_BASE_URL, baseUrl).commit()
     }

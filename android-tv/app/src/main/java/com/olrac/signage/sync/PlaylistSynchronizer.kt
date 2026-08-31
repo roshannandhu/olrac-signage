@@ -72,6 +72,26 @@ class PlaylistSynchronizer(context: Context) {
                     val interval = saveInterval(responseInterval ?: currentInterval)
                     return@withContext SyncOutcome(true, false, false, interval)
                 }
+                if (response.code() == 404 || response.code() == 401 || response.code() == 403) {
+                    android.util.Log.w("PlaylistSynchronizer", "Screen deleted or credentials revoked (HTTP ${response.code()}); signing out")
+                    com.olrac.signage.boot.PlayerLauncher.handleUnpairedOrDeleted(appContext)
+                    return@withContext SyncOutcome(false, false, true, currentInterval, "Screen unlinked")
+                }
+                // 404 is not a transient failure and must not be retried like one. It means
+                // the server has no screen for this device id -- the operator removed this TV
+                // from their fleet. Treated as retryable (which it was) the panel keeps
+                // playing the removed tenant's cached playlist forever, reconnecting every
+                // minute to a workspace it no longer belongs to.
+                if (response.code() == 404) {
+                    com.olrac.signage.boot.PlayerLauncher.handleUnpairedOrDeleted(appContext)
+                    return@withContext SyncOutcome(
+                        successful = false,
+                        retryable = false,
+                        changed = true,
+                        intervalSeconds = currentInterval,
+                        error = "This screen was removed from its workspace"
+                    )
+                }
                 if (!response.isSuccessful) {
                     return@withContext SyncOutcome(
                         successful = false,
@@ -100,9 +120,22 @@ class PlaylistSynchronizer(context: Context) {
                 }
 
                 syncData.pending_command?.let { cmd ->
+                    if (cmd == "deregister") {
+                        com.olrac.signage.boot.PlayerLauncher.handleUnpairedOrDeleted(appContext)
+                        return@withContext SyncOutcome(
+                            successful = true,
+                            retryable = false,
+                            changed = true,
+                            intervalSeconds = interval,
+                        )
+                    }
                     if (cmd == "bring_to_front" || cmd == "launch_app") {
                         android.util.Log.i("PlaylistSynchronizer", "Received $cmd command from sync; bringing app to front")
                         com.olrac.signage.boot.PlayerLauncher.launch(appContext, delayMs = 500L, reason = "sync_command")
+                    } else if (cmd == "reset" || cmd == "unpair") {
+                        android.util.Log.w("PlaylistSynchronizer", "Received $cmd command from sync; signing out")
+                        com.olrac.signage.boot.PlayerLauncher.handleUnpairedOrDeleted(appContext)
+                        return@withContext SyncOutcome(false, false, true, interval, "Screen reset command")
                     }
                 }
 

@@ -3,7 +3,7 @@
 import { useMemo, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { LayoutGrid, Layers3, List, ListVideo, MonitorPlay, Search, Settings2, Tv2 } from 'lucide-react'
+import { LayoutGrid, Layers3, List, ListVideo, MonitorPlay, Search, Settings2, Trash2, Tv2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { AssetCard, AssetGrid, OverlayBadge } from '@/components/dashboard/asset-card'
 import { BulkActionBar, SelectAllCheckbox } from '@/components/dashboard/bulk-action-bar'
@@ -13,7 +13,7 @@ import { ListToolbar, commonSorts, sortItems, type CommonSort } from '@/componen
 import { StatusIndicator } from '@/components/dashboard/status-indicator'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -74,6 +74,8 @@ export default function ScreensPage() {
   const view = useStoredView()
   const [pairOpen, setPairOpen] = useState(false)
   const [pairCode, setPairCode] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<Screen | null>(null)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
 
   const chooseView = (next: ViewMode) => {
     window.localStorage.setItem(VIEW_KEY, next)
@@ -104,6 +106,29 @@ export default function ScreensPage() {
   const pairMutation = useMutation({
     mutationFn: api.pairScreen,
     onSuccess: () => { refresh(); toast.success('Screen paired'); setPairOpen(false); setPairCode('') },
+    onError: fail,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (screenId: number) => api.deleteScreen(screenId),
+    onSuccess: () => {
+      refresh()
+      toast.success('Display removed and unpairing signal sent')
+      setDeleteTarget(null)
+    },
+    onError: fail,
+  })
+
+  const bulkDelete = useMutation({
+    mutationFn: async () => {
+      for (const id of bulk.selected) await api.deleteScreen(id)
+    },
+    onSuccess: () => {
+      refresh()
+      toast.success(`Removed ${bulk.selected.length} displays and sent unpairing signals`)
+      bulk.clear()
+      setBulkDeleteOpen(false)
+    },
     onError: fail,
   })
 
@@ -241,6 +266,14 @@ export default function ScreensPage() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => setBulkDeleteOpen(true)}
+          >
+            <Trash2 data-icon="inline-start" /> Remove screens
+          </Button>
         </BulkActionBar>
       )}
 
@@ -292,6 +325,15 @@ export default function ScreensPage() {
                 </Link>
                 {screen.app_version && <Badge variant="outline" className="hidden sm:inline-flex">v{screen.app_version}</Badge>}
                 <StatusIndicator status={screen.status} />
+                {canEdit && (
+                  <button
+                    onClick={() => setDeleteTarget(screen)}
+                    title="Remove display"
+                    className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded p-1.5 transition-colors"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                )}
               </div>
             )
           })}
@@ -337,6 +379,14 @@ export default function ScreensPage() {
                       <DropdownMenuItem render={<Link href="/dashboard/groups" />}>
                         <Layers3 aria-hidden="true" /> Manage groups
                       </DropdownMenuItem>
+                      {canEdit && (
+                        <DropdownMenuItem
+                          onClick={() => setDeleteTarget(screen)}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 aria-hidden="true" /> Remove screen
+                        </DropdownMenuItem>
+                      )}
                     </>
                   }
                 />
@@ -345,6 +395,50 @@ export default function ScreensPage() {
           })}
         </AssetGrid>
       )}
+
+      {/* Single Screen Delete Dialog */}
+      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove {deleteTarget?.name || `Screen ${deleteTarget?.id}`}?</DialogTitle>
+            <DialogDescription>
+              This will permanently unpair and remove this display from your workspace. The physical TV will be automatically signed out and return to the pairing screen.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+            >
+              {deleteMutation.isPending ? 'Removing…' : 'Remove Display'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Dialog */}
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove {bulk.selected.length} displays?</DialogTitle>
+            <DialogDescription>
+              This will unpair and remove all {bulk.selected.length} selected displays from your workspace. Connected physical TVs will be automatically signed out.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setBulkDeleteOpen(false)}>Cancel</Button>
+            <Button
+              variant="destructive"
+              disabled={bulkDelete.isPending}
+              onClick={() => bulkDelete.mutate()}
+            >
+              {bulkDelete.isPending ? 'Removing…' : `Remove ${bulk.selected.length} Displays`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -236,7 +236,15 @@ def legacy_device_auth_allowed() -> bool:
 
 
 def verify_device_auth(device_id: str, credentials: HTTPAuthorizationCredentials | None, db: Session) -> models.Screen:
-    screen = db.query(models.Screen).filter(models.Screen.device_id == device_id).first()
+    # deleted_at is checked here, not only in the dashboard's scope: this is the single
+    # door every device endpoint comes through, so an archived screen loses sync,
+    # heartbeat, play-log upload and its playlist in one place. The 404 is what the
+    # player reads as "you were removed" and resets on.
+    screen = (
+        db.query(models.Screen)
+        .filter(models.Screen.device_id == device_id, models.Screen.deleted_at.is_(None))
+        .first()
+    )
     if not screen:
         raise HTTPException(status_code=404, detail="Screen not found")
 
@@ -350,14 +358,24 @@ async def register_tv(
     db: Session = Depends(database.get_db),
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ):
+    # Both lookups exclude archived rows, so a panel whose screen was removed comes back
+    # as a genuinely new one and shows a fresh pairing code. Without this the operator
+    # deletes a TV, the TV re-registers, and the row they just removed reappears.
     # 1. Match by device_id
-    db_screen = db.query(models.Screen).filter(models.Screen.device_id == req.device_id).first()
+    db_screen = (
+        db.query(models.Screen)
+        .filter(models.Screen.device_id == req.device_id, models.Screen.deleted_at.is_(None))
+        .first()
+    )
 
     # 2. Match by installation_id if device_id didn't match (e.g. after reinstall/reset)
     if not db_screen and req.installation_id:
         db_screen = (
             db.query(models.Screen)
-            .filter(models.Screen.installation_id == req.installation_id)
+            .filter(
+                models.Screen.installation_id == req.installation_id,
+                models.Screen.deleted_at.is_(None),
+            )
             .order_by(models.Screen.last_seen.desc().nullslast(), models.Screen.id.desc())
             .first()
         )
@@ -477,7 +495,10 @@ def ensure_screen_quota(db: Session, organization_id: int, action: str) -> None:
         models.Organization.id == organization_id
     ).one()
 
+    # Archived screens do not occupy a slot -- removing a TV has to actually free the
+    # quota it was using, or the operator deletes one and still cannot add another.
     screen_count = db.query(models.Screen).filter(
+        models.Screen.deleted_at.is_(None),
         models.Screen.organization_id == organization_id,
         models.Screen.status != "waiting_pairing",
     ).count()
@@ -617,7 +638,7 @@ def bind_screen_to_org(
         ).first()
 
     if not screen:
-        screen = db.query(models.Screen).filter(models.Screen.device_id == device_id).first()
+        screen = db.query(models.Screen).filter(models.Screen.device_id == device_id, models.Screen.deleted_at.is_(None)).first()
 
     # If an existing screen with installation_id was found, clean up any transient placeholder holding device_id
     if screen and screen.device_id != device_id:
@@ -1085,7 +1106,7 @@ def enroll_device(req: schemas.EnrollRequest, db: Session = Depends(database.get
     if token.max_uses is not None and token.use_count >= token.max_uses:
         raise TOKEN_ERROR
 
-    screen = db.query(models.Screen).filter(models.Screen.device_id == req.device_id).first()
+    screen = db.query(models.Screen).filter(models.Screen.device_id == req.device_id, models.Screen.deleted_at.is_(None)).first()
 
     if screen and screen.organization_id not in (None, token.organization_id):
         # A device already belonging to another organisation must never be re-homed by
@@ -1177,7 +1198,7 @@ def auth_device(
     req: schemas.DeviceAuthRequest, 
     db: Session = Depends(database.get_db)
 ):
-    screen = db.query(models.Screen).filter(models.Screen.device_id == req.device_id).first()
+    screen = db.query(models.Screen).filter(models.Screen.device_id == req.device_id, models.Screen.deleted_at.is_(None)).first()
     if not screen or not screen.device_secret_hash:
         raise HTTPException(status_code=401, detail="Invalid credentials")
         
@@ -1380,6 +1401,64 @@ def patch_screen(
     return db_screen
 
 
+@router.delete("/{screen_id}", status_code=204)
+async def remove_screen(
+    screen_id: int,
+    scope: TenantScope = Depends(require_tenant_roles("owner")),
+):
+    """Remove a TV from the fleet and sign the panel out of this workspace.
+
+    Archives rather than deletes. play_logs and play_log_hourly_rollups both hold a NOT
+    NULL foreign key to this row, and the booking report attributes plays to a screen by
+    name -- so a DELETE would either fail on the constraint or, with it relaxed, quietly
+    erase the proof of play an advertiser was billed on. The screen leaves the fleet, the
+    history keeps it.
+
+    Owner-only, unlike the editor-level screen edits: this ends a device's access to the
+    workspace, which is closer to revoking a credential than to renaming a screen.
+    """
+    screen = scope.get(models.Screen, screen_id)
+    if not screen:
+        raise HTTPException(status_code=404, detail="Screen not found")
+
+    device_id = screen.device_id
+
+    screen.deleted_at = models.utcnow()
+    # The credential goes with the row. Without this, a token minted moments before the
+    # removal stays valid for its full hour -- and verify_device_auth would refuse it
+    # anyway, but leaving a live hash on an archived screen is a loaded gun for whatever
+    # reads that column next.
+    screen.device_secret_hash = None
+    # Frees the identifiers so the same panel can be paired again as a new screen. Held
+    # onto, the unique constraint on device_id would reject the fresh row and the TV could
+    # never rejoin -- a removal that quietly bricks the hardware. The old values stay
+    # readable on the archived row for anyone tracing what happened.
+    screen.device_id = f"removed:{screen.id}:{device_id}" if device_id else None
+    screen.installation_id = None
+    # Nothing should still be scheduled to it.
+    screen.playlist_id = None
+    screen.group_id = None
+    screen.pair_code = None
+    scope.db.commit()
+
+    # Tell it now rather than at its next sync. A screen removed mid-playback would
+    # otherwise keep showing the old playlist for up to PLAYER_SYNC_INTERVAL_SECONDS,
+    # which for an operator who just cut a customer off is exactly the wrong behaviour.
+    # Best-effort: the 404 on the next sync is the guarantee, this is the speed.
+    if device_id:
+        await queue_device_command(device_id, "deregister", ttl_seconds=3600)
+        try:
+            redis = database.get_redis()
+            payload = json.dumps({"type": "deregister", "command": "deregister"})
+            await redis.publish(f"screen:{device_id}", payload)
+            await redis.publish(f"device:{device_id}", payload)
+        except Exception as exc:  # noqa: BLE001 - the 404 still resets it
+            logger.warning("Could not push deregister to %s: %s", device_id, exc)
+
+    logger.info("Screen %s removed from organisation %s", screen_id, screen.organization_id)
+    return Response(status_code=204)
+
+
 @router.delete("/{screen_id}/device-secret")
 def revoke_device_secret(
     screen_id: int,
@@ -1391,6 +1470,61 @@ def revoke_device_secret(
     db_screen.device_secret_hash = None
     scope.db.commit()
     return {"status": "ok", "message": "Device secret revoked"}
+
+
+@router.delete("/{screen_id}")
+async def delete_screen(
+    screen_id: int,
+    scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
+):
+    """Permanently delete a screen and instruct the physical TV to sign out immediately."""
+    db_screen = scope.get(models.Screen, screen_id)
+    if not db_screen:
+        raise HTTPException(status_code=404, detail="Screen not found")
+
+    device_id = db_screen.device_id
+    org_id = db_screen.organization_id
+
+    # 1. Queue and publish instant remote reset / unpair command
+    if device_id:
+        try:
+            await queue_device_command(device_id, "reset", 300)
+        except Exception as exc:
+            logger.warning("Could not queue reset command for %s: %s", device_id, exc)
+
+        payload = json.dumps({"type": "command", "command": "reset", "reason": "unpaired_by_admin"})
+        try:
+            redis = database.get_redis()
+            await redis.publish(f"screen:{device_id}", payload)
+            await redis.publish(f"device:{device_id}", payload)
+            await redis.publish(f"screen:{screen_id}", payload)
+            if org_id:
+                await redis.publish(f"org:{org_id}", payload)
+        except Exception as exc:
+            logger.warning("Failed to publish reset command to redis: %s", exc)
+
+        try:
+            from .websockets import broadcast_in_memory
+            await broadcast_in_memory(f"screen:{device_id}", payload)
+            await broadcast_in_memory(f"device:{device_id}", payload)
+            await broadcast_in_memory(f"screen:{screen_id}", payload)
+            if org_id:
+                await broadcast_in_memory(f"org:{org_id}", payload)
+        except Exception as exc:
+            logger.warning("Failed to broadcast reset command in-memory: %s", exc)
+
+    # 2. Clean up child references
+    scope.db.query(models.AdPlacementTarget).filter(models.AdPlacementTarget.screen_id == screen_id).delete(synchronize_session=False)
+    scope.db.query(models.ScreenshotLog).filter(models.ScreenshotLog.screen_id == screen_id).delete(synchronize_session=False)
+    scope.db.query(models.Alert).filter(models.Alert.screen_id == screen_id).delete(synchronize_session=False)
+    scope.db.query(models.PlayLog).filter(models.PlayLog.screen_id == screen_id).delete(synchronize_session=False)
+    scope.db.query(models.PlayLogHourlyRollup).filter(models.PlayLogHourlyRollup.screen_id == screen_id).delete(synchronize_session=False)
+
+    # 3. Delete the screen from database
+    scope.db.delete(db_screen)
+    scope.db.commit()
+
+    return {"status": "ok", "message": f"Screen {screen_id} deleted and unpairing signal broadcast."}
 
 
 @router.post("/heartbeat")

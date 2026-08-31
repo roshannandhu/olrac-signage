@@ -25,7 +25,14 @@ def verify_device_token(device_id: str, token: str, db: Session) -> models.Scree
     """
     from .screens import legacy_device_auth_allowed
 
-    screen = db.query(models.Screen).filter(models.Screen.device_id == device_id).first()
+    # Same archive check as screens.verify_device_auth. A socket subscribed to org:{id}
+    # receives every fleet event for that tenant, so leaving it open to a removed screen
+    # would keep streaming a customer's activity to a panel they had deliberately cut off.
+    screen = (
+        db.query(models.Screen)
+        .filter(models.Screen.device_id == device_id, models.Screen.deleted_at.is_(None))
+        .first()
+    )
     if not screen:
         raise HTTPException(status_code=404, detail="Screen not found")
 

@@ -221,6 +221,12 @@ class Screen(Base):
     organization_id = Column(Integer, ForeignKey("organizations.id"), nullable=True, index=True)
     device_id = Column(String, unique=True, index=True, nullable=True)
     device_secret_hash = Column(String, nullable=True)
+    # Archived, not deleted. play_logs and play_log_hourly_rollups both carry a NOT NULL
+    # foreign key to this row, and the booking report attributes plays to a screen BY NAME
+    # -- so removing the row would either fail outright or, with the constraint relaxed,
+    # silently drop the evidence an advertiser was billed on. The fleet loses the screen;
+    # the history keeps it.
+    deleted_at = Column(UtcDateTime, nullable=True, index=True)
     installation_id = Column(String, nullable=True)
     pair_code = Column(String, unique=True, index=True, nullable=True)
     pair_code_expires_at = Column(UtcDateTime, nullable=True)

@@ -72,7 +72,7 @@ def get_s3_config() -> dict[str, str]:
     endpoint = raw_endpoint if raw_endpoint else R2_ENDPOINT_DEFAULT
 
     raw_bucket = os.getenv("S3_BUCKET_NAME", "").strip()
-    bucket = raw_bucket if raw_bucket else R2_BUCKET_DEFAULT
+    bucket = raw_bucket if (raw_bucket and raw_bucket not in {"olrac-media", "mock"}) else R2_BUCKET_DEFAULT
 
     region = (os.getenv("AWS_REGION") or "auto").strip()
     return {

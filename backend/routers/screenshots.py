@@ -81,14 +81,15 @@ def upload_device_screenshot(
             logger.error(f"Failed to upload screenshot to S3: {e}")
             raise HTTPException(status_code=500, detail="Storage error")
     else:
-        org_dir = os.path.join(UPLOAD_DIR, prefix)
-        os.makedirs(org_dir, exist_ok=True)
-        local_path = os.path.join(org_dir, unique_filename)
+        local_path = os.path.join(UPLOAD_DIR, storage_key)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
         with open(local_path, "wb") as f:
             f.write(file.file.read())
-        # The served path must match the directory just written to, which is why both
-        # sides read the same `prefix`.
-        storage_key = f"{prefix}/{unique_filename}"
+        # Both branches write the one `storage_key` built above. This branch used to
+        # rebuild it as f"{prefix}/{unique_filename}", dropping the screenshots/ root that
+        # the key exists to carry -- so on local disk every capture was filed into the
+        # tenant's content folder, mixed in with their uploaded media, and the same
+        # deployment moving to R2 silently changed where screenshots lived.
         file_url = public_upload_url(storage_key)
 
     screenshot = models.ScreenshotLog(

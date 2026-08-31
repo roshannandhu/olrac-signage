@@ -106,6 +106,26 @@ def test_thumbnail_is_written_where_its_url_points():
     assert 'thumbnail = public_upload_url(f"{storage_prefix(organization)}/' in source
 
 
+def test_screenshots_land_in_one_place_whichever_backend_is_configured():
+    """Local disk and R2 must file a capture under the same key, or the folder layout
+    changes the day object storage is switched on.
+
+    The local branch used to rebuild the key as f"{prefix}/{unique_filename}", dropping
+    the screenshots/ root -- so captures went into the tenant's content folder on disk and
+    into screenshots/<tenant>/ in the bucket, from identical code.
+    """
+    import inspect
+    from backend.routers import screenshots
+
+    source = inspect.getsource(screenshots.upload_device_screenshot)
+    assert source.count('storage_key = ') == 1, (
+        "upload_device_screenshot must build its storage key once and use it in both "
+        "branches; a second assignment is how the two backends drifted apart"
+    )
+    assert 'storage_key = f"screenshots/{prefix}/{unique_filename}"' in source
+    assert "os.path.join(UPLOAD_DIR, storage_key)" in source
+
+
 if __name__ == "__main__":
     for name, function in sorted(globals().items()):
         if name.startswith("test_") and callable(function):

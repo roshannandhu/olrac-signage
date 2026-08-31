@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "android-tv/app/build.gradle.kts": {
-    "mtime": 1788138329.3692908,
-    "ast_hash": "bbe91c7603edc06aac8f7505db9557f8",
+    "mtime": 1788196623.5488362,
+    "ast_hash": "bca7004998e21c83d9aff3ba7e1118e2",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/MainActivity.kt": {

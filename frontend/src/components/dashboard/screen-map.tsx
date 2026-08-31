@@ -6,16 +6,9 @@ import { useTheme } from 'next-themes'
 import { Badge } from '@/components/ui/badge'
 import { useGoogleMaps } from '@/hooks/use-google-maps'
 
-// OpenStreetMap standard tiles — free, no API key needed, universally recognised.
-//
-// CARTO basemaps now require a paid API key and display watermarks without one, so we
-// switched away from them. The standard OSM raster tiles are hosted by the OSM
-// Foundation and carry only a fair-use policy (see
-// https://operations.osmfoundation.org/policies/tiles/). For dark mode we use Stadia's
-// Alidade Smooth Dark which is free up to generous limits and keys by referrer rather
-// than explicit token.
+// OpenStreetMap standard tiles — 100% free, universal, zero API keys or authentication required.
 const TILES = {
-  dark: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png',
+  dark: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
   light: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
 }
 const ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -194,7 +187,11 @@ function LeafletMap({ points, height }: { points: MapPoint[]; height: number }) 
   return (
     <div
       ref={shell}
-      className="olrac-map border-hairline bg-muted relative z-0 overflow-hidden rounded-xl border"
+      className={`olrac-map border-hairline bg-muted relative z-0 overflow-hidden rounded-xl border ${
+        resolvedTheme === 'dark'
+          ? '[&_.leaflet-tile-pane]:brightness-[0.7] [&_.leaflet-tile-pane]:invert-[1] [&_.leaflet-tile-pane]:hue-rotate-[180deg] [&_.leaflet-tile-pane]:contrast-[1.1]'
+          : ''
+      }`}
       style={{ height: fullscreen ? '100vh' : height }}
     >
       <div ref={container} className="size-full" />

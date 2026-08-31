@@ -1752,7 +1752,7 @@ async def sync_tv(
         playlist_payload = schemas.PlaylistResponse.model_validate(playlist)
         valid_items = []
         for item in playlist_payload.items:
-            if item.content.status == "ready":
+            if item.content.status in {"ready", "processing"}:
                 rendition = select_rendition(item.content, screen)
                 if rendition:
                     item.content.file_url = rendition.file_url

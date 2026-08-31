@@ -37,16 +37,19 @@ def _detect_lan_host() -> str:
 
 
 def media_base_url() -> str:
-    """Origin that players and browsers should fetch media from.
-
-    Defaults to this machine's LAN address rather than localhost: a TV handed "localhost"
-    fetches from itself and gets nothing.
-    """
+    """Origin that players and browsers should fetch media from."""
     configured = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if configured and not ("localhost" in configured or "127.0.0.1" in configured):
+        return configured
+    render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
+    if render_url:
+        return render_url
     if configured:
         return configured
-    host = os.getenv("PUBLIC_HOST", "").strip() or _detect_lan_host()
-    return f"http://{host}:{os.getenv('PORT', '8010')}"
+    public_host = os.getenv("PUBLIC_HOST", "").strip()
+    if public_host and not ("127.0.0.1" in public_host or "localhost" in public_host):
+        return f"http://{public_host}:{os.getenv('PORT', '8010')}"
+    return "https://olrac-signage-32lh.onrender.com"
 
 
 def resolve_media_url(value: str | None) -> str | None:

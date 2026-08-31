@@ -1,14 +1,17 @@
 'use client'
 
+import { useState } from 'react'
 import Image from 'next/image'
-import { ImageIcon } from 'lucide-react'
+import { ImageIcon, Video } from 'lucide-react'
 import type { ContentItem } from '@/lib/types'
 
 import { resolveMediaUrl } from '@/lib/api'
 
 export function MediaThumbnail({ item, className = '' }: { item: ContentItem; className?: string }) {
-  const imageSource = resolveMediaUrl(item.thumbnail || (item.type === 'image' ? item.file_url : null))
+  const [hasError, setHasError] = useState(false)
+  const imageSource = !hasError ? resolveMediaUrl(item.thumbnail || (item.type === 'image' ? item.file_url : null)) : null
   const videoSource = resolveMediaUrl(item.file_url)
+
   return (
     <div className={`bg-muted relative overflow-hidden ${className}`}>
       {imageSource ? (
@@ -17,13 +20,20 @@ export function MediaThumbnail({ item, className = '' }: { item: ContentItem; cl
           alt=""
           fill
           unoptimized
+          onError={() => setHasError(true)}
           sizes="(max-width: 768px) 100vw, 25vw"
           className="object-cover transition-transform duration-500 group-hover/card:scale-[1.03] motion-reduce:transition-none"
         />
       ) : item.type === 'video' ? (
-        <video src={videoSource} muted preload="metadata" className="size-full object-cover" aria-label={`${item.name} preview`} />
+        videoSource ? (
+          <video src={videoSource} muted preload="metadata" className="size-full object-cover" aria-label={`${item.name} preview`} />
+        ) : (
+          <div className="text-muted-foreground/50 grid size-full place-items-center bg-gradient-to-br from-slate-900 to-slate-800">
+            <Video className="size-7 text-primary/70" />
+          </div>
+        )
       ) : (
-        <div className="text-muted-foreground grid size-full place-items-center">
+        <div className="text-muted-foreground/50 grid size-full place-items-center bg-gradient-to-br from-slate-900 to-slate-800">
           <ImageIcon className="size-7" />
         </div>
       )}

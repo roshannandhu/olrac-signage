@@ -140,6 +140,8 @@ def set_group_screens(
     group.updated_at = now
     scope.db.commit()
     scope.db.refresh(group)
+    from .websockets import trigger_screen_sync
+    trigger_screen_sync(organization_id=scope.organization_id, group_id=group.id)
     return serialize_group(group)
 
 
@@ -165,14 +167,8 @@ async def assign_group_playlist(
     scope.db.commit()
     scope.db.refresh(group)
     
-    import json
-    from .. import database
-    try:
-        redis = database.get_redis()
-        await redis.publish(f"group:{group.id}", json.dumps({"type": "playlist_changed"}))
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Failed to publish to redis: {e}")
+    from .websockets import trigger_screen_sync
+    trigger_screen_sync(organization_id=scope.organization_id, group_id=group.id)
     
     return serialize_group(group)
 

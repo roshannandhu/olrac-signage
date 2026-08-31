@@ -93,6 +93,48 @@ async def broadcast_in_memory(channel: str, text: str):
             pass
 
 
+async def broadcast_ws_event(channel: str, event_data: dict[str, Any]):
+    """Broadcast an event to both in-memory sockets and Redis pubsub."""
+    payload_str = json.dumps(event_data)
+    await broadcast_in_memory(channel, payload_str)
+    try:
+        redis = database.get_redis()
+        await redis.publish(channel, payload_str)
+    except Exception:
+        pass
+
+
+def trigger_screen_sync(
+    organization_id: int | None = None,
+    screen_device_id: str | None = None,
+    group_id: int | None = None,
+):
+    """Synchronous / Async friendly helper to push real-time sync signals to screens."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    event_payload = {"type": "sync", "command": "sync"}
+
+    async def _dispatch():
+        if screen_device_id:
+            await broadcast_ws_event(f"screen:{screen_device_id}", event_payload)
+        if group_id:
+            await broadcast_ws_event(f"group:{group_id}", event_payload)
+        if organization_id:
+            await broadcast_ws_event(f"org:{organization_id}", event_payload)
+            await broadcast_ws_event(f"dashboard:{organization_id}", {"type": "playlist_updated"})
+
+    if loop and loop.is_running():
+        loop.create_task(_dispatch())
+    else:
+        try:
+            asyncio.run(_dispatch())
+        except Exception as exc:
+            logger.debug("Failed to dispatch sync via asyncio.run: %s", exc)
+
+
 # The literal dashboard route must be declared before the parameterised device route
 # below: Starlette matches in definition order, so "/{device_id}/ws" otherwise claims
 # /dashboard/ws with device_id="dashboard", fails the device lookup, and rejects the

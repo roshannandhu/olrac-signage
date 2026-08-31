@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 
 from .. import models, schemas
 from ..tenancy import TenantScope, get_tenant_scope, require_tenant_roles
+from .websockets import trigger_screen_sync
 
 router = APIRouter()
 
@@ -111,6 +112,7 @@ def update_playlist(
     bump_playlist(playlist)
     scope.db.commit()
     scope.db.refresh(playlist)
+    trigger_screen_sync(organization_id=scope.organization_id)
     return playlist
 
 
@@ -150,6 +152,7 @@ def add_item_to_playlist(
     scope.db.add(db_item)
     scope.db.commit()
     scope.db.refresh(db_item)
+    trigger_screen_sync(organization_id=scope.organization_id)
     return db_item
 
 
@@ -171,6 +174,7 @@ def reorder_playlist_items(
         by_id[item_id].order = index
     bump_playlist(playlist)
     scope.db.commit()
+    trigger_screen_sync(organization_id=scope.organization_id)
     return {"status": "ok", "updated_at": playlist.updated_at}
 
 
@@ -215,6 +219,7 @@ def update_playlist_item(
     bump_playlist(item.playlist)
     scope.db.commit()
     scope.db.refresh(item)
+    trigger_screen_sync(organization_id=scope.organization_id)
     return item
 
 
@@ -237,6 +242,7 @@ def update_playlist_transitions(
     bump_playlist(playlist)
     scope.db.commit()
     scope.db.refresh(playlist)
+    trigger_screen_sync(organization_id=scope.organization_id)
     return playlist
 
 
@@ -258,6 +264,7 @@ def remove_item_from_playlist(
     scope.db.delete(item)
     bump_playlist(playlist)
     scope.db.commit()
+    trigger_screen_sync(organization_id=scope.organization_id)
     return {"status": "ok"}
 
 
@@ -280,4 +287,5 @@ def delete_playlist(
             screen.assignment_updated_at = now
     scope.db.delete(playlist)
     scope.db.commit()
+    trigger_screen_sync(organization_id=scope.organization_id)
     return {"status": "ok"}

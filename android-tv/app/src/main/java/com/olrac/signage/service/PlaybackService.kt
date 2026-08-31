@@ -93,7 +93,11 @@ class PlaybackService : Service() {
             when {
                 type == "request_screenshot" || command == "request_screenshot" -> ScreenshotManager.requestScreenshot()
                 type == "launch_app" || type == "bring_to_front" || command == "launch_app" || command == "bring_to_front" -> launchPlayer()
-                type == "sync_now" || type == "reload_playlist" || command == "sync_now" || command == "reload_playlist" -> immediateSyncSignals.trySend(Unit)
+                type in setOf("sync", "sync_now", "reload", "reload_playlist", "content_updated", "playlist_updated") ||
+                    command in setOf("sync", "sync_now", "reload", "reload_playlist", "content_updated", "playlist_updated") -> {
+                    android.util.Log.i("PlaybackService", "Received WS sync event (type=$type command=$command); triggering immediate sync")
+                    immediateSyncSignals.trySend(Unit)
+                }
                 // "deregister" is what the server queues when an operator removes the
                 // screen from their fleet; the others are the manual unlink. Same outcome.
                 type == "deregister" || command == "deregister" ||

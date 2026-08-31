@@ -1473,6 +1473,8 @@ def patch_screen(
     db_screen.assignment_updated_at = models.utcnow()
     scope.db.commit()
     scope.db.refresh(db_screen)
+    from .websockets import trigger_screen_sync
+    trigger_screen_sync(organization_id=scope.organization_id, screen_device_id=db_screen.device_id, group_id=db_screen.group_id)
     return db_screen
 
 
@@ -1740,13 +1742,8 @@ async def assign_playlist(
     playlist.updated_at = now
     scope.db.commit()
     
-    import json
-    try:
-        redis = database.get_redis()
-        await redis.publish(f"screen:{screen.device_id}", json.dumps({"type": "playlist_changed"}))
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Failed to publish to redis: {e}")
+    from .websockets import trigger_screen_sync
+    trigger_screen_sync(organization_id=scope.organization_id, screen_device_id=screen.device_id)
     
     return {"status": "ok", "message": "Playlist assigned"}
 
@@ -1763,13 +1760,8 @@ async def clear_direct_assignment(
     screen.assignment_updated_at = models.utcnow()
     scope.db.commit()
     
-    import json
-    try:
-        redis = database.get_redis()
-        await redis.publish(f"screen:{screen.device_id}", json.dumps({"type": "playlist_changed"}))
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Failed to publish to redis: {e}")
+    from .websockets import trigger_screen_sync
+    trigger_screen_sync(organization_id=scope.organization_id, screen_device_id=screen.device_id)
     
     return {"status": "ok"}
 

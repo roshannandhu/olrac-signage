@@ -176,6 +176,9 @@ def process_media_sync(content_id: int):
         stored_urls: dict[str, str] = {}
         stored_sizes: dict[str, int] = {}
 
+        from .media_urls import storage_prefix
+        prefix = storage_prefix(content.organization) if content.organization else str(organization_id)
+
         for name, (out_filename, out_filepath) in out_files.items():
             
             rend_info = probe_file(out_filepath)
@@ -196,7 +199,7 @@ def process_media_sync(content_id: int):
                 # rendition is fetched exactly like any other asset.
                 file_url=media_storage.store(
                     out_filepath,
-                    f"{organization_id}/{out_filename}",
+                    f"{prefix}/{out_filename}",
                     content_type="video/mp4",
                 ),
             )
@@ -220,7 +223,7 @@ def process_media_sync(content_id: int):
                 run_command_sync(cmd)
                 content.thumbnail = media_storage.store(
                     thumb_filepath,
-                    f"{organization_id}/{thumb_filename}",
+                    f"{prefix}/{thumb_filename}",
                     content_type="image/jpeg",
                 )
             except Exception:

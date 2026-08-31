@@ -1,16 +1,16 @@
 # Graph Report - OLRAC SIGNAGE  (2026-08-31)
 
 ## Corpus Check
-- 310 files · ~336,053 words
+- 310 files · ~336,093 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2508 nodes · 5733 edges · 207 communities (166 shown, 41 thin omitted)
+- 2508 nodes · 5733 edges · 205 communities (166 shown, 39 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 202 edges (avg confidence: 0.78)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `06a2fe24`
+- Built from commit: `c3add18c`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -27,7 +27,7 @@
 - AbleSign Auto-Launch — Full Documentation
 - compilerOptions
 - ScheduleEvaluator
-- field_validator
+- ValueError
 - test_screen_approval.py
 - api.ts
 - components.json
@@ -71,7 +71,7 @@
 - gradlew
 - .onCreate
 - storage_prefix
-- ValueError
+- model_validator
 - process_media_sync
 - eslint.config.mjs
 - next.config.ts
@@ -165,17 +165,15 @@
 - ComponentName
 - @dnd-kit/utilities
 - groups.py
-- PlacementSplit
+- ProfileUpdate
 - test_signup_lifecycle.py
 - PlaylistBase
 - acknowledge_alert
-- ScreenshotManager
+- ScreenBase
 - .query
 - resolve_location_link
 - promote_release
-- ScreenPatch
 - leaflet
-- ScheduleBase
 
 ## God Nodes (most connected - your core abstractions)
 1. `TenantScope` - 121 edges
@@ -204,7 +202,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (207 total, 41 thin omitted)
+## Communities (205 total, 39 thin omitted)
 
 ### Community 0 - "test_tv_deep_link.py"
 Cohesion: 0.16
@@ -250,9 +248,9 @@ Nodes (28): AbleSign Auto-Launch — Full Documentation, AbleSign not launching 
 Cohesion: 0.07
 Nodes (28): compilerOptions, allowJs, esModuleInterop, incremental, isolatedModules, jsx, lib, module (+20 more)
 
-### Community 12 - "field_validator"
+### Community 12 - "ValueError"
 Cohesion: 0.12
-Nodes (10): AppReleaseCreate, AppReleaseResponse, HeartbeatRequest, PasswordChange, ScreenBase, ScreenCreate, ScreenResponse, UserCreate (+2 more)
+Nodes (14): AppReleaseCreate, AppReleaseResponse, HeartbeatRequest, PasswordChange, PlaylistItemUpdate, Partial screen update: only the fields actually present are written. The PUT…, Each day maps to exactly [start, end] as HH:MM. Validated here rather than in…, ScheduleBase (+6 more)
 
 ### Community 13 - "test_screen_approval.py"
 Cohesion: 0.26
@@ -406,13 +404,17 @@ Nodes (13): BrandedMessage(), GoogleLogo(), GoogleSignInScreen(), Bundle, Modifi
 Cohesion: 0.14
 Nodes (20): Safe, alphanumeric bucket key prefix for an organization., storage_prefix(), FakeOrg, FakeUser, Tenant storage folders are named, unique and stable: python…, Local disk and R2 must file a capture under the same key, or the folder layout…, Stands in for models.Organization; owner_email is a property over .users., The address itself, unmangled -- that is the point of naming rather than… (+12 more)
 
-### Community 75 - "ValueError"
-Cohesion: 0.16
-Nodes (9): MediaRenditionResponse, PlacementCreate, PlaylistItemBase, PlaylistItemCreate, PlaylistItemResponse, PlaylistItemUpdate, PlaylistUpdate, model_validator (+1 more)
+### Community 75 - "model_validator"
+Cohesion: 0.15
+Nodes (7): MediaRenditionResponse, PlacementCreate, PlaylistItemBase, PlaylistItemCreate, PlaylistItemResponse, PlaylistUpdate, model_validator
 
 ### Community 76 - "process_media_sync"
 Cohesion: 0.18
 Nodes (19): compute_sha256(), probe_file(), process_media(), process_media_sync(), run_command_sync(), skipif, cleanup_tempdir(), _do_not_process_on_upload() (+11 more)
+
+### Community 79 - "DeviceState"
+Cohesion: 0.15
+Nodes (5): DeviceState, Activity, ScreenshotManager, Bitmap, WeakReference
 
 ### Community 80 - "OLRAC Signage — 80-TV Rollout Deployment Guide"
 Cohesion: 0.10
@@ -654,9 +656,9 @@ Nodes (3): DeviceOwnerManager, Context, ComponentName
 Cohesion: 0.33
 Nodes (12): assign_group_playlist(), create_group(), delete_group(), list_groups(), get, put, Reject a parent that is not ours, is the group itself, or would close a loop.…, serialize_group() (+4 more)
 
-### Community 196 - "PlacementSplit"
+### Community 196 - "ProfileUpdate"
 Cohesion: 0.33
-Nodes (4): PlacementSplit, Deliberately narrow: /screens/register is unauthenticated, so it must not reuse…, Screens to drop when converting a group booking into per-screen bookings., RegisterResponse
+Nodes (4): ProfileUpdate, Deliberately narrow: /screens/register is unauthenticated, so it must not reuse…, Self-service profile edit. Deliberately excludes role, is_active and password…, RegisterResponse
 
 ### Community 197 - "test_signup_lifecycle.py"
 Cohesion: 0.31
@@ -670,9 +672,9 @@ Nodes (3): PlaylistBase, PlaylistCreate, PlaylistResponse
 Cohesion: 0.25
 Nodes (9): Alert, acknowledge_alert(), alert_summary(), list_alerts(), get, Open alerts, newest first. Resolved ones only when asked for. The default is…, Mark an alert as picked up, without claiming the underlying fault is fixed.…, Counts for the navigation badge, so the header does not fetch the whole list. (+1 more)
 
-### Community 200 - "ScreenshotManager"
-Cohesion: 0.39
-Nodes (4): Activity, ScreenshotManager, Bitmap, WeakReference
+### Community 200 - "ScreenBase"
+Cohesion: 0.50
+Nodes (3): ScreenBase, ScreenCreate, ScreenResponse
 
 ### Community 202 - "resolve_location_link"
 Cohesion: 0.40
@@ -682,14 +684,10 @@ Nodes (5): Coordinates for a pasted Google Maps link. Deliberately not a Google 
 Cohesion: 0.40
 Nodes (5): promote_release(), patch, Move a build along the rollout ring: draft -> canary -> released. Promoting to…, AppReleasePatch, Promote (or demote) a build. The only mutable field: version_code, apk_url and…
 
-### Community 204 - "ScreenPatch"
-Cohesion: 0.40
-Nodes (3): Partial screen update: only the fields actually present are written. The PUT…, Each day maps to exactly [start, end] as HH:MM. Validated here rather than in…, ScreenPatch
-
 ## Knowledge Gaps
 - **316 isolated node(s):** `CheckingLocalState`, `GoogleSignIn`, `PLAYED_TO_END`, `SKIPPED`, `FAILED` (+311 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **41 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **39 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_

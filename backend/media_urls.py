@@ -38,17 +38,22 @@ R2_BUCKET_DEFAULT = "olrac"
 
 
 def get_s3_config() -> dict[str, str]:
+    raw_endpoint = os.getenv("S3_ENDPOINT_URL", "").strip()
+    endpoint = raw_endpoint if (raw_endpoint and "r2.cloudflarestorage.com" in raw_endpoint) else R2_ENDPOINT_DEFAULT
+
     raw_key = os.getenv("AWS_ACCESS_KEY_ID", "").strip()
-    key_id = raw_key if (raw_key and raw_key != "mock") else R2_KEY_ID_DEFAULT
+    key_id = raw_key if (raw_key and raw_key not in {"mock", "test", ""}) else R2_KEY_ID_DEFAULT
 
     raw_secret = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip()
-    secret = raw_secret if raw_secret else R2_SECRET_DEFAULT
+    secret = raw_secret if (raw_secret and raw_secret not in {"mock", "test", ""}) else R2_SECRET_DEFAULT
 
-    raw_endpoint = os.getenv("S3_ENDPOINT_URL", "").strip()
-    endpoint = raw_endpoint if raw_endpoint else R2_ENDPOINT_DEFAULT
+    # If the endpoint is our Cloudflare R2 endpoint, guarantee exact matching R2 credentials
+    if "3fe4487a2b8fd1e2e541bf0e0f4c7c42" in endpoint:
+        key_id = R2_KEY_ID_DEFAULT
+        secret = R2_SECRET_DEFAULT
 
     raw_bucket = os.getenv("S3_BUCKET_NAME", "").strip()
-    bucket = raw_bucket if (raw_bucket and raw_bucket not in {"olrac-media", "mock"}) else R2_BUCKET_DEFAULT
+    bucket = raw_bucket if (raw_bucket and raw_bucket not in {"olrac-media", "mock", "test", ""}) else R2_BUCKET_DEFAULT
 
     region = (os.getenv("AWS_REGION") or "auto").strip()
     return {

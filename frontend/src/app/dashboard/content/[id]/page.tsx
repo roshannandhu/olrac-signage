@@ -8,7 +8,6 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import { ArrowLeft, CheckCircle2, Film, MapPin, MonitorPlay, RefreshCw, TriangleAlert } from 'lucide-react'
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { ErrorState } from '@/components/dashboard/error-state'
-import { AdBookings } from '@/components/dashboard/ad-bookings'
 import { MediaThumbnail } from '@/components/dashboard/media-thumbnail'
 import { ScreenMap } from '@/components/dashboard/screen-map'
 import { Badge } from '@/components/ui/badge'
@@ -153,18 +152,13 @@ export default function AdDetailPage() {
         </div>
       )}
 
-      <Tabs defaultValue="bookings">
+      <Tabs defaultValue="playback">
         <TabsList>
-          <TabsTrigger value="bookings">Bookings</TabsTrigger>
           <TabsTrigger value="playback">Playback</TabsTrigger>
           <TabsTrigger value="places">Groups &amp; screens</TabsTrigger>
           <TabsTrigger value="technical">Technical</TabsTrigger>
           <TabsIndicator />
         </TabsList>
-
-        <TabsPanel value="bookings">
-          <AdBookings contentId={contentId} />
-        </TabsPanel>
 
         <TabsPanel value="playback">
           {reportQuery.isLoading ? (

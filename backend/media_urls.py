@@ -80,13 +80,11 @@ def _detect_lan_host() -> str:
 
 def media_base_url() -> str:
     """Origin that players and browsers should fetch media from."""
-    configured = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
-    if configured and not ("localhost" in configured or "127.0.0.1" in configured):
-        return configured
     render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
     if render_url:
         return render_url
-    if configured:
+    configured = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if configured and not ("localhost" in configured or "127.0.0.1" in configured):
         return configured
     public_host = os.getenv("PUBLIC_HOST", "").strip()
     if public_host and not ("127.0.0.1" in public_host or "localhost" in public_host):

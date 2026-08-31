@@ -57,14 +57,6 @@ def public_base_url(request: Request | None = None) -> str:
         if host and not ("127.0.0.1" in host or "localhost" in host):
             return f"{scheme}://{host}"
 
-    if configured:
-        return configured
-    if request is not None:
-        forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
-        scheme = forwarded_proto or request.url.scheme or "http"
-        host = request.headers.get("host") or request.url.netloc
-        return f"{scheme}://{host}"
-
     return "https://olrac-signage-32lh.onrender.com"
 
 

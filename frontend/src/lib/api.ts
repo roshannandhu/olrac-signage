@@ -24,19 +24,20 @@ if (typeof window !== 'undefined') {
 export const WS_BASE = API_BASE.replace(/^http/, 'ws')
 
 export function resolveMediaUrl(urlStr: string | null | undefined): string | undefined {
-  if (!urlStr) return undefined;
-  if (typeof window === 'undefined') return urlStr;
+  if (!urlStr) return undefined
+  if (urlStr.startsWith('/uploads/')) {
+    return `${API_HOST}${urlStr}`
+  }
+  if (urlStr.startsWith('uploads/')) {
+    return `${API_HOST}/${urlStr}`
+  }
   try {
-    const url = new URL(urlStr);
-    const apiHost = new URL(API_HOST);
-    // If the media URL is on the same port as our API (meaning it's locally hosted uploads),
-    // rewrite its hostname to match where we are currently accessing the API from.
-    if (url.port === apiHost.port && url.pathname.startsWith('/uploads/')) {
-      url.hostname = apiHost.hostname;
-      return url.href;
+    const url = new URL(urlStr)
+    if (url.pathname.startsWith('/uploads/')) {
+      return `${API_HOST}${url.pathname}${url.search}`
     }
   } catch {}
-  return urlStr;
+  return urlStr
 }
 
 

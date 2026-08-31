@@ -827,8 +827,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_appdatabase_appdatabase_playeventdao",
-      "community": 91,
-      "community_name": "AppDatabase",
+      "community": 121,
+      "community_name": "PlayEventDao",
       "norm_label": ".playeventdao()"
     },
     {
@@ -1406,7 +1406,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao",
       "community": 2,
-      "community_name": "PlaylistDao",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "playlistdao.kt"
     },
     {
@@ -1419,7 +1419,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao",
       "community": 2,
-      "community_name": "PlaylistDao",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "playlistdao"
     },
     {
@@ -1431,7 +1431,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao_getallitems",
       "community": 2,
-      "community_name": "PlaylistDao",
+      "community_name": "PlaylistItemEntity",
       "norm_label": ".getallitems()"
     },
     {
@@ -1443,7 +1443,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao_observeallitems",
       "community": 2,
-      "community_name": "PlaylistDao",
+      "community_name": "PlaylistItemEntity",
       "norm_label": ".observeallitems()"
     },
     {
@@ -1454,7 +1454,7 @@
       "_origin": "ast",
       "id": "flow",
       "community": 2,
-      "community_name": "PlaylistDao",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "flow"
     },
     {
@@ -1466,7 +1466,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao_hasitems",
       "community": 2,
-      "community_name": "PlaylistDao",
+      "community_name": "PlaylistItemEntity",
       "norm_label": ".hasitems()"
     },
     {
@@ -1478,7 +1478,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao_insertitems",
       "community": 2,
-      "community_name": "PlaylistDao",
+      "community_name": "PlaylistItemEntity",
       "norm_label": ".insertitems()"
     },
     {
@@ -1490,7 +1490,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao_deleteall",
       "community": 2,
-      "community_name": "PlaylistDao",
+      "community_name": "PlaylistItemEntity",
       "norm_label": ".deleteall()"
     },
     {
@@ -1502,7 +1502,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao_updatelocalpath",
       "community": 2,
-      "community_name": "PlaylistDao",
+      "community_name": "PlaylistItemEntity",
       "norm_label": ".updatelocalpath()"
     },
     {
@@ -1514,7 +1514,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao_replaceall",
       "community": 2,
-      "community_name": "PlaylistDao",
+      "community_name": "PlaylistItemEntity",
       "norm_label": ".replaceall()"
     },
     {
@@ -1524,7 +1524,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistitementity",
-      "community": 81,
+      "community": 2,
       "community_name": "PlaylistItemEntity",
       "norm_label": "playlistitementity.kt"
     },
@@ -1537,7 +1537,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistitementity_playlistitementity",
-      "community": 81,
+      "community": 2,
       "community_name": "PlaylistItemEntity",
       "norm_label": "playlistitementity"
     },
@@ -4289,7 +4289,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen",
       "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlayerScreen.kt",
       "norm_label": "playerscreen.kt"
     },
     {
@@ -4301,7 +4301,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_playerscreen",
       "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlayerScreen.kt",
       "norm_label": "playerscreen()"
     },
     {
@@ -4313,7 +4313,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer",
       "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlayerScreen.kt",
       "norm_label": "dualsurfaceplayer()"
     },
     {
@@ -4361,7 +4361,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_trimqueueifoversized",
       "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlayerScreen.kt",
       "norm_label": "trimqueueifoversized()"
     },
     {
@@ -4372,7 +4372,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_kt_com",
       "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlayerScreen.kt",
       "norm_label": "com"
     },
     {
@@ -4384,7 +4384,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_writeplaycheckpoint",
       "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlayerScreen.kt",
       "norm_label": "writeplaycheckpoint()"
     },
     {
@@ -4395,7 +4395,7 @@
       "_origin": "ast",
       "id": "android",
       "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlayerScreen.kt",
       "norm_label": "android"
     },
     {
@@ -4407,7 +4407,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_recoverinterruptedplay",
       "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlayerScreen.kt",
       "norm_label": "recoverinterruptedplay()"
     },
     {
@@ -4419,7 +4419,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_clearplaycheckpoint",
       "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlayerScreen.kt",
       "norm_label": "clearplaycheckpoint()"
     },
     {
@@ -4444,7 +4444,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_isimagedecodable",
       "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlayerScreen.kt",
       "norm_label": "isimagedecodable()"
     },
     {
@@ -4456,7 +4456,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_playbacksurface",
       "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlayerScreen.kt",
       "norm_label": "playbacksurface()"
     },
     {
@@ -4466,8 +4466,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_kt_exoplayer",
-      "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community": 90,
+      "community_name": "Player",
       "norm_label": "exoplayer"
     },
     {
@@ -4478,7 +4478,7 @@
       "_origin": "ast",
       "id": "dp",
       "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlayerScreen.kt",
       "norm_label": "dp"
     },
     {
@@ -4489,7 +4489,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_kt_modifier",
       "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlayerScreen.kt",
       "norm_label": "modifier"
     },
     {
@@ -4501,7 +4501,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_transitionlayer",
       "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlayerScreen.kt",
       "norm_label": "transitionlayer()"
     },
     {
@@ -4513,7 +4513,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_prepareplayer",
       "community": 81,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlayerScreen.kt",
       "norm_label": "prepareplayer()"
     },
     {
@@ -8828,7 +8828,7 @@
       "label": "delete()",
       "file_type": "code",
       "source_file": "backend/media_storage.py",
-      "source_location": "L100",
+      "source_location": "L103",
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_storage_delete",
@@ -8884,9 +8884,9 @@
       "label": "Remove a stored object. Best effort -- a missing object is not an error. Local\u2026",
       "file_type": "rationale",
       "source_file": "backend/media_storage.py",
-      "source_location": "L101",
+      "source_location": "L104",
       "_origin": "ast",
-      "id": "backend_media_storage_rationale_101",
+      "id": "backend_media_storage_rationale_104",
       "community": 98,
       "community_name": "HTTPException",
       "norm_label": "remove a stored object. best effort -- a missing object is not an error. local..."
@@ -11509,7 +11509,7 @@
       "label": "retry_content_processing()",
       "file_type": "code",
       "source_file": "backend/routers/content.py",
-      "source_location": "L247",
+      "source_location": "L257",
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_content_retry_content_processing",
@@ -11532,7 +11532,7 @@
       "label": "get_all_content()",
       "file_type": "code",
       "source_file": "backend/routers/content.py",
-      "source_location": "L269",
+      "source_location": "L279",
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_content_get_all_content",
@@ -11555,7 +11555,7 @@
       "label": "update_content()",
       "file_type": "code",
       "source_file": "backend/routers/content.py",
-      "source_location": "L293",
+      "source_location": "L303",
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_content_update_content",
@@ -11567,7 +11567,7 @@
       "label": "delete_content()",
       "file_type": "code",
       "source_file": "backend/routers/content.py",
-      "source_location": "L309",
+      "source_location": "L319",
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_content_delete_content",
@@ -15406,8 +15406,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_tenancy_is_super_admin",
-      "community": 201,
-      "community_name": ".query",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "is_super_admin()"
     },
     {
@@ -15417,8 +15417,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tenancy_py_user",
-      "community": 201,
-      "community_name": ".query",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "user"
     },
     {
@@ -15535,8 +15535,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_tenancy_require_super_admin",
-      "community": 201,
-      "community_name": ".query",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "require_super_admin()"
     },
     {
@@ -15558,8 +15558,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "backend_tenancy_rationale_15",
-      "community": 201,
-      "community_name": ".query",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "the single source of truth for platform-operator status. this used to be `role..."
     },
     {
@@ -15580,8 +15580,8 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "backend_tenancy_rationale_129",
-      "community": 201,
-      "community_name": ".query",
+      "community": 18,
+      "community_name": "tenancy.py",
       "norm_label": "platform-operator routes only. every caller of this used to accept `role in..."
     },
     {
@@ -42893,7 +42893,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L246",
+      "source_location": "L256",
       "weight": 1.0,
       "context": "decorator",
       "_origin": "ast",
@@ -45994,7 +45994,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_storage.py",
-      "source_location": "L100",
+      "source_location": "L103",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_storage",
@@ -46062,7 +46062,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_storage.py",
-      "source_location": "L110",
+      "source_location": "L113",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_storage",
@@ -46181,7 +46181,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_storage.py",
-      "source_location": "L116",
+      "source_location": "L119",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_storage_delete",
@@ -46205,7 +46205,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_storage.py",
-      "source_location": "L90",
+      "source_location": "L91",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_storage_store",
@@ -46217,7 +46217,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_storage.py",
-      "source_location": "L116",
+      "source_location": "L119",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_storage_delete",
@@ -46300,7 +46300,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_storage.py",
-      "source_location": "L109",
+      "source_location": "L112",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_storage_delete",
@@ -46514,7 +46514,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_storage.py",
-      "source_location": "L112",
+      "source_location": "L115",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_storage_delete",
@@ -46526,7 +46526,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_storage.py",
-      "source_location": "L114",
+      "source_location": "L117",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_storage_delete",
@@ -46537,10 +46537,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_storage.py",
-      "source_location": "L101",
+      "source_location": "L104",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "backend_media_storage_rationale_101",
+      "source": "backend_media_storage_rationale_104",
       "target": "backend_media_storage_delete",
       "confidence_score": 1.0
     },
@@ -46561,7 +46561,7 @@
       "context": "decorator",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L308",
+      "source_location": "L318",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_delete_content",
@@ -47201,7 +47201,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "backend/routers/content.py",
-      "source_location": "L172",
+      "source_location": "L178",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_upload_content",
@@ -47261,7 +47261,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "backend/routers/content.py",
-      "source_location": "L171",
+      "source_location": "L177",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_upload_content",
@@ -48767,7 +48767,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "backend/routers/content.py",
-      "source_location": "L320",
+      "source_location": "L330",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_delete_content",
@@ -48779,7 +48779,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "backend/routers/content.py",
-      "source_location": "L260",
+      "source_location": "L270",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_retry_content_processing",
@@ -48791,7 +48791,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "backend/routers/content.py",
-      "source_location": "L234",
+      "source_location": "L244",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_upload_content",
@@ -51372,7 +51372,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L224",
+      "source_location": "L234",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_upload_content",
@@ -59107,7 +59107,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L309",
+      "source_location": "L319",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content",
@@ -59129,7 +59129,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L269",
+      "source_location": "L279",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content",
@@ -59173,7 +59173,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L247",
+      "source_location": "L257",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content",
@@ -59195,7 +59195,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L293",
+      "source_location": "L303",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content",
@@ -59385,7 +59385,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L264",
+      "source_location": "L274",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_retry_content_processing",
@@ -59397,7 +59397,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L241",
+      "source_location": "L251",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_upload_content",
@@ -59409,7 +59409,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L173",
+      "source_location": "L179",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_upload_content",
@@ -59432,7 +59432,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L216",
+      "source_location": "L224",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_upload_content",
@@ -59491,7 +59491,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L287",
+      "source_location": "L297",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_get_all_content",
@@ -59503,7 +59503,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L266",
+      "source_location": "L276",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_retry_content_processing",
@@ -59527,7 +59527,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L305",
+      "source_location": "L315",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_update_content",
@@ -59539,7 +59539,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L243",
+      "source_location": "L253",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_upload_content",
@@ -59587,7 +59587,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L251",
+      "source_location": "L261",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_retry_content_processing",
@@ -59599,7 +59599,7 @@
       "context": "parameter_type",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L247",
+      "source_location": "L257",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_retry_content_processing",
@@ -59612,7 +59612,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "backend/routers/content.py",
-      "source_location": "L253",
+      "source_location": "L263",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_retry_content_processing",
@@ -59623,7 +59623,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L313",
+      "source_location": "L323",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_delete_content",
@@ -59634,7 +59634,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L268",
+      "source_location": "L278",
       "weight": 1.0,
       "context": "decorator",
       "_origin": "ast",
@@ -59647,7 +59647,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L298",
+      "source_location": "L308",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_update_content",
@@ -59659,7 +59659,7 @@
       "context": "parameter_type",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L269",
+      "source_location": "L279",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_get_all_content",
@@ -59670,7 +59670,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L292",
+      "source_location": "L302",
       "weight": 1.0,
       "context": "decorator",
       "_origin": "ast",
@@ -59683,7 +59683,7 @@
       "context": "parameter_type",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L293",
+      "source_location": "L303",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_update_content",
@@ -59695,7 +59695,7 @@
       "context": "parameter_type",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L293",
+      "source_location": "L303",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_update_content",
@@ -59708,7 +59708,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "backend/routers/content.py",
-      "source_location": "L300",
+      "source_location": "L310",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_update_content",
@@ -59719,7 +59719,7 @@
       "context": "parameter_type",
       "confidence": "EXTRACTED",
       "source_file": "backend/routers/content.py",
-      "source_location": "L309",
+      "source_location": "L319",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_delete_content",
@@ -59732,7 +59732,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "backend/routers/content.py",
-      "source_location": "L315",
+      "source_location": "L325",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_routers_content_delete_content",
@@ -96026,5 +96026,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "3ee39414824cefc6f880bae6277805628ae60079"
+  "built_at_commit": "1ee2eeaf40e68d8c3c39d054cde9758ed2410515"
 }

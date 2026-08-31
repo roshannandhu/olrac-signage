@@ -5,13 +5,13 @@
     "semantic_hash": ""
   },
   "android-tv/app/build.gradle.kts": {
-    "mtime": 1788196623.5488362,
-    "ast_hash": "bca7004998e21c83d9aff3ba7e1118e2",
+    "mtime": 1788198644.4928,
+    "ast_hash": "1e83691d4a5a8ac91d84f53af1f89d39",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/MainActivity.kt": {
-    "mtime": 1788164742.3975813,
-    "ast_hash": "b157eac71ad93d59f1fba909b671a84b",
+    "mtime": 1788198618.069277,
+    "ast_hash": "3c6a354513e31a0b787ec76530bfc85e",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/data/AppDatabase.kt": {
@@ -95,8 +95,8 @@
     "semantic_hash": "102be328260c5deb369b740ba62e5b32"
   },
   "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt": {
-    "mtime": 1788192011.2516441,
-    "ast_hash": "b016109840616960e75efbce0e51c820",
+    "mtime": 1788198635.2625823,
+    "ast_hash": "d44e8c69848dbe803f0a284d0a255187",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerViewModel.kt": {

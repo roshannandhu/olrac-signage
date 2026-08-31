@@ -83,6 +83,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        volumeControlStream = android.media.AudioManager.STREAM_MUSIC
         ScreenshotManager.registerActivity(this)
 
         configurePlayerWindow()
@@ -256,6 +257,36 @@ class MainActivity : ComponentActivity() {
                     try { stopLockTask() } catch (e: Exception) {}
                 }
                 showPinPrompt = true
+                return true
+            }
+        }
+
+        when (keyCode) {
+            KeyEvent.KEYCODE_VOLUME_DOWN -> {
+                val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+                audioManager?.adjustStreamVolume(
+                    android.media.AudioManager.STREAM_MUSIC,
+                    android.media.AudioManager.ADJUST_LOWER,
+                    android.media.AudioManager.FLAG_SHOW_UI
+                )
+                return true
+            }
+            KeyEvent.KEYCODE_VOLUME_UP -> {
+                val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+                audioManager?.adjustStreamVolume(
+                    android.media.AudioManager.STREAM_MUSIC,
+                    android.media.AudioManager.ADJUST_RAISE,
+                    android.media.AudioManager.FLAG_SHOW_UI
+                )
+                return true
+            }
+            KeyEvent.KEYCODE_VOLUME_MUTE, KeyEvent.KEYCODE_MUTE -> {
+                val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+                audioManager?.adjustStreamVolume(
+                    android.media.AudioManager.STREAM_MUSIC,
+                    android.media.AudioManager.ADJUST_TOGGLE_MUTE,
+                    android.media.AudioManager.FLAG_SHOW_UI
+                )
                 return true
             }
         }

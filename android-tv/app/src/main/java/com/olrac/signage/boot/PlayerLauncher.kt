@@ -46,13 +46,18 @@ object PlayerLauncher {
         warnIfBackgroundStartsWillBeRefused(context, reason)
         val intent = playerIntent(context)
 
-        // 1. Direct startActivity (works on Device Owner and stock devices)
+        // 1. Accessibility Service privileged launch (bypasses all Android 14 background activity restrictions)
+        if (WatchdogAccessibilityService.bringToFront(context)) {
+            Log.i(TAG, "Successfully brought player to front via Accessibility Service (reason=$reason)")
+        }
+
+        // 2. Direct startActivity (works on Device Owner and stock devices)
         attemptDirectStart(context, intent, reason)
 
-        // 2. High-priority Full-Screen Intent Notification (guaranteed foreground takeover on Android 10-14)
+        // 3. High-priority Full-Screen Intent Notification (guaranteed foreground takeover on Android 10-14)
         triggerFullScreenNotification(context, intent, reason)
 
-        // 3. System-level AlarmManager dispatch (with Android 14+ background launch allowance)
+        // 4. System-level AlarmManager dispatch (with Android 14+ background launch allowance)
         scheduleViaAlarm(context, intent, delayMs, reason)
     }
 

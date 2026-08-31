@@ -142,35 +142,45 @@ def _command_key(device_id: str) -> str:
     return f"screen_cmd:{device_id}"
 
 
+_IN_MEMORY_COMMANDS: dict[str, tuple[str, float]] = {}
+
+
 async def queue_device_command(device_id: str, command: str, ttl_seconds: int = 300) -> bool:
     """Queue a one-shot command. Returns whether it was actually stored."""
     if not device_id:
         return False
+    import time
+    _IN_MEMORY_COMMANDS[device_id] = (command, time.time() + ttl_seconds)
     try:
         await database.get_redis().setex(_command_key(device_id), ttl_seconds, command)
         return True
     except Exception as exc:  # noqa: BLE001 - Redis down must not fail the operator's request
-        logger.warning("Could not queue command %r for device %s: %s", command, device_id, exc)
-        return False
+        logger.warning("Could not queue command %r in Redis for device %s: %s (using in-memory fallback)", command, device_id, exc)
+        return True
 
 
 async def pop_device_command(device_id: str) -> str | None:
     """Take the pending command for this device, if any. Reading it consumes it."""
     if not device_id:
         return None
+    import time
+    now = time.time()
+    in_memory_val = None
+    in_memory = _IN_MEMORY_COMMANDS.pop(device_id, None)
+    if in_memory and in_memory[1] > now:
+        in_memory_val = in_memory[0]
+
+    redis_val = None
     try:
         redis = database.get_redis()
         value = await redis.get(_command_key(device_id))
-        if value is None:
-            return None
-        await redis.delete(_command_key(device_id))
-        return value.decode("utf-8") if isinstance(value, bytes) else str(value)
+        if value is not None:
+            await redis.delete(_command_key(device_id))
+            redis_val = value.decode("utf-8") if isinstance(value, bytes) else str(value)
     except Exception as exc:  # noqa: BLE001
-        # Logged rather than swallowed: silently returning None here is indistinguishable
-        # from "no command was queued", which is what made the old TTL-expiry path so hard
-        # to diagnose -- the operator saw the button do nothing and no trace anywhere.
-        logger.warning("Could not read pending command for device %s: %s", device_id, exc)
-        return None
+        logger.warning("Could not read pending command from Redis for device %s: %s", device_id, exc)
+
+    return in_memory_val or redis_val
 
 
 # A freshly paired screen has to be told its own credential, and the pair-code flow gives

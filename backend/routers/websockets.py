@@ -183,6 +183,11 @@ async def dashboard_websocket(
             pass
         except Exception as e:
             logger.warning(f"Redis pubsub disabled or disconnected for dashboard WS: {e}")
+            try:
+                while True:
+                    await asyncio.sleep(3600)
+            except asyncio.CancelledError:
+                pass
 
     writer_task = asyncio.create_task(writer())
     
@@ -267,6 +272,11 @@ async def screen_websocket(
             pass
         except Exception as e:
             logger.warning(f"Redis pubsub disabled or disconnected for screen WS: {e}")
+            try:
+                while True:
+                    await asyncio.sleep(3600)
+            except asyncio.CancelledError:
+                pass
 
     reader_task = asyncio.create_task(reader())
     writer_task = asyncio.create_task(writer())

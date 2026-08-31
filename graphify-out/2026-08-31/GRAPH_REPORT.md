@@ -1,7 +1,7 @@
 # Graph Report - OLRAC SIGNAGE  (2026-08-31)
 
 ## Corpus Check
-- 310 files · ~336,162 words
+- 310 files · ~336,232 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1ee2eeaf`
+- Built from commit: `cdb54bc4`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -435,7 +435,7 @@ Cohesion: 0.20
 Nodes (7): awaitPlayerReady(), Player, DecoderSnapshot, Player, ExoPlayer, PlaybackException, Player
 
 ### Community 91 - "AppDatabase"
-Cohesion: 0.29
+Cohesion: 0.25
 Nodes (6): AppDatabase, getDatabase(), Context, migrate(), RoomDatabase, SupportSQLiteDatabase
 
 ### Community 92 - "P8 — Per-TV capability detection and rendition selection"

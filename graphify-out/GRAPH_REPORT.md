@@ -1,23 +1,23 @@
 # Graph Report - OLRAC SIGNAGE  (2026-08-31)
 
 ## Corpus Check
-- 310 files · ~336,093 words
+- 310 files · ~336,145 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2508 nodes · 5733 edges · 205 communities (166 shown, 39 thin omitted)
+- 2508 nodes · 5734 edges · 199 communities (160 shown, 39 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 202 edges (avg confidence: 0.78)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c3add18c`
+- Built from commit: `3ee39414`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - test_tv_deep_link.py
 - schemas.py
-- PlaylistItemEntity
+- PlaylistDao
 - ApiService.kt
 - MainActivity
 - team/page.tsx
@@ -49,7 +49,6 @@
 - conftest.py
 - ProofOfPlayWorker.kt
 - scripts
-- PlayerLauncher
 - cn
 - test_alerting.py
 - OLRAC Signage — Build Goal & Agent Work Order
@@ -77,8 +76,7 @@
 - next.config.ts
 - DeviceState
 - OLRAC Signage — 80-TV Rollout Deployment Guide
-- PlayerScreen.kt
-- android.content.Context
+- PlaylistItemEntity
 - admin-ui.tsx
 - parse
 - P9 — Zero-touch provisioning for 80+ TVs (no ADB)
@@ -153,16 +151,12 @@
 - test_reinstall_reconnect.py
 - get
 - content.py
-- WatchdogAccessibilityService
 - test_google_signin.py
 - @dnd-kit/sortable
 - shadcn
-- WatchdogAccessibilityService
-- BootReceiver.java
 - emergency/page.tsx
 - @dnd-kit/core
 - routers/billing.py
-- ComponentName
 - @dnd-kit/utilities
 - groups.py
 - ProfileUpdate
@@ -202,7 +196,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (205 total, 39 thin omitted)
+## Communities (199 total, 39 thin omitted)
 
 ### Community 0 - "test_tv_deep_link.py"
 Cohesion: 0.16
@@ -211,10 +205,6 @@ Nodes (16): _android_intent_url(), Rewrite an "olrac://" deep link into the inte
 ### Community 1 - "schemas.py"
 Cohesion: 0.08
 Nodes (45): create_checkout(), AlertResponse, AlertSummaryResponse, AppVersionResponse, BillingSummaryResponse, CheckoutRequest, CheckoutResponse, DeviceAuthRequest (+37 more)
-
-### Community 2 - "PlaylistItemEntity"
-Cohesion: 0.24
-Nodes (3): PlaylistDao, PlaylistItemEntity, Flow
 
 ### Community 3 - "ApiService.kt"
 Cohesion: 0.10
@@ -237,8 +227,8 @@ Cohesion: 0.15
 Nodes (20): AdPlacementTarget, Alert, Campaign, EmergencyBroadcast, Plan, PlayLog, PlayLogHourlyRollup, One place a booked advert runs, and the playlist item it put there. Exactly one… (+12 more)
 
 ### Community 8 - "MainActivity"
-Cohesion: 0.21
-Nodes (7): android.app.Activity, android.content.Intent, android.os.Bundle, android.os.Handler, Intent, Override, MainActivity
+Cohesion: 0.05
+Nodes (32): android.accessibilityservice.AccessibilityService, android.app.Activity, android.app.PendingIntent, android.content.BroadcastReceiver, android.content.ComponentName, android.content.Context, android.content.Intent, android.content.SharedPreferences (+24 more)
 
 ### Community 9 - "AbleSign Auto-Launch — Full Documentation"
 Cohesion: 0.07
@@ -273,8 +263,8 @@ Cohesion: 0.08
 Nodes (17): ExoPlayer, Job, PlaybackException, onPlayerError(), PlayerSupervisor, HeartbeatReporter, Context, PlaybackSnapshot (+9 more)
 
 ### Community 18 - "tenancy.py"
-Cohesion: 0.12
-Nodes (25): OLRAC Signage backend package. Explicit package marker. Without it `backend` is…, BroadcastRequest, cancel_emergency_broadcast(), get_active_broadcasts(), BaseModel, get, Session, create_token() (+17 more)
+Cohesion: 0.15
+Nodes (20): OLRAC Signage backend package. Explicit package marker. Without it `backend` is…, BroadcastRequest, cancel_emergency_broadcast(), get_active_broadcasts(), BaseModel, get, Session, create_token() (+12 more)
 
 ### Community 19 - "resolve_rotation"
 Cohesion: 0.23
@@ -335,10 +325,6 @@ Nodes (16): Context, ProofOfPlayReporter, BatchOutcome, ACCEPTED, DISCARD, RETRY
 ### Community 33 - "scripts"
 Cohesion: 0.17
 Nodes (11): name, private, scripts, build, cf:build, cf:deploy, cf:preview, dev (+3 more)
-
-### Community 34 - "PlayerLauncher"
-Cohesion: 0.38
-Nodes (4): Context, Intent, PlayerLauncher, PendingIntent
 
 ### Community 35 - "cn"
 Cohesion: 0.12
@@ -420,13 +406,9 @@ Nodes (5): DeviceState, Activity, ScreenshotManager, Bitmap, WeakReference
 Cohesion: 0.10
 Nodes (18): 1. Server Environment Setup, 2. Storage Configuration, 3. Start the Stack, 4. Database Migration, 5. Create the Platform Owner, 6. TV Enrollment & Provisioning, 7. Watchdog Setup (Crucial for Budget TVs), Build the Watchdog (+10 more)
 
-### Community 81 - "PlayerScreen.kt"
-Cohesion: 0.23
-Nodes (13): android, clearPlayCheckpoint(), DualSurfacePlayer(), com, Modifier, PlaybackSurface(), PlayerScreen(), preparePlayer() (+5 more)
-
-### Community 82 - "android.content.Context"
-Cohesion: 0.36
-Nodes (5): android.content.ComponentName, android.content.Context, android.content.SharedPreferences, Override, WatchdogTarget
+### Community 81 - "PlaylistItemEntity"
+Cohesion: 0.20
+Nodes (15): android, PlaylistItemEntity, clearPlayCheckpoint(), DualSurfacePlayer(), com, ExoPlayer, Modifier, PlaybackSurface() (+7 more)
 
 ### Community 83 - "admin-ui.tsx"
 Cohesion: 0.15
@@ -445,11 +427,11 @@ Cohesion: 0.26
 Nodes (9): dateTime(), ScreenDetailsDrawer(), ScreenMap(), Tabs(), TabsIndicator(), TabsList(), TabsPanel(), TabsTrigger() (+1 more)
 
 ### Community 90 - "Player"
-Cohesion: 0.20
-Nodes (7): awaitPlayerReady(), Player, DecoderSnapshot, Player, ExoPlayer, PlaybackException, Player
+Cohesion: 0.22
+Nodes (6): awaitPlayerReady(), Player, DecoderSnapshot, Player, PlaybackException, Player
 
 ### Community 91 - "AppDatabase"
-Cohesion: 0.29
+Cohesion: 0.25
 Nodes (6): AppDatabase, getDatabase(), Context, migrate(), RoomDatabase, SupportSQLiteDatabase
 
 ### Community 92 - "P8 — Per-TV capability detection and rendition selection"
@@ -624,21 +606,9 @@ Nodes (20): auth_device(), bind_screen_to_org(), get_tv_google_oauth_url(), goog
 Cohesion: 0.21
 Nodes (16): delete_content(), generate_video_thumbnail(), get_all_content(), get_s3_client(), public_upload_url(), get, put, UploadFile (+8 more)
 
-### Community 181 - "WatchdogAccessibilityService"
-Cohesion: 0.31
-Nodes (4): android.accessibilityservice.AccessibilityService, android.view.accessibility.AccessibilityEvent, Override, WatchdogAccessibilityService
-
 ### Community 184 - "test_google_signin.py"
 Cohesion: 0.24
 Nodes (10): approved(), _database_url(), poll(), Signing a TV in with a Google account: who it lets in, and who it must not.…, Postgres when a server is there, SQLite otherwise -- as test_release_rollout…, Point the module's two network calls at canned answers., run(), setup_db() (+2 more)
-
-### Community 187 - "WatchdogAccessibilityService"
-Cohesion: 0.27
-Nodes (3): AccessibilityEvent, AccessibilityService, WatchdogAccessibilityService
-
-### Community 188 - "BootReceiver.java"
-Cohesion: 0.28
-Nodes (6): android.app.PendingIntent, android.content.BroadcastReceiver, BootReceiver, Intent, Override, ConfigureReceiver
 
 ### Community 189 - "emergency/page.tsx"
 Cohesion: 0.16
@@ -647,10 +617,6 @@ Nodes (16): BillingPage(), percent(), exportFormats, targetLabels, GroupDetailPa
 ### Community 192 - "routers/billing.py"
 Cohesion: 0.21
 Nodes (15): ensure_billing_catalog(), plan_features(), Plan, Session, billing_summary(), list_plans(), datetime, get (+7 more)
-
-### Community 193 - "ComponentName"
-Cohesion: 0.40
-Nodes (3): DeviceOwnerManager, Context, ComponentName
 
 ### Community 195 - "groups.py"
 Cohesion: 0.33
@@ -675,6 +641,10 @@ Nodes (9): Alert, acknowledge_alert(), alert_summary(), list_alerts(), get, Open
 ### Community 200 - "ScreenBase"
 Cohesion: 0.50
 Nodes (3): ScreenBase, ScreenCreate, ScreenResponse
+
+### Community 201 - ".query"
+Cohesion: 0.20
+Nodes (7): is_super_admin(), User, Platform-operator routes only. Every caller of this used to accept `role in…, The single source of truth for platform-operator status. This used to be `role…, require_super_admin(), Query, TenantModel
 
 ### Community 202 - "resolve_location_link"
 Cohesion: 0.40

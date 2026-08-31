@@ -1,12 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Reading the hardware serial, the only identifier that survives a factory reset and
-         so the only way a wiped panel can be recognised as the screen it already was.
-         maxSdkVersion=28 because from API 29 the serial is gated on device-owner
-         privilege instead, which this player holds on a zero-touch provisioned panel. -->
-    <uses-permission android:name="android.permission.READ_PHONE_STATE"
-        android:maxSdkVersion="28" />
+
     <!-- The only reliable way to start the player from the background on Android 12+.
          The launch paths in PlayerLauncher (direct startActivity, and an AlarmManager
          PendingIntent) are BOTH refused without this: logcat shows

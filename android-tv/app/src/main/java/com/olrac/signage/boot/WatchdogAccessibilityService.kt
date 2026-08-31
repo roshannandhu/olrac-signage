@@ -107,7 +107,17 @@ class WatchdogAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // No-op - only used for boot lifecycle anchor
+        if (event == null || event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        val currentPkg = event.packageName?.toString() ?: return
+
+        // If the system returns to launcher or another non-system app, and the screen is paired, restore player
+        if (currentPkg != packageName && !currentPkg.startsWith("com.android.systemui") && !currentPkg.startsWith("android")) {
+            val deviceState = com.olrac.signage.data.DeviceState(applicationContext)
+            if (deviceState.isPaired) {
+                Log.d(TAG, "Watchdog detected foreground package $currentPkg, ensuring OLRAC Signage remains active")
+                scheduleLaunch("watchdog_event", WARM_SETTLE_DELAY_MS)
+            }
+        }
     }
 
     override fun onInterrupt() {
@@ -116,8 +126,8 @@ class WatchdogAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "WatchdogA11y"
-        private const val BOOT_SETTLE_DELAY_MS = 12_000L
-        private const val WARM_SETTLE_DELAY_MS = 3_000L
+        private const val BOOT_SETTLE_DELAY_MS = 2_000L
+        private const val WARM_SETTLE_DELAY_MS = 1_000L
         private var hasLaunched = false
     }
 }

@@ -36,11 +36,11 @@ object PlayerLauncher {
     private const val CHANNEL_BRING_TO_FRONT = "olrac_bring_to_front"
     private const val NOTIFICATION_ID_BRING_TO_FRONT = 9991
 
-    /** Give the system time to settle before grabbing the foreground on boot. */
-    const val BOOT_SETTLE_MS = 12_000L
+    /** Fast system settle before grabbing the foreground on boot. */
+    const val BOOT_SETTLE_MS = 2_000L
 
-    /** Shorter delay when the app is already alive (supervisor restart, package replaced). */
-    const val WARM_RESTART_MS = 2_000L
+    /** Immediate delay when the app is already alive (supervisor restart, package replaced). */
+    const val WARM_RESTART_MS = 1_000L
 
     fun launch(context: Context, delayMs: Long = BOOT_SETTLE_MS, reason: String = "unspecified") {
         warnIfBackgroundStartsWillBeRefused(context, reason)

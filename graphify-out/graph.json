@@ -496,8 +496,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_playerlauncher",
-      "community": 34,
-      "community_name": "PlayerLauncher",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "playerlauncher.kt"
     },
     {
@@ -509,8 +509,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_playerlauncher_playerlauncher",
-      "community": 34,
-      "community_name": "PlayerLauncher",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "playerlauncher"
     },
     {
@@ -521,8 +521,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_playerlauncher_playerlauncher_launch",
-      "community": 34,
-      "community_name": "PlayerLauncher",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".launch()"
     },
     {
@@ -532,8 +532,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_playerlauncher_kt_context",
-      "community": 34,
-      "community_name": "PlayerLauncher",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "context"
     },
     {
@@ -544,8 +544,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_playerlauncher_playerlauncher_canstartfrombackground",
-      "community": 34,
-      "community_name": "PlayerLauncher",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".canstartfrombackground()"
     },
     {
@@ -556,8 +556,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_playerlauncher_playerlauncher_warnifbackgroundstartswillberefused",
-      "community": 34,
-      "community_name": "PlayerLauncher",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".warnifbackgroundstartswillberefused()"
     },
     {
@@ -568,8 +568,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_playerlauncher_playerlauncher_playerintent",
-      "community": 34,
-      "community_name": "PlayerLauncher",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".playerintent()"
     },
     {
@@ -579,8 +579,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_playerlauncher_kt_intent",
-      "community": 34,
-      "community_name": "PlayerLauncher",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "intent"
     },
     {
@@ -591,8 +591,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_playerlauncher_playerlauncher_createlaunchpendingintent",
-      "community": 34,
-      "community_name": "PlayerLauncher",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".createlaunchpendingintent()"
     },
     {
@@ -602,8 +602,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "pendingintent",
-      "community": 34,
-      "community_name": "PlayerLauncher",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "pendingintent"
     },
     {
@@ -614,8 +614,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_playerlauncher_playerlauncher_triggerfullscreennotification",
-      "community": 34,
-      "community_name": "PlayerLauncher",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".triggerfullscreennotification()"
     },
     {
@@ -626,8 +626,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_playerlauncher_playerlauncher_scheduleviaalarm",
-      "community": 34,
-      "community_name": "PlayerLauncher",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".scheduleviaalarm()"
     },
     {
@@ -638,8 +638,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_playerlauncher_playerlauncher_attemptdirectstart",
-      "community": 34,
-      "community_name": "PlayerLauncher",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".attemptdirectstart()"
     },
     {
@@ -650,8 +650,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_playerlauncher_playerlauncher_handleunpairedordeleted",
-      "community": 34,
-      "community_name": "PlayerLauncher",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".handleunpairedordeleted()"
     },
     {
@@ -661,8 +661,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_watchdogaccessibilityservice",
-      "community": 187,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "watchdogaccessibilityservice.kt"
     },
     {
@@ -674,8 +674,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_watchdogaccessibilityservice_watchdogaccessibilityservice",
-      "community": 187,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "watchdogaccessibilityservice"
     },
     {
@@ -685,8 +685,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_watchdogaccessibilityservice_kt_accessibilityservice",
-      "community": 187,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "accessibilityservice"
     },
     {
@@ -697,8 +697,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_watchdogaccessibilityservice_watchdogaccessibilityservice_oncreate",
-      "community": 187,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".oncreate()"
     },
     {
@@ -709,8 +709,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_watchdogaccessibilityservice_watchdogaccessibilityservice_onserviceconnected",
-      "community": 187,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".onserviceconnected()"
     },
     {
@@ -721,8 +721,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_watchdogaccessibilityservice_watchdogaccessibilityservice_schedulelaunch",
-      "community": 187,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".schedulelaunch()"
     },
     {
@@ -733,8 +733,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_watchdogaccessibilityservice_watchdogaccessibilityservice_launcholracsignage",
-      "community": 187,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".launcholracsignage()"
     },
     {
@@ -745,8 +745,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_watchdogaccessibilityservice_watchdogaccessibilityservice_onaccessibilityevent",
-      "community": 187,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".onaccessibilityevent()"
     },
     {
@@ -756,20 +756,20 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_watchdogaccessibilityservice_kt_accessibilityevent",
-      "community": 187,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "accessibilityevent"
     },
     {
       "label": ".onInterrupt()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/boot/WatchdogAccessibilityService.kt",
-      "source_location": "L113",
+      "source_location": "L123",
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_boot_watchdogaccessibilityservice_watchdogaccessibilityservice_oninterrupt",
-      "community": 187,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".oninterrupt()"
     },
     {
@@ -827,8 +827,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_appdatabase_appdatabase_playeventdao",
-      "community": 121,
-      "community_name": "PlayEventDao",
+      "community": 91,
+      "community_name": "AppDatabase",
       "norm_label": ".playeventdao()"
     },
     {
@@ -1406,7 +1406,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao",
       "community": 2,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlaylistDao",
       "norm_label": "playlistdao.kt"
     },
     {
@@ -1419,7 +1419,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao",
       "community": 2,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlaylistDao",
       "norm_label": "playlistdao"
     },
     {
@@ -1431,7 +1431,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao_getallitems",
       "community": 2,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlaylistDao",
       "norm_label": ".getallitems()"
     },
     {
@@ -1443,7 +1443,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao_observeallitems",
       "community": 2,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlaylistDao",
       "norm_label": ".observeallitems()"
     },
     {
@@ -1454,7 +1454,7 @@
       "_origin": "ast",
       "id": "flow",
       "community": 2,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlaylistDao",
       "norm_label": "flow"
     },
     {
@@ -1466,7 +1466,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao_hasitems",
       "community": 2,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlaylistDao",
       "norm_label": ".hasitems()"
     },
     {
@@ -1478,7 +1478,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao_insertitems",
       "community": 2,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlaylistDao",
       "norm_label": ".insertitems()"
     },
     {
@@ -1490,7 +1490,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao_deleteall",
       "community": 2,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlaylistDao",
       "norm_label": ".deleteall()"
     },
     {
@@ -1502,7 +1502,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao_updatelocalpath",
       "community": 2,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlaylistDao",
       "norm_label": ".updatelocalpath()"
     },
     {
@@ -1514,7 +1514,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistdao_playlistdao_replaceall",
       "community": 2,
-      "community_name": "PlaylistItemEntity",
+      "community_name": "PlaylistDao",
       "norm_label": ".replaceall()"
     },
     {
@@ -1524,7 +1524,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistitementity",
-      "community": 2,
+      "community": 81,
       "community_name": "PlaylistItemEntity",
       "norm_label": "playlistitementity.kt"
     },
@@ -1537,7 +1537,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_data_playlistitementity_playlistitementity",
-      "community": 2,
+      "community": 81,
       "community_name": "PlaylistItemEntity",
       "norm_label": "playlistitementity"
     },
@@ -1759,8 +1759,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_device_deviceownermanager",
-      "community": 193,
-      "community_name": "ComponentName",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "deviceownermanager.kt"
     },
     {
@@ -1772,8 +1772,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_device_deviceownermanager_deviceownermanager",
-      "community": 193,
-      "community_name": "ComponentName",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "deviceownermanager"
     },
     {
@@ -1784,8 +1784,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_device_deviceownermanager_deviceownermanager_isdeviceowner",
-      "community": 193,
-      "community_name": "ComponentName",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".isdeviceowner()"
     },
     {
@@ -1795,8 +1795,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_device_deviceownermanager_kt_context",
-      "community": 193,
-      "community_name": "ComponentName",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "context"
     },
     {
@@ -1807,8 +1807,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_device_deviceownermanager_deviceownermanager_applykioskpolicy",
-      "community": 193,
-      "community_name": "ComponentName",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".applykioskpolicy()"
     },
     {
@@ -4289,7 +4289,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen",
       "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "playerscreen.kt"
     },
     {
@@ -4301,7 +4301,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_playerscreen",
       "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "playerscreen()"
     },
     {
@@ -4313,7 +4313,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_dualsurfaceplayer",
       "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "dualsurfaceplayer()"
     },
     {
@@ -4361,7 +4361,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_trimqueueifoversized",
       "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "trimqueueifoversized()"
     },
     {
@@ -4372,7 +4372,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_kt_com",
       "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "com"
     },
     {
@@ -4384,7 +4384,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_writeplaycheckpoint",
       "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "writeplaycheckpoint()"
     },
     {
@@ -4395,7 +4395,7 @@
       "_origin": "ast",
       "id": "android",
       "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "android"
     },
     {
@@ -4407,7 +4407,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_recoverinterruptedplay",
       "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "recoverinterruptedplay()"
     },
     {
@@ -4419,7 +4419,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_clearplaycheckpoint",
       "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "clearplaycheckpoint()"
     },
     {
@@ -4444,7 +4444,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_isimagedecodable",
       "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "isimagedecodable()"
     },
     {
@@ -4456,7 +4456,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_playbacksurface",
       "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "playbacksurface()"
     },
     {
@@ -4466,8 +4466,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_kt_exoplayer",
-      "community": 90,
-      "community_name": "Player",
+      "community": 81,
+      "community_name": "PlaylistItemEntity",
       "norm_label": "exoplayer"
     },
     {
@@ -4478,7 +4478,7 @@
       "_origin": "ast",
       "id": "dp",
       "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "dp"
     },
     {
@@ -4489,7 +4489,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_kt_modifier",
       "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "modifier"
     },
     {
@@ -4501,7 +4501,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_transitionlayer",
       "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "transitionlayer()"
     },
     {
@@ -4513,7 +4513,7 @@
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_ui_playerscreen_prepareplayer",
       "community": 81,
-      "community_name": "PlayerScreen.kt",
+      "community_name": "PlaylistItemEntity",
       "norm_label": "prepareplayer()"
     },
     {
@@ -5859,8 +5859,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_bootreceiver",
-      "community": 188,
-      "community_name": "BootReceiver.java",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "bootreceiver.java"
     },
     {
@@ -5872,8 +5872,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_bootreceiver_bootreceiver",
-      "community": 188,
-      "community_name": "BootReceiver.java",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "bootreceiver"
     },
     {
@@ -5884,8 +5884,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_bootreceiver_bootreceiver_onreceive",
-      "community": 188,
-      "community_name": "BootReceiver.java",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".onreceive()"
     },
     {
@@ -5895,8 +5895,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_bootreceiver_java_intent",
-      "community": 188,
-      "community_name": "BootReceiver.java",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "intent"
     },
     {
@@ -5906,8 +5906,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_bootreceiver_java_override",
-      "community": 188,
-      "community_name": "BootReceiver.java",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "override"
     },
     {
@@ -5917,8 +5917,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_configurereceiver",
-      "community": 188,
-      "community_name": "BootReceiver.java",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "configurereceiver.java"
     },
     {
@@ -5930,8 +5930,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_configurereceiver_configurereceiver",
-      "community": 188,
-      "community_name": "BootReceiver.java",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "configurereceiver"
     },
     {
@@ -5942,8 +5942,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_configurereceiver_configurereceiver_onreceive",
-      "community": 82,
-      "community_name": "android.content.Context",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".onreceive()"
     },
     {
@@ -5953,8 +5953,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_configurereceiver_java_override",
-      "community": 82,
-      "community_name": "android.content.Context",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "override"
     },
     {
@@ -6106,8 +6106,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogaccessibilityservice",
-      "community": 181,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "watchdogaccessibilityservice.java"
     },
     {
@@ -6119,8 +6119,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogaccessibilityservice_watchdogaccessibilityservice",
-      "community": 181,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "watchdogaccessibilityservice"
     },
     {
@@ -6131,8 +6131,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogaccessibilityservice_watchdogaccessibilityservice_oncreate",
-      "community": 181,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".oncreate()"
     },
     {
@@ -6142,8 +6142,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogaccessibilityservice_java_override",
-      "community": 181,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "override"
     },
     {
@@ -6154,8 +6154,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogaccessibilityservice_watchdogaccessibilityservice_onserviceconnected",
-      "community": 181,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".onserviceconnected()"
     },
     {
@@ -6166,8 +6166,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogaccessibilityservice_watchdogaccessibilityservice_launchablesign",
-      "community": 181,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".launchablesign()"
     },
     {
@@ -6178,8 +6178,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogaccessibilityservice_watchdogaccessibilityservice_onaccessibilityevent",
-      "community": 181,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".onaccessibilityevent()"
     },
     {
@@ -6190,8 +6190,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogaccessibilityservice_watchdogaccessibilityservice_oninterrupt",
-      "community": 181,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".oninterrupt()"
     },
     {
@@ -6201,8 +6201,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogtarget",
-      "community": 82,
-      "community_name": "android.content.Context",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "watchdogtarget.java"
     },
     {
@@ -6214,8 +6214,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogtarget_watchdogtarget",
-      "community": 82,
-      "community_name": "android.content.Context",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "watchdogtarget"
     },
     {
@@ -6226,8 +6226,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogtarget_watchdogtarget_watchdogtarget",
-      "community": 82,
-      "community_name": "android.content.Context",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".watchdogtarget()"
     },
     {
@@ -6238,8 +6238,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogtarget_watchdogtarget_packagename",
-      "community": 82,
-      "community_name": "android.content.Context",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".packagename()"
     },
     {
@@ -6250,8 +6250,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogtarget_watchdogtarget_activityname",
-      "community": 82,
-      "community_name": "android.content.Context",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".activityname()"
     },
     {
@@ -6262,8 +6262,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogtarget_watchdogtarget_component",
-      "community": 82,
-      "community_name": "android.content.Context",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".component()"
     },
     {
@@ -6273,8 +6273,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "componentname",
-      "community": 193,
-      "community_name": "ComponentName",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "componentname"
     },
     {
@@ -6285,8 +6285,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogtarget_watchdogtarget_configure",
-      "community": 82,
-      "community_name": "android.content.Context",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".configure()"
     },
     {
@@ -6297,8 +6297,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_watchdog_src_com_ablesign_bootlauncher_watchdogtarget_watchdogtarget_prefs",
-      "community": 82,
-      "community_name": "android.content.Context",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": ".prefs()"
     },
     {
@@ -15406,8 +15406,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_tenancy_is_super_admin",
-      "community": 18,
-      "community_name": "tenancy.py",
+      "community": 201,
+      "community_name": ".query",
       "norm_label": "is_super_admin()"
     },
     {
@@ -15417,8 +15417,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_tenancy_py_user",
-      "community": 18,
-      "community_name": "tenancy.py",
+      "community": 201,
+      "community_name": ".query",
       "norm_label": "user"
     },
     {
@@ -15535,8 +15535,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_tenancy_require_super_admin",
-      "community": 18,
-      "community_name": "tenancy.py",
+      "community": 201,
+      "community_name": ".query",
       "norm_label": "require_super_admin()"
     },
     {
@@ -15558,8 +15558,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "backend_tenancy_rationale_15",
-      "community": 18,
-      "community_name": "tenancy.py",
+      "community": 201,
+      "community_name": ".query",
       "norm_label": "the single source of truth for platform-operator status. this used to be `role..."
     },
     {
@@ -15580,8 +15580,8 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "backend_tenancy_rationale_129",
-      "community": 18,
-      "community_name": "tenancy.py",
+      "community": 201,
+      "community_name": ".query",
       "norm_label": "platform-operator routes only. every caller of this used to accept `role in..."
     },
     {
@@ -29181,8 +29181,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_app_pendingintent",
-      "community": 188,
-      "community_name": "BootReceiver.java",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "android.app.pendingintent"
     },
     {
@@ -29192,8 +29192,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_content_broadcastreceiver",
-      "community": 188,
-      "community_name": "BootReceiver.java",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "android.content.broadcastreceiver"
     },
     {
@@ -29203,8 +29203,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_content_componentname",
-      "community": 82,
-      "community_name": "android.content.Context",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "android.content.componentname"
     },
     {
@@ -29214,8 +29214,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_content_context",
-      "community": 82,
-      "community_name": "android.content.Context",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "android.content.context"
     },
     {
@@ -29269,8 +29269,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_accessibilityservice_accessibilityservice",
-      "community": 181,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "android.accessibilityservice.accessibilityservice"
     },
     {
@@ -29280,8 +29280,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_view_accessibility_accessibilityevent",
-      "community": 181,
-      "community_name": "WatchdogAccessibilityService",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "android.view.accessibility.accessibilityevent"
     },
     {
@@ -29291,8 +29291,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_content_sharedpreferences",
-      "community": 82,
-      "community_name": "android.content.Context",
+      "community": 8,
+      "community_name": "MainActivity",
       "norm_label": "android.content.sharedpreferences"
     }
   ],
@@ -30955,7 +30955,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/boot/WatchdogAccessibilityService.kt",
-      "source_location": "L113",
+      "source_location": "L123",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_boot_watchdogaccessibilityservice_watchdogaccessibilityservice",
@@ -31005,6 +31005,18 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_boot_watchdogaccessibilityservice_watchdogaccessibilityservice_onserviceconnected",
+      "target": "android_tv_app_src_main_java_com_olrac_signage_boot_watchdogaccessibilityservice_watchdogaccessibilityservice_schedulelaunch",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "android-tv/app/src/main/java/com/olrac/signage/boot/WatchdogAccessibilityService.kt",
+      "source_location": "L118",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "android_tv_app_src_main_java_com_olrac_signage_boot_watchdogaccessibilityservice_watchdogaccessibilityservice_onaccessibilityevent",
       "target": "android_tv_app_src_main_java_com_olrac_signage_boot_watchdogaccessibilityservice_watchdogaccessibilityservice_schedulelaunch",
       "confidence_score": 1.0
     },
@@ -96014,5 +96026,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "c3add18cbcc7667dd761266a34252e0eae685293"
+  "built_at_commit": "3ee39414824cefc6f880bae6277805628ae60079"
 }

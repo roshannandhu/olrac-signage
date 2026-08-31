@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from .. import models, schemas, database
 from ..tenancy import TenantScope, get_tenant_scope, require_tenant_roles
-from .content import is_s3_enabled, s3_client, S3_BUCKET, UPLOAD_DIR, public_upload_url
-from ..media_urls import resolve_media_url, storage_prefix
+from .content import UPLOAD_DIR, public_upload_url
+from ..media_urls import is_s3_enabled, get_s3_config, resolve_media_url, storage_prefix
 from .screens import verify_device_auth
 
 logger = logging.getLogger(__name__)
@@ -64,18 +64,21 @@ def upload_device_screenshot(
     
     if is_s3_enabled():
         try:
-            s3_client.upload_fileobj(
+            import boto3
+            cfg = get_s3_config()
+            s3 = boto3.client(
+                "s3",
+                endpoint_url=cfg["endpoint_url"],
+                aws_access_key_id=cfg["aws_access_key_id"],
+                aws_secret_access_key=cfg["aws_secret_access_key"],
+                region_name=cfg["region_name"],
+            )
+            s3.upload_fileobj(
                 file.file,
-                S3_BUCKET,
+                cfg["bucket"],
                 storage_key,
                 ExtraArgs={"ContentType": file.content_type or "image/jpeg"},
             )
-            # Stored in the canonical "s3://<key>" form, like every other asset, and
-            # resolved to a fetchable URL on read (list_screenshots below already calls
-            # resolve_media_url). It used to be saved as a public https://pub-... URL,
-            # which media_storage.is_remote() does not recognise -- so the nightly
-            # prune deleted the row, silently failed to delete the object, and every
-            # screenshot ever taken stayed in the bucket forever.
             file_url = f"s3://{storage_key}"
         except Exception as e:
             logger.error(f"Failed to upload screenshot to S3: {e}")

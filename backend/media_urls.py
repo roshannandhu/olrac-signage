@@ -55,9 +55,30 @@ def storage_prefix(organization) -> str:
     return f"org-{organization.id}"
 
 
+R2_ENDPOINT_DEFAULT = "https://3fe4487a2b8fd1e2e541bf0e0f4c7c42.r2.cloudflarestorage.com"
+R2_KEY_ID_DEFAULT = "734d432aeb20a3f4bbd484ca83a8a82b"
+R2_SECRET_DEFAULT = "ef6c0c74667843ec08f396b12ab0e8929d409c8c8062713da09cd17c6c628acf"
+R2_BUCKET_DEFAULT = "olrac"
+
+
+def get_s3_config() -> dict[str, str]:
+    endpoint = (os.getenv("S3_ENDPOINT_URL") or R2_ENDPOINT_DEFAULT).strip()
+    key_id = (os.getenv("AWS_ACCESS_KEY_ID") or R2_KEY_ID_DEFAULT).strip()
+    secret = (os.getenv("AWS_SECRET_ACCESS_KEY") or R2_SECRET_DEFAULT).strip()
+    bucket = (os.getenv("S3_BUCKET_NAME") or R2_BUCKET_DEFAULT).strip()
+    region = (os.getenv("AWS_REGION") or "auto").strip()
+    return {
+        "endpoint_url": endpoint,
+        "aws_access_key_id": key_id,
+        "aws_secret_access_key": secret,
+        "bucket": bucket,
+        "region_name": region,
+    }
+
+
 def is_s3_enabled() -> bool:
-    key = os.getenv("AWS_ACCESS_KEY_ID")
-    return bool(key and key != "mock")
+    cfg = get_s3_config()
+    return bool(cfg["aws_access_key_id"] and cfg["aws_access_key_id"] != "mock")
 
 
 @lru_cache(maxsize=1)
@@ -105,17 +126,18 @@ def resolve_media_url(value: str | None) -> str | None:
     try:
         import boto3
 
+        cfg = get_s3_config()
         client = boto3.client(
             "s3",
-            endpoint_url=os.getenv("S3_ENDPOINT_URL") or None,
-            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-            region_name=os.getenv("AWS_REGION", "auto"),
+            endpoint_url=cfg["endpoint_url"],
+            aws_access_key_id=cfg["aws_access_key_id"],
+            aws_secret_access_key=cfg["aws_secret_access_key"],
+            region_name=cfg["region_name"],
         )
         return client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": os.getenv("S3_BUCKET_NAME", "olrac-media"), "Key": value.removeprefix("s3://")},
-            ExpiresIn=3600,
+            Params={"Bucket": cfg["bucket"], "Key": value.removeprefix("s3://")},
+            ExpiresIn=3600 * 24 * 7,
         )
     except Exception:
         return value

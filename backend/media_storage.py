@@ -19,23 +19,23 @@ import pathlib
 import shutil
 from typing import Optional
 
-from .media_urls import is_s3_enabled
+from .media_urls import is_s3_enabled, get_s3_config
 
 UPLOAD_DIR = os.path.join(
     pathlib.Path(__file__).parent.parent.absolute(), "uploads"
 )
-S3_BUCKET = os.getenv("S3_BUCKET_NAME", "olrac-media")
 
 
 def _client():
     import boto3
 
+    cfg = get_s3_config()
     return boto3.client(
         "s3",
-        endpoint_url=os.getenv("S3_ENDPOINT_URL") or None,
-        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-        region_name=os.getenv("AWS_REGION", "auto"),
+        endpoint_url=cfg["endpoint_url"],
+        aws_access_key_id=cfg["aws_access_key_id"],
+        aws_secret_access_key=cfg["aws_secret_access_key"],
+        region_name=cfg["region_name"],
     )
 
 
@@ -66,7 +66,8 @@ def fetch_to(stored_url: str, destination: pathlib.Path) -> pathlib.Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     if is_remote(stored_url):
-        _client().download_file(S3_BUCKET, key, str(destination))
+        cfg = get_s3_config()
+        _client().download_file(cfg["bucket"], key, str(destination))
         return destination
 
     source = pathlib.Path(UPLOAD_DIR) / key
@@ -84,8 +85,9 @@ def store(local_path: pathlib.Path, key: str, content_type: Optional[str] = None
     an original as far as `resolve_media_url` is concerned.
     """
     if is_s3_enabled():
+        cfg = get_s3_config()
         extra = {"ContentType": content_type} if content_type else None
-        _client().upload_file(str(local_path), S3_BUCKET, key, ExtraArgs=extra)
+        _client().upload_file(str(local_path), cfg["bucket"], key, ExtraArgs=extra)
         return f"s3://{key}"
 
     target = pathlib.Path(UPLOAD_DIR) / key
@@ -108,8 +110,10 @@ def delete(stored_url: str) -> bool:
         from .media_urls import delete_stored_file
 
         return delete_stored_file(stored_url, UPLOAD_DIR)
+
+    cfg = get_s3_config()
     try:
-        _client().delete_object(Bucket=S3_BUCKET, Key=storage_key_for(stored_url))
+        _client().delete_object(Bucket=cfg["bucket"], Key=storage_key_for(stored_url))
         return True
     except Exception:
         return False

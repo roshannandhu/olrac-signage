@@ -1,16 +1,16 @@
 # Graph Report - OLRAC SIGNAGE  (2026-08-31)
 
 ## Corpus Check
-- 310 files · ~336,196 words
+- 310 files · ~336,111 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2505 nodes · 5718 edges · 200 communities (153 shown, 47 thin omitted)
+- 2505 nodes · 5716 edges · 206 communities (161 shown, 45 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 203 edges (avg confidence: 0.78)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `da9d5e8d`
+- Built from commit: `7eb618cd`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -36,7 +36,7 @@
 - routers/billing.py
 - resolve_rotation
 - main.py
-- utcnow
+- groups.py
 - dependencies
 - devDependencies
 - TenantScope
@@ -44,7 +44,7 @@
 - TransitionType
 - admin.py
 - app/layout.tsx
-- google_device.py
+- _post
 - StorageManagerTest
 - conftest.py
 - ProofOfPlayWorker.kt
@@ -66,11 +66,11 @@
 - TransitionSpecResolverTest
 - websockets.py
 - process_media_sync
-- tenancy.py
+- content.py
 - SyncBackoffPolicyTest
 - gradlew
 - .onCreate
-- content.py
+- storage_prefix
 - model_validator
 - ScreenshotManager
 - eslint.config.mjs
@@ -85,7 +85,7 @@
 - postcss.config.mjs
 - backup_db.sh
 - validation_script.sh
-- screens/[id]/page.tsx
+- files/page.tsx
 - Player
 - AppDatabase
 - P8 — Per-TV capability detection and rendition selection
@@ -117,9 +117,9 @@
 - select_rendition
 - start-dev.ps1
 - useAuthStore
-- get_password_hash
+- sign_in_with_google
 - cleanup_orphans.py
-- create_access_token
+- test_p6_websockets.py
 - provision-tv.sh
 - build.sh
 - ApiClient
@@ -132,43 +132,49 @@
 - MaintenanceGesture
 - recharts
 - screens.py
-- ScreenBase
+- update_screen
 - PlayCompletionTest
 - check_r2.py
 - PlayEndReason
 - UpdateGateTest
 - @dnd-kit/utilities
 - theme-toggle.tsx
-- run
+- get_redis
 - UpdateGate
 - a1b4e7c92f38_play_log_campaign_attribution.py
-- PlaylistBase
+- get
 - next-themes
 - react
 - tw-animate-css
 - @types/leaflet
-- users.py
-- analytics.py
+- HTTPException
+- create_access_token
 - Organization
 - test_reinstall_reconnect.py
 - GoogleWebSignInRequest
-- ScreenSignInRequest
+- resolve_media_url
 - WatchdogAccessibilityService
 - test_google_signin.py
 - @dnd-kit/sortable
 - shadcn
 - WatchdogAccessibilityService
 - BootReceiver.java
-- billing/page.tsx
+- emergency/page.tsx
 - @dnd-kit/core
-- test_ws_connection_pool.py
+- utcnow
 - ComponentName
-- GoogleDevicePollResponse
-- HeartbeatRequest
+- get_payment_provider
+- upload_content
 - PlacementSplit
 - ProfileUpdate
-- ScheduleBase
-- next
+- test_signup_lifecycle.py
+- acknowledge_alert
+- trigger_emergency_broadcast
+- auth_device
+- resolve_location_link
+- AlertSummaryResponse
+- RegisterResponse
+- leaflet
 
 ## God Nodes (most connected - your core abstractions)
 1. `TenantScope` - 121 edges
@@ -197,15 +203,15 @@
 ## Import Cycles
 - None detected.
 
-## Communities (200 total, 47 thin omitted)
+## Communities (206 total, 45 thin omitted)
 
 ### Community 0 - "test_tv_deep_link.py"
 Cohesion: 0.16
-Nodes (16): _android_intent_url(), The TV's Custom Tab landing page, which then hands back to the player app.…, Rewrite an "olrac://" deep link into the intent: form a browser will actually…, _tv_result_page(), HTMLResponse, The TV hand-back link must be openable by a browser: python…, The whole bug in one assertion: a raw custom scheme is what Chrome rejects., No APK change: the intent's data must still be the olrac:// URL already… (+8 more)
+Nodes (16): _android_intent_url(), Rewrite an "olrac://" deep link into the intent: form a browser will actually…, The TV's Custom Tab landing page, which then hands back to the player app.…, _tv_result_page(), HTMLResponse, The TV hand-back link must be openable by a browser: python…, The whole bug in one assertion: a raw custom scheme is what Chrome rejects., No APK change: the intent's data must still be the olrac:// URL already… (+8 more)
 
 ### Community 1 - "schemas.py"
 Cohesion: 0.09
-Nodes (41): AlertResponse, AlertSummaryResponse, AppReleasePatch, AppVersionResponse, BillingSummaryResponse, CheckoutRequest, CheckoutResponse, DeviceAuthRequest (+33 more)
+Nodes (42): create_checkout(), AlertResponse, AppReleasePatch, AppVersionResponse, BillingSummaryResponse, CheckoutRequest, CheckoutResponse, DeviceAuthRequest (+34 more)
 
 ### Community 2 - "PlaylistItemEntity"
 Cohesion: 0.24
@@ -220,16 +226,16 @@ Cohesion: 0.14
 Nodes (7): RegistrationSnapshot, Intent, MainActivity, GooglePollRequest, SignInRequest, ComponentActivity, KeyEvent
 
 ### Community 5 - "team/page.tsx"
-Cohesion: 0.10
-Nodes (40): exportFormats, targetLabels, GroupDetailPage(), PendingApprovalPage(), roleDescription, TENANT_ROLES, AssignPlaylistCard(), AssignTarget (+32 more)
+Cohesion: 0.09
+Nodes (43): orientationLabel(), ScreenDetailPage(), asTenantRole(), roleDescription, TeamPage(), TENANT_ROLES, AdBookings(), asDate() (+35 more)
 
 ### Community 6 - "PlaybackService"
 Cohesion: 0.06
 Nodes (22): ConnectivityWatcher, Response, WebSocket, RealtimeClient, WebSocketListener, Context, Intent, Job (+14 more)
 
 ### Community 7 - "models.py"
-Cohesion: 0.14
-Nodes (21): AdPlacementTarget, Alert, Campaign, EmergencyBroadcast, Plan, PlayLog, PlayLogHourlyRollup, datetime (+13 more)
+Cohesion: 0.11
+Nodes (24): AdPlacementTarget, Alert, Campaign, EmergencyBroadcast, Plan, PlayLog, PlayLogHourlyRollup, One place a booked advert runs, and the playlist item it put there. Exactly one… (+16 more)
 
 ### Community 8 - "MainActivity"
 Cohesion: 0.21
@@ -244,16 +250,16 @@ Cohesion: 0.07
 Nodes (28): compilerOptions, allowJs, esModuleInterop, incremental, isolatedModules, jsx, lib, module (+20 more)
 
 ### Community 12 - "ValueError"
-Cohesion: 0.14
-Nodes (11): AppReleaseCreate, AppReleaseResponse, PasswordChange, PlaylistItemUpdate, Partial screen update: only the fields actually present are written. The PUT…, Each day maps to exactly [start, end] as HH:MM. Validated here rather than in…, ScreenPatch, UserCreate (+3 more)
+Cohesion: 0.12
+Nodes (14): AppReleaseCreate, AppReleaseResponse, HeartbeatRequest, PasswordChange, PlaylistItemUpdate, Partial screen update: only the fields actually present are written. The PUT…, Each day maps to exactly [start, end] as HH:MM. Validated here rather than in…, ScheduleBase (+6 more)
 
 ### Community 13 - "test_screen_approval.py"
 Cohesion: 0.26
 Nodes (11): auth_header(), Screen pairing is instant: python tests/test_screen_approval.py This file used…, sign_in(), test_a_secret_does_not_authenticate_a_different_screen(), test_a_signed_in_screen_syncs_straight_away(), test_enrolment_token_admits_immediately(), test_pairing_admits_immediately(), test_re_signing_in_keeps_the_screen_admitted() (+3 more)
 
 ### Community 14 - "api.ts"
-Cohesion: 0.06
-Nodes (44): blank, AdminReleasesPage(), API_HOST, ApiError, authFetch(), configuredUrl, fetchWithAuth(), WS_BASE (+36 more)
+Cohesion: 0.07
+Nodes (45): blank, AdminReleasesPage(), API_HOST, ApiError, authFetch(), configuredUrl, fetchWithAuth(), WS_BASE (+37 more)
 
 ### Community 15 - "components.json"
 Cohesion: 0.09
@@ -276,24 +282,24 @@ Cohesion: 0.23
 Nodes (12): normalise(), Resolve the rotation a screen should apply to one playlist item. The player…, Coerce anything to one of 0/90/180/270, defaulting to 0., Degrees the player should rotate this item on this screen., resolve_rotation(), Rotation precedence — pure logic, no database, no device. Run directly: python…, A screen mounted portrait with one item deliberately pinned to landscape., test_defaults_when_nothing_is_set() (+4 more)
 
 ### Community 20 - "main.py"
-Cohesion: 0.06
-Nodes (24): _pool_for_current_loop(), login_page(), get, Request, read_root(), _redact(), redacted_validation_error(), ConnectionPool (+16 more)
+Cohesion: 0.07
+Nodes (31): login_page(), get, Request, read_root(), _redact(), redacted_validation_error(), ensure_initial_owner(), get_or_create_default_organization() (+23 more)
 
-### Community 21 - "utcnow"
-Cohesion: 0.18
-Nodes (20): Return a timezone-aware UTC timestamp., utcnow(), Point a screen at a build, clearing any state from the previous attempt.…, repin(), assign_group_playlist(), create_group(), delete_group(), list_groups() (+12 more)
+### Community 21 - "groups.py"
+Cohesion: 0.33
+Nodes (12): assign_group_playlist(), create_group(), delete_group(), list_groups(), get, put, Reject a parent that is not ours, is the group itself, or would close a loop.…, serialize_group() (+4 more)
 
 ### Community 22 - "dependencies"
 Cohesion: 0.10
-Nodes (21): @base-ui/react, class-variance-authority, clsx, dependencies, @base-ui/react, class-variance-authority, clsx, leaflet (+13 more)
+Nodes (21): @base-ui/react, class-variance-authority, clsx, dependencies, @base-ui/react, class-variance-authority, clsx, next (+13 more)
 
 ### Community 23 - "devDependencies"
 Cohesion: 0.09
 Nodes (23): eslint, eslint-config-next, devDependencies, eslint, eslint-config-next, @opennextjs/cloudflare, tailwindcss, @tailwindcss/postcss (+15 more)
 
 ### Community 24 - "TenantScope"
-Cohesion: 0.09
-Nodes (48): delete(), Remove a stored object. Best effort -- a missing object is not an error. Local…, AdPlacement, An advert sold to a client: what runs, for whom, when, and for how much.…, create_checkout(), revoke_token(), add_target(), _booking_screen_ids() (+40 more)
+Cohesion: 0.11
+Nodes (37): AdPlacement, An advert sold to a client: what runs, for whom, when, and for how much.…, add_target(), _booking_screen_ids(), build_booking_report(), create_placement(), delete_placement(), download_booking_report() (+29 more)
 
 ### Community 25 - "OLRAC Signage"
 Cohesion: 0.11
@@ -311,9 +317,9 @@ Nodes (55): _apply_plan(), ApprovalRequest, approve_tenant(), create_plan(), del
 Cohesion: 0.19
 Nodes (8): geistMono, geistSans, metadata, Providers(), Toaster(), TransitionClass, ViewTransition(), ViewTransitionProps
 
-### Community 29 - "google_device.py"
-Cohesion: 0.07
-Nodes (41): build_oauth_url(), _claims(), client_id(), client_secret(), exchange_code(), GoogleError, is_configured(), is_web_configured() (+33 more)
+### Community 29 - "_post"
+Cohesion: 0.14
+Nodes (27): build_oauth_url(), _claims(), client_id(), client_secret(), exchange_code(), GoogleError, is_configured(), is_web_configured() (+19 more)
 
 ### Community 30 - "StorageManagerTest"
 Cohesion: 0.22
@@ -336,8 +342,8 @@ Cohesion: 0.38
 Nodes (4): Context, Intent, PlayerLauncher, PendingIntent
 
 ### Community 35 - "cn"
-Cohesion: 0.16
-Nodes (20): StatusIndicator(), CardAction(), CardDescription(), CardFooter(), CardHeader(), CardTitle(), SelectGroup(), SelectLabel() (+12 more)
+Cohesion: 0.20
+Nodes (15): StatusIndicator(), SelectGroup(), SelectLabel(), SelectScrollDownButton(), SelectScrollUpButton(), SelectSeparator(), Table(), TableBody() (+7 more)
 
 ### Community 36 - "test_alerting.py"
 Cohesion: 0.08
@@ -376,16 +382,16 @@ Cohesion: 0.40
 Nodes (3): HeartbeatWorker, CoroutineWorker, Result
 
 ### Community 49 - "websockets.py"
-Cohesion: 0.11
-Nodes (28): Any, get_redis(), health_check(), Session, Liveness, plus WHICH database is actually behind it. This used to answer…, bring_to_front(), delete_screen(), queue_device_command() (+20 more)
+Cohesion: 0.18
+Nodes (16): health_check(), Session, Liveness, plus WHICH database is actually behind it. This used to answer…, legacy_device_auth_allowed(), Whether a screen holding no device secret may still call the device endpoints.…, dashboard_websocket(), Screen, Session (+8 more)
 
 ### Community 50 - "process_media_sync"
 Cohesion: 0.07
-Nodes (46): _client(), fetch_to(), is_remote(), Path, Reading and writing media wherever it happens to live. The transcoder needs a…, The backend-relative key inside a stored location. Both schemes carry the same…, Put the bytes of `stored_url` at `destination` and return it. A local file is…, Persist `local_path` under `key` and return the location to save on the row.… (+38 more)
+Nodes (45): _client(), fetch_to(), is_remote(), Path, The backend-relative key inside a stored location. Both schemes carry the same…, Put the bytes of `stored_url` at `destination` and return it. A local file is…, Persist `local_path` under `key` and return the location to save on the row.…, storage_key_for() (+37 more)
 
-### Community 51 - "tenancy.py"
-Cohesion: 0.08
-Nodes (39): Alert, OLRAC Signage backend package. Explicit package marker. Without it `backend` is…, eligible_for_fallback(), Staged player rollout: which build a screen is offered, and when to give up on…, Restrict an AppRelease query to builds that unpinned screens may be offered., acknowledge_alert(), alert_summary(), list_alerts() (+31 more)
+### Community 51 - "content.py"
+Cohesion: 0.15
+Nodes (22): OLRAC Signage backend package. Explicit package marker. Without it `backend` is…, public_upload_url(), Where an asset lives, stored as a path rather than a full URL. This used to…, create_token(), list_tokens(), get, _token_to_dict(), generate_provisioning_qr() (+14 more)
 
 ### Community 53 - "gradlew"
 Cohesion: 0.83
@@ -395,12 +401,12 @@ Nodes (3): gradlew script, die(), warn()
 Cohesion: 0.32
 Nodes (13): BrandedMessage(), GoogleLogo(), GoogleSignInScreen(), Bundle, Modifier, PairingScreen(), PinPromptScreen(), secondaryButtonColors() (+5 more)
 
-### Community 74 - "content.py"
-Cohesion: 0.06
-Nodes (50): delete_stored_file(), _detect_lan_host(), is_s3_enabled(), media_base_url(), Turning a stored media location into something a browser or a TV can fetch.…, Remove the local file a stored location points at. Returns True if it went.…, Folder in Cloudflare R2 / storage, named after the account's email. Named…, Best-effort LAN address of this machine, so devices on the network can reach… (+42 more)
+### Community 74 - "storage_prefix"
+Cohesion: 0.12
+Nodes (21): Folder in Cloudflare R2 / storage, named after the account's email. Named…, storage_prefix(), Address that names this tenant's storage folder. See media_urls.storage_prefix.…, FakeOrg, FakeUser, Tenant storage folders are named, unique and stable: python…, Local disk and R2 must file a capture under the same key, or the folder layout…, Stands in for models.Organization; owner_email is a property over .users. (+13 more)
 
 ### Community 75 - "model_validator"
-Cohesion: 0.17
+Cohesion: 0.15
 Nodes (7): MediaRenditionResponse, PlacementCreate, PlaylistItemBase, PlaylistItemCreate, PlaylistItemResponse, PlaylistUpdate, model_validator
 
 ### Community 76 - "ScreenshotManager"
@@ -431,9 +437,9 @@ Nodes (44): _expand(), geocode(), _is_error_page(), MapsLinkError, _name_from(),
 Cohesion: 0.20
 Nodes (9): 1. Make the app a working Device Policy Controller, 2. Silent updates (finishes P7), 3. Generate the provisioning QR, 4. Auto-enrol on first boot, 5. Retire the accessibility watchdog on provisioned devices, Definition of done, Deployment paths, in order of preference, P9 — Zero-touch provisioning for 80+ TVs (no ADB) (+1 more)
 
-### Community 89 - "screens/[id]/page.tsx"
-Cohesion: 0.14
-Nodes (21): orientationLabel(), ScreenDetailPage(), AdBookings(), asDate(), runState(), rupees(), EmptyState(), dateTime() (+13 more)
+### Community 89 - "files/page.tsx"
+Cohesion: 0.12
+Nodes (25): Alert, AlertsPage(), buildAlerts(), hoursSince(), Severity, FileManagementPage(), FileSort, SORTS (+17 more)
 
 ### Community 90 - "Player"
 Cohesion: 0.25
@@ -504,8 +510,8 @@ Cohesion: 0.12
 Nodes (16): 0. Before either dashboard, 1. Render: the API and worker, 2. The dashboard: Cloudflare Workers, or Vercel, 2a. Cloudflare Workers (via OpenNext), 2b. Vercel, 3. Back to Render, 4. Create the platform operator, 5. Verify before provisioning a screen (+8 more)
 
 ### Community 114 - "playlist-builder.tsx"
-Cohesion: 0.11
-Nodes (27): AdDetailPage(), FileManagementPage(), FileSort, SORTS, MediaThumbnail(), dayLabels, dayNames, DefaultTransitionPanel() (+19 more)
+Cohesion: 0.14
+Nodes (19): AdDetailPage(), dayLabels, dayNames, DefaultTransitionPanel(), ItemRow(), PlaylistBuilder(), previewStyle(), rotationLabel() (+11 more)
 
 ### Community 118 - "check-maps-keys.py"
 Cohesion: 0.32
@@ -524,20 +530,20 @@ Cohesion: 0.25
 Nodes (16): Screen, Selects the most appropriate media rendition for a screen based on its hardware…, select_rendition(), Rendition selection, against the set the transcoder actually produces.…, Content carrying exactly what the transcoder produces today., real_content(), rendition(), screen() (+8 more)
 
 ### Community 128 - "useAuthStore"
-Cohesion: 0.16
+Cohesion: 0.15
 Nodes (20): AdminLayout(), navItems, AccountPage(), EmergencyPage(), accountLinks, DashboardLayout(), primaryLinks, toolLinks (+12 more)
 
-### Community 130 - "get_password_hash"
-Cohesion: 0.10
-Nodes (32): auth_methods(), change_own_password(), ensure_initial_owner(), get_current_user(), get_current_user_ws(), get_or_create_default_organization(), get_password_hash(), login_for_access_token() (+24 more)
+### Community 130 - "sign_in_with_google"
+Cohesion: 0.17
+Nodes (19): auth_methods(), change_own_password(), get_current_user(), get_current_user_ws(), login_for_access_token(), get, limit, patch (+11 more)
 
 ### Community 131 - "cleanup_orphans.py"
 Cohesion: 0.43
 Nodes (6): find_orphans(), main(), Path, Find upload files that no database row points at. Reports by default and…, Every upload path any row still points at, relative to the uploads root., referenced_paths()
 
-### Community 132 - "create_access_token"
-Cohesion: 0.14
-Nodes (19): ScreenGroup, create_access_token(), capture_screenshot(), main(), P6 realtime checks: python tests/test_p6_websockets.py Covers hierarchical…, /api/ws/dashboard/ws must reach the dashboard handler, not the device one. Both…, Push must never be the only path. The spec is explicit: if the socket is down…, _redis_available() (+11 more)
+### Community 132 - "test_p6_websockets.py"
+Cohesion: 0.30
+Nodes (10): P6 realtime checks: python tests/test_p6_websockets.py Covers hierarchical…, /api/ws/dashboard/ws must reach the dashboard handler, not the device one. Both…, Push must never be the only path. The spec is explicit: if the socket is down…, _redis_available(), run(), setup_db(), test_dashboard_websocket_is_not_shadowed_by_device_route(), test_hierarchical_playlist_resolution() (+2 more)
 
 ### Community 137 - "ApiClient"
 Cohesion: 0.36
@@ -548,24 +554,24 @@ Cohesion: 0.22
 Nodes (14): api_key(), fetch_static_map(), is_enabled(), Map imagery for reports, behind a single switch. Everything map-related…, URL for an image pinning every point, or None when maps are not configured.…, The map image itself, or None if unavailable. A report must never fail because…, static_map_url(), build_pdf() (+6 more)
 
 ### Community 143 - "screens/page.tsx"
-Cohesion: 0.11
-Nodes (36): Alert, AlertsPage(), buildAlerts(), hoursSince(), Severity, ContentPage(), isSupported(), QueuedUpload (+28 more)
+Cohesion: 0.15
+Nodes (26): ContentPage(), isSupported(), QueuedUpload, stripExtension(), GroupsPage(), ScreensPage(), StatusFilter, useStoredView() (+18 more)
 
 ### Community 144 - "test_rollout_policy.py"
-Cohesion: 0.29
-Nodes (13): apply_update_status(), Fold one device-reported update result into `screen`. Returns a short human-…, Staged-rollout decisions — pure logic, no database, no device. Run directly:…, screen(), test_failures_must_be_consecutive(), test_in_flight_states_are_recorded_without_judgement(), test_none_status_changes_nothing(), test_null_failure_count_is_tolerated() (+5 more)
+Cohesion: 0.18
+Nodes (18): apply_update_status(), eligible_for_fallback(), Staged player rollout: which build a screen is offered, and when to give up on…, Point a screen at a build, clearing any state from the previous attempt.…, Restrict an AppRelease query to builds that unpinned screens may be offered., Fold one device-reported update result into `screen`. Returns a short human-…, repin(), Staged-rollout decisions — pure logic, no database, no device. Run directly:… (+10 more)
 
 ### Community 145 - "env.py"
 Cohesion: 0.40
 Nodes (4): Run migrations in 'offline' mode. This configures the context with just a URL…, Run migrations in 'online' mode. In this scenario we need to create an Engine…, run_migrations_offline(), run_migrations_online()
 
 ### Community 148 - "screens.py"
-Cohesion: 0.07
-Nodes (70): AppRelease, _post(), Form-post to Google and return (status, parsed body). A 4xx is returned rather…, get_secret_key(), as_aware_utc(), assign_playlist(), auth_device(), batch_upload_play_logs() (+62 more)
+Cohesion: 0.12
+Nodes (35): AppRelease, as_aware_utc(), batch_upload_play_logs(), collect_device_secret(), current_app_version(), enroll_device(), generate_pair_code(), get_screens() (+27 more)
 
-### Community 149 - "ScreenBase"
-Cohesion: 0.67
-Nodes (3): ScreenBase, ScreenCreate, ScreenResponse
+### Community 149 - "update_screen"
+Cohesion: 0.33
+Nodes (5): put, update_screen(), ScreenBase, ScreenCreate, ScreenResponse
 
 ### Community 152 - "PlayEndReason"
 Cohesion: 0.22
@@ -575,29 +581,33 @@ Nodes (6): PlayCompletion, PlayEndReason, FAILED, INTERRUPTED, PLAYED_TO_END, SK
 Cohesion: 0.83
 Nodes (3): subscribe(), ThemeToggle(), useHydrated()
 
-### Community 156 - "run"
-Cohesion: 0.53
-Nodes (5): auth_header(), main(), TestClient, Runnable backend parity check: python tests/test_feature_parity.py, run()
+### Community 156 - "get_redis"
+Cohesion: 0.15
+Nodes (19): Any, get_redis(), _pool_for_current_loop(), bring_to_front(), _command_key(), delete_screen(), pop_device_command(), queue_device_command() (+11 more)
 
-### Community 166 - "PlaylistBase"
-Cohesion: 0.67
-Nodes (3): PlaylistBase, PlaylistCreate, PlaylistResponse
+### Community 166 - "get"
+Cohesion: 0.15
+Nodes (19): get_secret_key(), assign_playlist(), bind_screen_to_org(), get_tv_google_oauth_url(), google_device_poll(), patch_screen(), presents_valid_device_token(), public_base_url() (+11 more)
 
-### Community 175 - "users.py"
-Cohesion: 0.31
-Nodes (10): active_owner_count(), create_user(), delete_user(), deny_platform_account(), list_users(), get, put, User (+2 more)
+### Community 175 - "HTTPException"
+Cohesion: 0.11
+Nodes (29): delete(), Remove a stored object. Best effort -- a missing object is not an error. Local…, export_campaign_report(), get_campaign_info(), get_campaign_stats(), get_campaign_timeseries(), get_media_report(), list_campaigns() (+21 more)
 
-### Community 176 - "analytics.py"
-Cohesion: 0.24
-Nodes (14): export_campaign_report(), get_campaign_info(), get_campaign_stats(), get_campaign_timeseries(), get_media_report(), list_campaigns(), get, Session (+6 more)
+### Community 176 - "create_access_token"
+Cohesion: 0.08
+Nodes (38): MediaRendition, create_access_token(), aggregate_play_logs_sync(), prune_play_log_rollups(), prune_play_logs(), prune_screenshots(), _publish_alert(), Notice what is wrong with the fleet, and what has stopped being wrong. Runs… (+30 more)
 
 ### Community 177 - "Organization"
-Cohesion: 0.07
-Nodes (58): get_db(), Content, EnrollmentToken, MediaRendition, Organization, Playlist, PlaylistItem, Exposed so UserResponse can show the tenant by name instead of a bare id. (+50 more)
+Cohesion: 0.12
+Nodes (31): get_db(), Content, EnrollmentToken, Organization, Playlist, PlaylistItem, Exposed so UserResponse can show the tenant by name instead of a bare id., Screen (+23 more)
 
 ### Community 178 - "test_reinstall_reconnect.py"
 Cohesion: 0.30
 Nodes (13): check(), dashboard_token(), fleet(), One account on the TV and the dashboard, and a screen that survives a…, What the player sends when the installer types their account on the TV., What the player sends on every cold start, before it knows anything., A wipe on a panel whose serial is unreadable CANNOT be auto-recovered. Pinned…, A caller holding only the device id must not be handed a device secret.… (+5 more)
+
+### Community 180 - "resolve_media_url"
+Cohesion: 0.14
+Nodes (16): Reading and writing media wherever it happens to live. The transcoder needs a…, delete_stored_file(), _detect_lan_host(), is_s3_enabled(), media_base_url(), Turning a stored media location into something a browser or a TV can fetch.…, Remove the local file a stored location points at. Returns True if it went.…, Best-effort LAN address of this machine, so devices on the network can reach… (+8 more)
 
 ### Community 181 - "WatchdogAccessibilityService"
 Cohesion: 0.31
@@ -615,37 +625,65 @@ Nodes (3): AccessibilityEvent, AccessibilityService, WatchdogAccessibilityServic
 Cohesion: 0.28
 Nodes (6): android.app.PendingIntent, android.content.BroadcastReceiver, BootReceiver, Intent, Override, ConfigureReceiver
 
-### Community 189 - "billing/page.tsx"
-Cohesion: 0.31
-Nodes (5): BillingPage(), percent(), Badge(), badgeVariants, Plan
+### Community 189 - "emergency/page.tsx"
+Cohesion: 0.13
+Nodes (20): BillingPage(), percent(), exportFormats, targetLabels, GroupDetailPage(), AssignPlaylistCard(), ErrorState(), AssignScreensDialog() (+12 more)
 
-### Community 192 - "test_ws_connection_pool.py"
-Cohesion: 0.32
-Nodes (6): _database_url(), A websocket must not hold a database connection open for its whole life. Both…, Postgres when a server is there, SQLite otherwise -- as the other scripts do., redis_reachable(), run(), setup_db()
+### Community 192 - "utcnow"
+Cohesion: 0.15
+Nodes (15): datetime, Return a timezone-aware UTC timestamp., utcnow(), recover_stuck_processing(), auth_header(), main(), TestClient, Runnable backend parity check: python tests/test_feature_parity.py (+7 more)
 
 ### Community 193 - "ComponentName"
 Cohesion: 0.40
 Nodes (3): DeviceOwnerManager, Context, ComponentName
 
+### Community 194 - "get_payment_provider"
+Cohesion: 0.23
+Nodes (9): CheckoutSession, get_payment_provider(), MockPaymentProvider, PaymentProvider, RazorpayProvider, Protocol, RuntimeError, auth_headers() (+1 more)
+
+### Community 195 - "upload_content"
+Cohesion: 0.19
+Nodes (13): delete_content(), generate_video_thumbnail(), get_all_content(), get, put, UploadFile, queue_processing(), Hand a video to the transcode worker, ensuring it is processed immediately. In… (+5 more)
+
+### Community 198 - "test_signup_lifecycle.py"
+Cohesion: 0.26
+Nodes (11): ensure_screen_quota(), Reject the caller when the organisation is already at its screen limit. Two…, check(), hdr(), promote_platform_operator(), A company from signup to paying customer: python tests/test_signup_lifecycle.py…, Stand in for Google's token endpoint. Only the exchange is replaced. Everything…, The bootstrap account is created as an ordinary owner; make it the operator.… (+3 more)
+
+### Community 199 - "acknowledge_alert"
+Cohesion: 0.25
+Nodes (9): Alert, acknowledge_alert(), alert_summary(), list_alerts(), get, Open alerts, newest first. Resolved ones only when asked for. The default is…, Mark an alert as picked up, without claiming the underlying fault is fixed.…, Counts for the navigation badge, so the header does not fetch the whole list. (+1 more)
+
+### Community 200 - "trigger_emergency_broadcast"
+Cohesion: 0.33
+Nodes (7): BroadcastRequest, cancel_emergency_broadcast(), get_active_broadcasts(), BaseModel, get, Session, trigger_emergency_broadcast()
+
+### Community 201 - "auth_device"
+Cohesion: 0.40
+Nodes (6): verify_password(), auth_device(), limit, Bind this device to the organisation of whoever signs in on the TV. The…, sign_in_screen(), DeviceAuthRequest
+
+### Community 202 - "resolve_location_link"
+Cohesion: 0.40
+Nodes (5): Coordinates for a pasted Google Maps link. Deliberately not a Google API call:…, resolve_location_link(), A Google Maps share link, pasted by an operator., ResolveLinkRequest, ResolveLinkResponse
+
 ## Knowledge Gaps
 - **316 isolated node(s):** `CheckingLocalState`, `GoogleSignIn`, `PLAYED_TO_END`, `SKIPPED`, `FAILED` (+311 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **47 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **45 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `TenantScope` connect `TenantScope` to `playlists.py`, `content.py`, `users.py`, `analytics.py`, `websockets.py`, `routers/billing.py`, `tenancy.py`, `screens.py`, `utcnow`, `Organization`, `admin.py`?**
+- **Why does `TenantScope` connect `TenantScope` to `schemas.py`, `playlists.py`, `upload_content`, `get`, `models.py`, `acknowledge_alert`, `trigger_emergency_broadcast`, `resolve_location_link`, `HTTPException`, `Organization`, `routers/billing.py`, `content.py`, `screens.py`, `groups.py`, `update_screen`, `resolve_media_url`, `admin.py`, `get_redis`?**
   _High betweenness centrality (0.027) - this node is a cross-community bridge._
-- **Why does `utcnow()` connect `utcnow` to `test_ws_connection_pool.py`, `playlists.py`, `create_access_token`, `models.py`, `content.py`, `websockets.py`, `routers/billing.py`, `tenancy.py`, `screens.py`, `Organization`, `TenantScope`, `admin.py`, `run`, `google_device.py`, `test_release_rollout.py`?**
+- **Why does `utcnow()` connect `utcnow` to `schemas.py`, `test_p6_websockets.py`, `models.py`, `routers/billing.py`, `screens.py`, `groups.py`, `update_screen`, `main.py`, `TenantScope`, `admin.py`, `get_redis`, `get`, `HTTPException`, `create_access_token`, `Organization`, `upload_content`, `test_signup_lifecycle.py`, `acknowledge_alert`, `trigger_emergency_broadcast`, `test_release_rollout.py`, `playlists.py`?**
   _High betweenness centrality (0.010) - this node is a cross-community bridge._
-- **Why does `dependencies` connect `dependencies` to `scripts`, `next`, `next-themes`, `react`, `shadcn`, `tw-animate-css`, `@types/leaflet`, `@types/qrcode.react`, `recharts`, `lucide-react`, `@dnd-kit/sortable`, `@dnd-kit/utilities`, `@dnd-kit/core`?**
+- **Why does `dependencies` connect `dependencies` to `scripts`, `next-themes`, `react`, `shadcn`, `tw-animate-css`, `@types/leaflet`, `leaflet`, `@types/qrcode.react`, `recharts`, `lucide-react`, `@dnd-kit/sortable`, `@dnd-kit/utilities`, `@dnd-kit/core`?**
   _High betweenness centrality (0.009) - this node is a cross-community bridge._
 - **Are the 69 inferred relationships involving `HTTPException` (e.g. with `health_check()` and `approve_tenant()`) actually correct?**
   _`HTTPException` has 69 INFERRED edges - model-reasoned connections that need verification._
 - **What connects `CheckingLocalState`, `GoogleSignIn`, `PLAYED_TO_END` to the rest of the system?**
   _316 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `schemas.py` be split into smaller, more focused modules?**
-  _Cohesion score 0.08710801393728224 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08637873754152824 - nodes in this community are weakly interconnected._
 - **Should `ApiService.kt` be split into smaller, more focused modules?**
   _Cohesion score 0.10338680926916222 - nodes in this community are weakly interconnected._

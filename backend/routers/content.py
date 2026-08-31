@@ -49,15 +49,18 @@ ALLOWED_UPLOAD_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp",
     ".mp4", ".mov", ".webm", ".mkv", ".m4v",
 }
-S3_BUCKET = os.getenv("S3_BUCKET_NAME", "olrac-media")
+from ..media_urls import get_s3_config, is_s3_enabled, storage_prefix
 
-s3_client = boto3.client(
-    "s3",
-    endpoint_url=os.getenv("S3_ENDPOINT_URL") or None,
-    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    region_name=os.getenv("AWS_REGION", "auto"),
-)
+
+def get_s3_client():
+    cfg = get_s3_config()
+    return boto3.client(
+        "s3",
+        endpoint_url=cfg["endpoint_url"],
+        aws_access_key_id=cfg["aws_access_key_id"],
+        aws_secret_access_key=cfg["aws_secret_access_key"],
+        region_name=cfg["region_name"],
+    )
 
 
 def public_upload_url(storage_key: str) -> str:
@@ -166,11 +169,14 @@ def upload_content(
     thumbnail: str | None = None
 
     if is_s3_enabled():
+        cfg = get_s3_config()
+        s3 = get_s3_client()
+        bucket = cfg["bucket"]
         try:
             file.file.seek(0)
-            s3_client.upload_fileobj(
+            s3.upload_fileobj(
                 file.file,
-                S3_BUCKET,
+                bucket,
                 storage_key,
                 ExtraArgs={"ContentType": content_type_header},
             )
@@ -188,9 +194,9 @@ def upload_content(
                 if thumbnail_path and os.path.exists(thumbnail_path):
                     thumb_key = f"{storage_prefix(organization)}/{os.path.basename(thumbnail_path)}"
                     with open(thumbnail_path, "rb") as thumb_file:
-                        s3_client.upload_fileobj(
+                        s3.upload_fileobj(
                             thumb_file,
-                            S3_BUCKET,
+                            bucket,
                             thumb_key,
                             ExtraArgs={"ContentType": "image/jpeg"},
                         )

@@ -71,6 +71,8 @@ PURE_MODULES = {
     "test_alerting.py",
     "test_maps_link.py",
     "test_rendition_defaults.py",
+    # Pure logic over a fake Organization; no database, no engine at import.
+    "test_storage_prefix.py",
 }
 
 

@@ -78,6 +78,24 @@ class Organization(Base):
     created_at = Column(UtcDateTime, nullable=False, default=utcnow)
 
     users = relationship("User", back_populates="organization")
+
+    @property
+    def owner_email(self) -> str | None:
+        """Address that names this tenant's storage folder. See media_urls.storage_prefix.
+
+        The owner is the account that created the workspace. Falls back to any member with
+        an address, because a workspace seeded by `seed_admin` has an owner with no email
+        set and the folder should still be legible.
+        """
+        members = sorted(self.users, key=lambda user: user.id)
+        for candidate in members:
+            if user_email := (candidate.email or "").strip():
+                if candidate.role == "owner":
+                    return user_email
+        for candidate in members:
+            if user_email := (candidate.email or "").strip():
+                return user_email
+        return None
     screens = relationship("Screen", back_populates="organization")
     groups = relationship("ScreenGroup", back_populates="organization")
     content = relationship("Content", back_populates="organization")

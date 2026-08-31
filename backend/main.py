@@ -240,9 +240,22 @@ async def health_check(db: Session = Depends(database.get_db)):
     except Exception as exc:  # noqa: BLE001 - any failure means "not usable"
         redis_error = type(exc).__name__
 
+    # Object storage, reported because its absence is invisible until a screen shows
+    # nothing. Without it every upload is written to the container's own disk, which on
+    # Render and most PaaS hosts is discarded on the next deploy: the row survives, the
+    # file does not, and the dashboard lists media that 404s everywhere.
+    from .media_urls import is_s3_enabled
+
+    object_storage = is_s3_enabled()
+
     warnings = []
     if ephemeral:
         warnings.append("using local SQLite fallback; DATABASE_URL is not set")
+    if not object_storage:
+        warnings.append(
+            "object storage is not configured (AWS_ACCESS_KEY_ID unset or 'mock'); "
+            "uploads are written to local disk and are LOST on every redeploy"
+        )
 
     # Surfaced here because it is the one security-relevant setting that is open by
     # default and invisible when it is wrong. While it is on, any caller that knows a
@@ -269,6 +282,7 @@ async def health_check(db: Session = Depends(database.get_db)):
         "backend": url.get_backend_name(),
         "host": url.host or url.database,
         "redis": "connected" if redis_ok else "unreachable",
+        "object_storage": "configured" if object_storage else "local disk (ephemeral)",
         # Loud on purpose: these are the states where everything looks fine and either
         # every write is discarded on the next deploy, or nothing is being processed.
         "warning": "; ".join(warnings) or None,

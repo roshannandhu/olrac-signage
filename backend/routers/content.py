@@ -19,7 +19,7 @@ from .. import models, schemas
 from ..database import REDIS_SETTINGS
 from ..tenancy import TenantScope, get_tenant_scope, require_tenant_roles
 from .. import media_storage
-from ..media_urls import is_s3_enabled, resolve_media_url
+from ..media_urls import is_s3_enabled, resolve_media_url, storage_prefix
 
 router = APIRouter()
 
@@ -73,12 +73,20 @@ def public_upload_url(storage_key: str) -> str:
     return f"/uploads/{storage_key}"
 
 
-def generate_video_thumbnail(video_path: str, stem: str, organization_id: int) -> str | None:
+def generate_video_thumbnail(video_path: str, stem: str, prefix: str) -> str | None:
+    """Write a poster frame beside the video it came from.
+
+    Takes the storage PREFIX rather than an organisation id: the caller builds the
+    thumbnail's URL from the same prefix, and when this took an id it wrote the file to
+    `uploads/19/` while the row pointed at `uploads/alice-example.com-19/`, so every video
+    thumbnail 404'd.
+    """
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         return None
     thumbnail_name = f"{stem}-thumbnail.jpg"
-    thumbnail_path = os.path.join(UPLOAD_DIR, str(organization_id), thumbnail_name)
+    thumbnail_path = os.path.join(UPLOAD_DIR, prefix, thumbnail_name)
+    os.makedirs(os.path.dirname(thumbnail_path), exist_ok=True)
     try:
         subprocess.run(
             [ffmpeg, "-y", "-ss", "00:00:01", "-i", video_path, "-frames:v", "1", "-vf", "scale=640:-2", thumbnail_path],
@@ -149,7 +157,10 @@ def upload_content(
         )
     stem = str(uuid.uuid4())
     unique_filename = f"{stem}{extension}"
-    storage_key = f"{scope.organization_id}/{unique_filename}"
+    # Folder named after the owner's address rather than the bare organisation id, so the
+    # bucket can be read by a human. storage_prefix keeps the id as a suffix, which is what
+    # makes it unique and stable; see its docstring.
+    storage_key = f"{storage_prefix(organization)}/{unique_filename}"
     content_type_header = file.content_type or "application/octet-stream"
     content_type = "video" if content_type_header.startswith("video") or extension in {".mp4", ".mov", ".webm"} else "image"
     thumbnail: str | None = None
@@ -176,9 +187,9 @@ def upload_content(
         if content_type == "image":
             thumbnail = file_url
         else:
-            thumbnail_path = generate_video_thumbnail(file_path, stem, scope.organization_id)
+            thumbnail_path = generate_video_thumbnail(file_path, stem, storage_prefix(organization))
             if thumbnail_path:
-                thumbnail = public_upload_url(f"{scope.organization_id}/{os.path.basename(thumbnail_path)}")
+                thumbnail = public_upload_url(f"{storage_prefix(organization)}/{os.path.basename(thumbnail_path)}")
 
     content = models.Content(
         organization_id=scope.organization_id,

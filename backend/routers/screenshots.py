@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas, database
 from ..tenancy import TenantScope, get_tenant_scope, require_tenant_roles
 from .content import is_s3_enabled, s3_client, S3_BUCKET, UPLOAD_DIR, public_upload_url
-from ..media_urls import resolve_media_url
+from ..media_urls import resolve_media_url, storage_prefix
 from .screens import verify_device_auth
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,10 @@ def upload_device_screenshot(
     extension = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
     stem = str(uuid.uuid4())
     unique_filename = f"{stem}{extension}"
-    storage_key = f"screenshots/{screen.organization_id}/{unique_filename}"
+    # Same tenant folder as the content library, under a screenshots/ root so retention
+    # can sweep captures without touching uploaded media.
+    prefix = storage_prefix(screen.organization)
+    storage_key = f"screenshots/{prefix}/{unique_filename}"
     
     file.file.seek(0)
     
@@ -78,14 +81,14 @@ def upload_device_screenshot(
             logger.error(f"Failed to upload screenshot to S3: {e}")
             raise HTTPException(status_code=500, detail="Storage error")
     else:
-        org_dir = os.path.join(UPLOAD_DIR, str(screen.organization_id))
+        org_dir = os.path.join(UPLOAD_DIR, prefix)
         os.makedirs(org_dir, exist_ok=True)
         local_path = os.path.join(org_dir, unique_filename)
         with open(local_path, "wb") as f:
             f.write(file.file.read())
-        # Use existing content router's public_upload_url mapping for simplicity,
-        # but note it maps to /uploads/{org_id}/{filename} which matches our folder.
-        storage_key = f"{screen.organization_id}/{unique_filename}"
+        # The served path must match the directory just written to, which is why both
+        # sides read the same `prefix`.
+        storage_key = f"{prefix}/{unique_filename}"
         file_url = public_upload_url(storage_key)
 
     screenshot = models.ScreenshotLog(

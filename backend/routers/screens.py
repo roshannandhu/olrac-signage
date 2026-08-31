@@ -41,27 +41,31 @@ s3_client = boto3.client(
 
 
 def public_base_url(request: Request | None = None) -> str:
-    """The address a phone or a TV can actually reach this API on.
-
-    OAuth redirect URIs were built as f"http://{request.headers['host']}" and, in the token
-    exchange, hardcoded to http://127.0.0.1:8000. Both are wrong off a developer laptop:
-    behind TLS the http:// scheme makes Google reject the redirect outright, and 127.0.0.1
-    on a TV means the TV.
-
-    PUBLIC_BASE_URL is the deployment's own answer and is already used for media URLs and
-    provisioning QR codes. The request is only a fallback, and its scheme is taken from
-    X-Forwarded-Proto so a request arriving at the container over http through an HTTPS
-    proxy still produces an https:// URL.
-    """
+    """The address a phone or a TV can actually reach this API on."""
     configured = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if configured and not ("localhost" in configured or "127.0.0.1" in configured):
+        return configured
+
+    render_url = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
+    if render_url:
+        return render_url
+
+    if request is not None:
+        forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
+        scheme = forwarded_proto or request.url.scheme or "http"
+        host = request.headers.get("host") or request.url.netloc
+        if host and not ("127.0.0.1" in host or "localhost" in host):
+            return f"{scheme}://{host}"
+
     if configured:
         return configured
-    if request is None:
-        return "http://127.0.0.1:8000"
-    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
-    scheme = forwarded_proto or request.url.scheme or "http"
-    host = request.headers.get("host") or request.url.netloc
-    return f"{scheme}://{host}"
+    if request is not None:
+        forwarded_proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip()
+        scheme = forwarded_proto or request.url.scheme or "http"
+        host = request.headers.get("host") or request.url.netloc
+        return f"{scheme}://{host}"
+
+    return "https://olrac-signage-32lh.onrender.com"
 
 
 def generate_pair_code() -> str:

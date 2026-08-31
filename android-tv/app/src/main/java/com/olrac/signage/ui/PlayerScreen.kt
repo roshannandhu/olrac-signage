@@ -11,6 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.Dp
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -434,10 +436,12 @@ private fun DualSurfacePlayer(
         }
     }
 
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
         val density = LocalDensity.current
-        val widthPx = with(density) { maxWidth.toPx() }
-        val heightPx = with(density) { maxHeight.toPx() }
+        val screenW = maxWidth
+        val screenH = maxHeight
+        val widthPx = with(density) { screenW.toPx() }
+        val heightPx = with(density) { screenH.toPx() }
         val progress = transitionProgress.value
 
         // Render by physical slot, not by current/next role. A preloaded video must
@@ -447,8 +451,9 @@ private fun DualSurfacePlayer(
         PlaybackSurface(
             item = if (slot0IsCurrent) currentItem else nextItem,
             player = players[0],
+            screenW = screenW,
+            screenH = screenH,
             modifier = Modifier
-                .fillMaxSize()
                 .transitionLayer(
                     transitionSpec,
                     progress,
@@ -461,8 +466,9 @@ private fun DualSurfacePlayer(
             PlaybackSurface(
                 item = if (slot0IsCurrent) nextItem else currentItem,
                 player = players[1],
+                screenW = screenW,
+                screenH = screenH,
                 modifier = Modifier
-                    .fillMaxSize()
                     .transitionLayer(
                         transitionSpec,
                         progress,
@@ -653,47 +659,52 @@ private suspend fun isImageDecodable(localPath: String?): Boolean = withContext(
 private fun PlaybackSurface(
     item: PlaylistItemEntity,
     player: ExoPlayer,
-    modifier: Modifier
+    screenW: Dp,
+    screenH: Dp,
+    modifier: Modifier = Modifier
 ) {
-    // The server already resolved this from the per-item override and the screen's
-    // orientation, so a portrait advert on a landscape panel just works. Turning the
-    // surface is cheaper and sharper than re-encoding the media rotated.
-    // 90/270 swap width and height, so the frame is also scaled to fit the panel's other
-    // axis — without that a rotated video is cropped to the panel's short side.
-    val rotated = item.rotation == 90 || item.rotation == 270
-    val surface = if (item.rotation % 360 == 0) modifier else modifier.then(
-        Modifier.graphicsLayer {
-            rotationZ = item.rotation.toFloat()
-            if (rotated && size.width > 0f && size.height > 0f) {
-                val fit = minOf(size.width / size.height, size.height / size.width)
-                scaleX = fit
-                scaleY = fit
-            }
-        }
-    )
+    val rotation = (item.rotation % 360 + 360) % 360
+    val isSwapped = rotation == 90 || rotation == 270
+
+    // When rotated 90/270 degrees, swap the canvas dimensions so that after rotation
+    // it fills the physical display completely without letterboxing or squishing.
+    val contentW = if (isSwapped) screenH else screenW
+    val contentH = if (isSwapped) screenW else screenH
+
     // "cover" fills the panel and crops; "contain" shows the whole frame letterboxed.
     val imageScale = if (item.fitMode == "cover") ContentScale.Crop else ContentScale.Fit
 
-    when (item.type) {
-        "video" -> AndroidView(
-            factory = { context ->
-                (LayoutInflater.from(context).inflate(R.layout.player_surface, null, false) as PlayerView).apply {
-                    setShutterBackgroundColor(AndroidColor.TRANSPARENT)
-                    this.player = player
+    Box(
+        modifier = modifier
+            .size(contentW, contentH)
+            .graphicsLayer {
+                if (rotation != 0) {
+                    rotationZ = rotation.toFloat()
                 }
             },
-            update = { it.player = player },
-            modifier = surface
-        )
+        contentAlignment = Alignment.Center
+    ) {
+        when (item.type) {
+            "video" -> AndroidView(
+                factory = { context ->
+                    (LayoutInflater.from(context).inflate(R.layout.player_surface, null, false) as PlayerView).apply {
+                        setShutterBackgroundColor(AndroidColor.TRANSPARENT)
+                        this.player = player
+                    }
+                },
+                update = { it.player = player },
+                modifier = Modifier.fillMaxSize()
+            )
 
-        "image" -> AsyncImage(
-            model = item.localPath?.let(::File),
-            contentDescription = "Signage image",
-            contentScale = imageScale,
-            modifier = surface
-        )
+            "image" -> AsyncImage(
+                model = item.localPath?.let(::File),
+                contentDescription = "Signage image",
+                contentScale = imageScale,
+                modifier = Modifier.fillMaxSize()
+            )
 
-        else -> Box(modifier = modifier.background(Color.Black))
+            else -> Box(modifier = Modifier.fillMaxSize().background(Color.Black))
+        }
     }
 }
 

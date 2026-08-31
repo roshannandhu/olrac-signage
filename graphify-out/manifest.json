@@ -95,8 +95,8 @@
     "semantic_hash": "102be328260c5deb369b740ba62e5b32"
   },
   "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt": {
-    "mtime": 1788083577.606258,
-    "ast_hash": "eb1b8bf82dace17d217b364c57b9aafc",
+    "mtime": 1788192011.2516441,
+    "ast_hash": "b016109840616960e75efbce0e51c820",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerViewModel.kt": {

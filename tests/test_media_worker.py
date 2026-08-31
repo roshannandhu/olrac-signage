@@ -1,6 +1,16 @@
 """Test for media worker and ffmpeg pipeline"""
 
 import os
+
+# Pinned before backend is imported, because backend/database.py calls load_dotenv() at
+# import and a developer's real backend/.env now carries live R2 credentials. Inherited,
+# is_s3_enabled() flips to true and these tests silently take the object-storage branch --
+# uploads come back as "s3://..." and the local-disk assertions below fail with an
+# IndexError that names nothing. The suite's result must not depend on an untracked file.
+os.environ.setdefault("AWS_ACCESS_KEY_ID", "mock")
+os.environ["AWS_ACCESS_KEY_ID"] = "mock"
+os.environ["AWS_SECRET_ACCESS_KEY"] = "mock"
+
 import shutil
 import socket
 import subprocess
@@ -18,6 +28,8 @@ from fastapi.testclient import TestClient
 TEMP_DIR = tempfile.TemporaryDirectory(prefix="olrac-worker-test-", ignore_cleanup_errors=True)
 DB_PATH = Path(TEMP_DIR.name) / "worker.db"
 import psycopg2
+import sqlalchemy
+import sqlalchemy.orm as sqlalchemy_orm
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 test_db_name = f"olrac_test_worker_{os.getpid()}"
@@ -54,6 +66,25 @@ from backend import database, models
 from backend.main import app
 from backend.worker import process_media_sync
 import backend.routers.content as content_router
+
+# Rebind the engine the APP uses to this file's own database.
+#
+# backend.database builds its engine at import, and this module is not necessarily the
+# first to import it -- pytest imports the in-process modules alphabetically, and several
+# earlier ones pull backend in without setting DATABASE_URL. Setting the variable above is
+# therefore not enough on its own: the app kept whatever engine the first importer bound,
+# so the uploads below went to that database while setup_db() built the schema in this one.
+#
+# When that first importer inherited a developer's backend/.env, "that database" was the
+# production Supabase instance, and rows accumulated there run over run -- which is exactly
+# how this file started reporting four renditions where it creates two, and only ever in a
+# full-suite run. conftest.py now pins the in-process default somewhere harmless; this
+# rebind is what points the app at the database this file actually prepared.
+_test_engine = sqlalchemy.create_engine(os.environ["DATABASE_URL"])
+database.engine = _test_engine
+database.SessionLocal = sqlalchemy_orm.sessionmaker(
+    autocommit=False, autoflush=False, bind=_test_engine
+)
 
 def setup_db():
     from sqlalchemy import create_engine
@@ -97,6 +128,26 @@ def synthesize_video(filepath: Path, width=640, height=360):
 def cleanup_tempdir():
     yield
     TEMP_DIR.cleanup()
+
+
+@pytest.fixture(autouse=True)
+def _do_not_process_on_upload(monkeypatch):
+    """Stop the upload from transcoding, so only the explicit worker run below does.
+
+    POST /api/content/upload calls queue_processing, which hands the job to Redis or, when
+    that is unreachable, to a background thread running process_media_sync. These tests
+    then run the worker again themselves -- so the file was transcoded TWICE, concurrently.
+
+    process_media_sync clears a content row's existing renditions before writing its own,
+    which makes sequential retries safe but not two overlapping runs: the thread's inserts
+    land after the explicit run has already deleted, leaving four rows where the ladder
+    defines two. The failure is a race, so it appeared intermittently and looked like the
+    rendition ladder had changed.
+
+    Suppressed rather than waited on: these tests are about what the worker produces, and
+    driving it directly is the thing they mean to assert.
+    """
+    monkeypatch.setattr(content_router, "queue_processing", lambda db, content: None)
 
 @pytest.mark.skipif(not shutil.which("ffmpeg"), reason="ffmpeg is required for pipeline test")
 def test_media_pipeline():

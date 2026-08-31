@@ -11,12 +11,32 @@ script, one engine per database, and no import-order coupling. It also keeps
 each file directly runnable (`python tests/test_quotas.py`).
 """
 
+import os
 import pathlib
 import socket
 import subprocess
 import sys
 
 import pytest
+
+# Point the in-process engine somewhere harmless BEFORE any test module is imported.
+#
+# backend/database.py calls load_dotenv() and builds its engine at import, so whichever
+# module imports backend first decides the database for the whole pytest process -- and
+# the modules in python_files are imported in alphabetical order, most of which never set
+# DATABASE_URL. With a developer's backend/.env present, the first importer therefore bound
+# the engine to the REAL database: verified, it resolved to the production Supabase host,
+# and test_media_worker's uploads landed there. That is how its rendition count grew run
+# over run (2, then 4) and failed only in a full-suite run, never alone.
+#
+# Set here rather than in each module because it has to happen before the first import, and
+# because a rule that every new test file must remember is one that will eventually be
+# forgotten -- exactly as it was. Scripts in ISOLATED_SCRIPTS run as subprocesses and set
+# their own DATABASE_URL, which still wins.
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ.setdefault("SECRET_KEY", "pytest-in-process-secret")
+os.environ.setdefault("AWS_ACCESS_KEY_ID", "mock")
+os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "mock")
 
 ISOLATED_SCRIPTS = {
     "test_feature_parity.py",
@@ -58,6 +78,8 @@ ISOLATED_SCRIPTS = {
     "test_ad_counting_detail.py",
     "test_counting_integrity.py",
     "test_all_five_areas_e2e.py",
+    # Removing a TV: play history survives, the panel is signed out, quota is freed.
+    "test_screen_removal.py",
 }
 
 # Pure-logic tests: no database, no import-time engine, safe to run in-process.

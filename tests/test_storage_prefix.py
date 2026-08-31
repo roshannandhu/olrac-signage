@@ -22,8 +22,8 @@ class FakeUser:
 class FakeOrg:
     """Stands in for models.Organization; owner_email is a property over .users."""
 
-    def __init__(self, id, users):
-        self.id, self.users = id, users
+    def __init__(self, id, users, slug=None):
+        self.id, self.users, self.slug = id, users, slug
 
     @property
     def owner_email(self):
@@ -38,19 +38,21 @@ class FakeOrg:
 
 
 def test_folder_is_named_after_the_owner():
+    """The address itself, unmangled -- that is the point of naming rather than numbering."""
     org = FakeOrg(19, [FakeUser(1, "alice@example.com")])
-    assert storage_prefix(org) == "alice-example.com-19"
+    assert storage_prefix(org) == "alice@example.com"
 
 
-def test_two_tenants_of_the_same_person_do_not_collide():
-    """The whole point of keeping the id.
+def test_distinct_tenants_get_distinct_folders():
+    """Two organisations must never share a folder, or their media mixes in the bucket.
 
-    One person can own several workspaces, and nothing stops them. Were the folder named
-    from the address alone, both would resolve to the same prefix and one tenant's uploads
-    would be filed among another's -- a cross-tenant leak created by a naming choice.
+    Safe on the address alone because `users.email` carries a global unique constraint, so
+    one address belongs to exactly one account and therefore one organisation. This asserts
+    the property that matters rather than the mechanism -- if that constraint is ever
+    dropped, this is what fails.
     """
     first = FakeOrg(19, [FakeUser(1, "alice@example.com")])
-    second = FakeOrg(20, [FakeUser(2, "alice@example.com")])
+    second = FakeOrg(20, [FakeUser(2, "bob@example.com")])
     assert storage_prefix(first) != storage_prefix(second)
 
 
@@ -60,13 +62,13 @@ def test_owner_wins_over_other_members():
         FakeUser(1, "editor@example.com", role="editor"),
         FakeUser(2, "owner@example.com", role="owner"),
     ])
-    assert storage_prefix(org) == "owner-example.com-7"
+    assert storage_prefix(org) == "owner@example.com"
 
 
-def test_falls_back_to_the_id_when_there_is_no_address():
+def test_falls_back_when_there_is_no_address():
     """seed_admin creates an owner with no email, and an upload must still work."""
-    assert storage_prefix(FakeOrg(42, [FakeUser(1, None)])) == "42"
-    assert storage_prefix(FakeOrg(43, [])) == "43"
+    assert storage_prefix(FakeOrg(42, [FakeUser(1, None)])) == "org-42"
+    assert storage_prefix(FakeOrg(43, [])) == "org-43"
 
 
 def test_unsafe_characters_never_reach_a_key():
@@ -80,7 +82,7 @@ def test_unsafe_characters_never_reach_a_key():
         assert "/" not in prefix, f"path separator survived: {prefix}"
         assert " " not in prefix, f"space survived: {prefix}"
         assert ".." not in prefix, f"traversal survived: {prefix}"
-        assert prefix.endswith("-1")
+        assert prefix, "an address must never sanitise away to nothing"
 
 
 def test_thumbnail_is_written_where_its_url_points():

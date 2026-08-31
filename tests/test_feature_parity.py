@@ -284,8 +284,18 @@ def run() -> None:
         )
         assert upload_a.status_code == 201 and upload_b.status_code == 201
         upload_a_payload, upload_b_payload = upload_a.json(), upload_b.json()
-        assert f"/uploads/1/" in upload_a_payload["file_url"]
-        assert f"/uploads/{organization_b_id}/" in upload_b_payload["file_url"]
+        # Asserts the PROPERTY -- each tenant's media lands in its own folder -- rather
+        # than the folder's literal name. These pinned "/uploads/1/" and
+        # "/uploads/<org id>/", which broke when folders were renamed after the owner's
+        # address; a test that fails on a deliberate rename while still passing if two
+        # tenants were given the SAME folder is checking the wrong thing.
+        folder_a = upload_a_payload["file_url"].split("/uploads/", 1)[1].rsplit("/", 1)[0]
+        folder_b = upload_b_payload["file_url"].split("/uploads/", 1)[1].rsplit("/", 1)[0]
+        assert folder_a and folder_b, "uploads must be filed under a per-tenant folder"
+        assert folder_a != folder_b, (
+            f"both tenants uploaded into {folder_a!r}; one organisation's media is stored "
+            "among another's"
+        )
         content_b_id = upload_b_payload["id"]
 
         playlist_b = client.post("/api/playlists/", headers=owner_b, json={"name": "B only"})

@@ -13,11 +13,42 @@ import pathlib
 from functools import lru_cache
 
 
+# Characters that must never reach a storage key. "/" would invent a nested folder and
+# ".." a parent one; whitespace and control characters break the URLs built from the key.
+_UNSAFE_PUNCTUATION = '/\\?%*:|"<>'
+_UNSAFE_IN_KEY = str.maketrans(
+    {character: "-" for character in _UNSAFE_PUNCTUATION}
+    # Space and the control range: both are legal in an S3 key and both make the URLs
+    # built from it awkward or invalid, so neither should survive into one.
+    | {chr(code): "-" for code in range(33)}
+)
+
+
 def storage_prefix(organization) -> str:
-    """Folder in Cloudflare R2 / storage named directly after the account's email."""
+    """Folder in Cloudflare R2 / storage, named after the account's email.
+
+    Named rather than numbered so the bucket is legible: `19/` identifies nobody, while
+    `alice@example.com/` names the customer without a database lookup.
+
+    The address is safe to use as the sole folder name because `users.email` is globally
+    unique, so one address belongs to exactly one account and therefore one organisation.
+    (An earlier version appended the organisation id to guard against a collision that the
+    unique constraint already makes impossible.)
+
+    Sanitised anyway, because this is a trust boundary rather than a formatting nicety: the
+    value reaches a storage key and a URL, PATCH /api/auth/me lets an account choose it,
+    and a "/" would silently file objects under an invented folder. EmailStr rejects those
+    today; this does not depend on that staying true.
+
+    Note the address appears in presigned URLs, so it is visible to anyone holding one --
+    a TV, or a browser's history. Return str(organization.id) here if that is ever
+    unwanted; nothing else needs to change.
+    """
     email = (getattr(organization, "owner_email", None) or "").strip().lower()
     if email:
-        return email
+        cleaned = email.translate(_UNSAFE_IN_KEY).replace("..", "-").strip("-. ")
+        if cleaned:
+            return cleaned
     slug = (getattr(organization, "slug", None) or "").strip()
     if slug:
         return slug

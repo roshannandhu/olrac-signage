@@ -108,6 +108,23 @@ async def lifespan(_app: FastAPI):
     finally:
         db.close()
 
+    def _recover_stuck_media():
+        rec_db = database.SessionLocal()
+        try:
+            stuck_items = rec_db.query(models.Content).filter(models.Content.status == "processing").all()
+            if stuck_items:
+                logger.info("Found %d media items in processing state; recovering in background", len(stuck_items))
+                from .worker import process_media_sync
+                for item in stuck_items:
+                    process_media_sync(item.id)
+        except Exception as exc:
+            logger.warning("Failed to recover stuck media processing on startup: %s", exc)
+        finally:
+            rec_db.close()
+
+    import threading
+    threading.Thread(target=_recover_stuck_media, daemon=True).start()
+
     arq_worker = None
     worker_task = None
     if _run_worker_in_process():

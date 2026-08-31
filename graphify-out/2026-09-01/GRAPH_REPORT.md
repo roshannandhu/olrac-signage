@@ -1,16 +1,16 @@
-# Graph Report - OLRAC SIGNAGE  (2026-09-01)
+# Graph Report - OLRAC SIGNAGE  (2026-08-31)
 
 ## Corpus Check
-- 310 files · ~336,237 words
+- 310 files · ~336,184 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2511 nodes · 5738 edges · 197 communities (153 shown, 44 thin omitted)
+- 2511 nodes · 5737 edges · 196 communities (153 shown, 43 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 201 edges (avg confidence: 0.78)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b3ad0f2f`
+- Built from commit: `11a54049`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -153,7 +153,6 @@
 - test_reinstall_reconnect.py
 - @dnd-kit/sortable
 - content.py
-- HeartbeatRequest
 - test_google_signin.py
 - shadcn
 - emergency/page.tsx
@@ -194,7 +193,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (197 total, 44 thin omitted)
+## Communities (196 total, 43 thin omitted)
 
 ### Community 0 - "test_tv_deep_link.py"
 Cohesion: 0.16
@@ -241,8 +240,8 @@ Cohesion: 0.07
 Nodes (28): compilerOptions, allowJs, esModuleInterop, incremental, isolatedModules, jsx, lib, module (+20 more)
 
 ### Community 12 - "ValueError"
-Cohesion: 0.13
-Nodes (13): AppReleaseCreate, AppReleaseResponse, PasswordChange, PlaylistItemUpdate, Partial screen update: only the fields actually present are written. The PUT…, Each day maps to exactly [start, end] as HH:MM. Validated here rather than in…, ScheduleBase, ScheduleResponse (+5 more)
+Cohesion: 0.12
+Nodes (14): AppReleaseCreate, AppReleaseResponse, HeartbeatRequest, PasswordChange, PlaylistItemUpdate, Partial screen update: only the fields actually present are written. The PUT…, Each day maps to exactly [start, end] as HH:MM. Validated here rather than in…, ScheduleBase (+6 more)
 
 ### Community 13 - "test_screen_approval.py"
 Cohesion: 0.26
@@ -627,7 +626,7 @@ Nodes (3): ScreenBase, ScreenCreate, ScreenResponse
 ## Knowledge Gaps
 - **316 isolated node(s):** `CheckingLocalState`, `GoogleSignIn`, `PLAYED_TO_END`, `SKIPPED`, `FAILED` (+311 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **44 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **43 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_

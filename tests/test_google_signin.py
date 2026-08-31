@@ -242,6 +242,29 @@ def run() -> None:
     assert still_acme.organization_id == acme_id, "a screen was re-homed across tenants"
     db.close()
 
+    # --- a binding made by another route is reported, not left pending ----------------
+    # The panel signs in through its OWN browser. That is a separate OAuth grant which
+    # never approves this device code, so Google says "pending" here forever while the
+    # screen is already bound -- the TV showed "Display Connected" and the app kept
+    # waiting. Rescuing it was left entirely to an olrac:// deep link the TV browser is
+    # free to refuse ("App deeplink blocked"). The poll the player is already running has
+    # to notice the binding by itself.
+    db = TestingSessionLocal()
+    db.add(Screen(device_id="tv-web", organization_id=acme_id, name="Foyer", status="online"))
+    db.commit()
+    db.close()
+
+    stub_google({"status": "pending"})
+    web = poll(start(device_id="tv-web")["poll_token"])
+    assert web.status_code == 200, web.text
+    assert web.json()["status"] == "bound", web.json()
+    assert web.json()["screen"]["name"] == "Foyer", web.json()
+
+    # ...and a panel that genuinely is not bound still waits. Reporting every device as
+    # bound would send each new TV straight to a player with no playlist.
+    stub_google({"status": "pending"})
+    assert poll(start(device_id="tv-unbound")["poll_token"]).json()["status"] == "pending"
+
     # --- poll tokens are not session tokens -------------------------------------------
     # Both are signed with the same key, so a login token would decode cleanly here. The
     # type marker is the only thing standing between them.

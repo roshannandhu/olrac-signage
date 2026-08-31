@@ -850,6 +850,45 @@ def google_device_poll(
         raise HTTPException(status_code=502, detail="Could not reach Google. Try again.")
 
     if result["status"] != "ok":
+        # Google has nothing for us. Before reporting that back, check whether this panel
+        # got bound by some OTHER route in the meantime.
+        #
+        # google_device.poll() asks GOOGLE about this device code. The browser flow on the
+        # TV (google/oauth-callback) is a separate OAuth grant that never approves this
+        # code, so a panel signing in through its own browser sat on "authorization_pending"
+        # until the code expired -- while the screen was already bound and the TV's browser
+        # was showing "Display Connected".
+        #
+        # Closing that gap was left entirely to the olrac:// deep link back into the app,
+        # and a TV browser is free to refuse it ("App deeplink blocked" on TCL), which
+        # stranded the panel on a sign-in screen it had already passed. MainActivity starts
+        # this poll alongside opening the browser, so the binding is reported on the next
+        # tick instead and the deep link becomes an accelerator, not the only way through.
+        # An operator redeeming a pairing code mid-flow lands here for the same reason.
+        #
+        # Deliberately only on a NON-ok result. Every authorisation check below -- the
+        # tenant boundary above all -- runs whenever Google actually returns an identity,
+        # and must keep running: a rival approving on their own phone has to be refused,
+        # not handed the screen this device is already bound to.
+        #
+        # It reports a binding, it never creates one, and it reaches no further than
+        # /register already does for the same device_id. No device secret: there is no new
+        # grant to hand over, which is also why the deep-link path carries none.
+        already_bound = (
+            db.query(models.Screen)
+            .filter(
+                models.Screen.device_id == device_id,
+                models.Screen.deleted_at.is_(None),
+                models.Screen.organization_id.isnot(None),
+                models.Screen.status != "waiting_pairing",
+            )
+            .first()
+        )
+        if already_bound:
+            return schemas.GoogleDevicePollResponse(
+                status="bound",
+                screen=schemas.ScreenResponse.model_validate(already_bound),
+            )
         return schemas.GoogleDevicePollResponse(status=result["status"])
 
     email = result.get("email") or ""
@@ -985,7 +1024,7 @@ def _tv_result_page(title: str, heading: str, body_html: str, deep_link: str, ac
     <div class="card">
         <h1 style="color:{accent};margin-bottom:12px;font-size:22px;">{heading}</h1>
         <p style="color:#94A3B8;line-height:1.5;">{body_html}</p>
-        <a id="link" href="{safe_link}" class="btn">Return to Player</a>
+        <a id="link" href="{safe_link}" class="btn" autofocus>Return to Player</a>
     </div>
     <script>
         window.location.href = {json.dumps(launch_url)};

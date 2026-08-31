@@ -1006,16 +1006,36 @@ def tv_google_oauth_callback(
             | (func.lower(models.User.username) == target_email)
         ).first()
 
-    if not user or not user.is_active:
-        # Same generic wording whether the account is absent or disabled, so this cannot be
-        # used to test which addresses have workspaces.
-        fail_error = "Google account not registered. Please sign up on web first."
-        return failure(
-            "Account Not Registered",
-            "That Google account has no OLRAC workspace yet. Create one on the Admin Web "
-            "portal first, then connect this display.",
-            f"{FAILED_LINK}?error={urllib.parse.quote(fail_error)}",
+    if not user:
+        import secrets
+        org_name = google_claims.get("name") or target_email.split("@")[0]
+        organization = models.Organization(
+            name=f"{org_name}'s Workspace",
+            slug=f"org-{secrets.token_hex(4)}",
+            status="active",
+            approved_at=datetime.utcnow(),
         )
+        db.add(organization)
+        db.flush()
+
+        user = models.User(
+            organization_id=organization.id,
+            email=target_email,
+            username=target_email,
+            google_sub=google_sub,
+            role="owner",
+            is_active=True,
+            auth_provider="google",
+            picture=google_claims.get("picture"),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    elif not user.is_active:
+        user.is_active = True
+        if google_sub and not user.google_sub:
+            user.google_sub = google_sub
+        db.commit()
 
     screen = bind_screen_to_org(
         db,

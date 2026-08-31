@@ -1,7 +1,7 @@
 # Graph Report - OLRAC SIGNAGE  (2026-08-31)
 
 ## Corpus Check
-- 310 files · ~336,145 words
+- 310 files · ~336,162 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,14 +10,14 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `3ee39414`
+- Built from commit: `1ee2eeaf`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
 - test_tv_deep_link.py
 - schemas.py
-- PlaylistDao
+- PlaylistItemEntity
 - ApiService.kt
 - MainActivity
 - team/page.tsx
@@ -76,7 +76,7 @@
 - next.config.ts
 - DeviceState
 - OLRAC Signage — 80-TV Rollout Deployment Guide
-- PlaylistItemEntity
+- PlayerScreen.kt
 - admin-ui.tsx
 - parse
 - P9 — Zero-touch provisioning for 80+ TVs (no ADB)
@@ -206,6 +206,10 @@ Nodes (16): _android_intent_url(), Rewrite an "olrac://" deep link into the inte
 Cohesion: 0.08
 Nodes (45): create_checkout(), AlertResponse, AlertSummaryResponse, AppVersionResponse, BillingSummaryResponse, CheckoutRequest, CheckoutResponse, DeviceAuthRequest (+37 more)
 
+### Community 2 - "PlaylistItemEntity"
+Cohesion: 0.24
+Nodes (3): PlaylistDao, PlaylistItemEntity, Flow
+
 ### Community 3 - "ApiService.kt"
 Cohesion: 0.10
 Nodes (21): ApiService, AuthMethodsResponse, ContentDto, DeviceAuthRequest, DeviceTokenResponse, EnrollResponse, GoogleOAuthUrlResponse, GooglePollResponse (+13 more)
@@ -263,8 +267,8 @@ Cohesion: 0.08
 Nodes (17): ExoPlayer, Job, PlaybackException, onPlayerError(), PlayerSupervisor, HeartbeatReporter, Context, PlaybackSnapshot (+9 more)
 
 ### Community 18 - "tenancy.py"
-Cohesion: 0.15
-Nodes (20): OLRAC Signage backend package. Explicit package marker. Without it `backend` is…, BroadcastRequest, cancel_emergency_broadcast(), get_active_broadcasts(), BaseModel, get, Session, create_token() (+12 more)
+Cohesion: 0.12
+Nodes (25): OLRAC Signage backend package. Explicit package marker. Without it `backend` is…, BroadcastRequest, cancel_emergency_broadcast(), get_active_broadcasts(), BaseModel, get, Session, create_token() (+17 more)
 
 ### Community 19 - "resolve_rotation"
 Cohesion: 0.23
@@ -406,9 +410,9 @@ Nodes (5): DeviceState, Activity, ScreenshotManager, Bitmap, WeakReference
 Cohesion: 0.10
 Nodes (18): 1. Server Environment Setup, 2. Storage Configuration, 3. Start the Stack, 4. Database Migration, 5. Create the Platform Owner, 6. TV Enrollment & Provisioning, 7. Watchdog Setup (Crucial for Budget TVs), Build the Watchdog (+10 more)
 
-### Community 81 - "PlaylistItemEntity"
-Cohesion: 0.20
-Nodes (15): android, PlaylistItemEntity, clearPlayCheckpoint(), DualSurfacePlayer(), com, ExoPlayer, Modifier, PlaybackSurface() (+7 more)
+### Community 81 - "PlayerScreen.kt"
+Cohesion: 0.23
+Nodes (13): android, clearPlayCheckpoint(), DualSurfacePlayer(), com, Modifier, PlaybackSurface(), PlayerScreen(), preparePlayer() (+5 more)
 
 ### Community 83 - "admin-ui.tsx"
 Cohesion: 0.15
@@ -427,11 +431,11 @@ Cohesion: 0.26
 Nodes (9): dateTime(), ScreenDetailsDrawer(), ScreenMap(), Tabs(), TabsIndicator(), TabsList(), TabsPanel(), TabsTrigger() (+1 more)
 
 ### Community 90 - "Player"
-Cohesion: 0.22
-Nodes (6): awaitPlayerReady(), Player, DecoderSnapshot, Player, PlaybackException, Player
+Cohesion: 0.20
+Nodes (7): awaitPlayerReady(), Player, DecoderSnapshot, Player, ExoPlayer, PlaybackException, Player
 
 ### Community 91 - "AppDatabase"
-Cohesion: 0.25
+Cohesion: 0.29
 Nodes (6): AppDatabase, getDatabase(), Context, migrate(), RoomDatabase, SupportSQLiteDatabase
 
 ### Community 92 - "P8 — Per-TV capability detection and rendition selection"
@@ -641,10 +645,6 @@ Nodes (9): Alert, acknowledge_alert(), alert_summary(), list_alerts(), get, Open
 ### Community 200 - "ScreenBase"
 Cohesion: 0.50
 Nodes (3): ScreenBase, ScreenCreate, ScreenResponse
-
-### Community 201 - ".query"
-Cohesion: 0.20
-Nodes (7): is_super_admin(), User, Platform-operator routes only. Every caller of this used to accept `role in…, The single source of truth for platform-operator status. This used to be `role…, require_super_admin(), Query, TenantModel
 
 ### Community 202 - "resolve_location_link"
 Cohesion: 0.40

@@ -87,7 +87,10 @@ def store(local_path: pathlib.Path, key: str, content_type: Optional[str] = None
     if is_s3_enabled():
         cfg = get_s3_config()
         extra = {"ContentType": content_type} if content_type else None
-        _client().upload_file(str(local_path), cfg["bucket"], key, ExtraArgs=extra)
+        if extra:
+            _client().upload_file(str(local_path), cfg["bucket"], key, ExtraArgs=extra)
+        else:
+            _client().upload_file(str(local_path), cfg["bucket"], key)
         return f"s3://{key}"
 
     target = pathlib.Path(UPLOAD_DIR) / key

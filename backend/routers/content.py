@@ -168,29 +168,29 @@ def upload_content(
     content_type = "video" if content_type_header.startswith("video") or extension in {".mp4", ".mov", ".webm"} else "image"
     thumbnail: str | None = None
 
+    temp_local_file = os.path.join(UPLOAD_DIR, storage_key)
+    os.makedirs(os.path.dirname(temp_local_file), exist_ok=True)
+    file.file.seek(0)
+    with open(temp_local_file, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
     if is_s3_enabled():
         cfg = get_s3_config()
         s3 = get_s3_client()
         bucket = cfg["bucket"]
         try:
-            file.file.seek(0)
-            s3.upload_fileobj(
-                file.file,
-                bucket,
-                storage_key,
-                ExtraArgs={"ContentType": content_type_header},
-            )
+            with open(temp_local_file, "rb") as f_in:
+                s3.upload_fileobj(
+                    f_in,
+                    bucket,
+                    storage_key,
+                    ExtraArgs={"ContentType": content_type_header},
+                )
             file_url = f"s3://{storage_key}"
             if content_type == "image":
                 thumbnail = file_url
             else:
-                temp_video = os.path.join(UPLOAD_DIR, storage_key)
-                os.makedirs(os.path.dirname(temp_video), exist_ok=True)
-                file.file.seek(0)
-                with open(temp_video, "wb") as buffer:
-                    shutil.copyfileobj(file.file, buffer)
-                
-                thumbnail_path = generate_video_thumbnail(temp_video, stem, storage_prefix(organization))
+                thumbnail_path = generate_video_thumbnail(temp_local_file, stem, storage_prefix(organization))
                 if thumbnail_path and os.path.exists(thumbnail_path):
                     thumb_key = f"{storage_prefix(organization)}/{os.path.basename(thumbnail_path)}"
                     with open(thumbnail_path, "rb") as thumb_file:
@@ -201,25 +201,35 @@ def upload_content(
                             ExtraArgs={"ContentType": "image/jpeg"},
                         )
                     thumbnail = f"s3://{thumb_key}"
-                try:
-                    if os.path.exists(temp_video):
-                        os.remove(temp_video)
-                except Exception:
-                    pass
+                    try:
+                        os.remove(thumbnail_path)
+                    except Exception:
+                        pass
+                else:
+                    thumbnail = file_url
+
+            try:
+                if os.path.exists(temp_local_file):
+                    os.remove(temp_local_file)
+            except Exception:
+                pass
         except Exception as exc:
+            try:
+                if os.path.exists(temp_local_file):
+                    os.remove(temp_local_file)
+            except Exception:
+                pass
             raise HTTPException(status_code=500, detail=f"S3 upload failed: {exc}")
     else:
-        file_path = os.path.join(UPLOAD_DIR, storage_key)
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
         file_url = public_upload_url(storage_key)
         if content_type == "image":
             thumbnail = file_url
         else:
-            thumbnail_path = generate_video_thumbnail(file_path, stem, storage_prefix(organization))
+            thumbnail_path = generate_video_thumbnail(temp_local_file, stem, storage_prefix(organization))
             if thumbnail_path:
                 thumbnail = public_upload_url(f"{storage_prefix(organization)}/{os.path.basename(thumbnail_path)}")
+            else:
+                thumbnail = file_url
 
     content = models.Content(
         organization_id=scope.organization_id,

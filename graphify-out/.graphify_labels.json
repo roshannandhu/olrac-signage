@@ -1,7 +1,7 @@
 {
   "0": "test_tv_deep_link.py",
   "1": "schemas.py",
-  "2": "PlaylistDao",
+  "2": "PlaylistItemEntity",
   "3": "ApiService.kt",
   "4": "MainActivity",
   "5": "team/page.tsx",
@@ -79,7 +79,7 @@
   "78": "next.config.ts",
   "79": "DeviceState",
   "80": "OLRAC Signage — 80-TV Rollout Deployment Guide",
-  "81": "PlaylistItemEntity",
+  "81": "PlayerScreen.kt",
   "83": "admin-ui.tsx",
   "84": "parse",
   "85": "P9 — Zero-touch provisioning for 80+ TVs (no ADB)",

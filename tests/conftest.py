@@ -95,6 +95,8 @@ PURE_MODULES = {
     "test_rendition_defaults.py",
     # Pure logic over a fake Organization; no database, no engine at import.
     "test_storage_prefix.py",
+    # Pure string rewriting over the TV hand-back link; reads no rows.
+    "test_tv_deep_link.py",
 }
 
 

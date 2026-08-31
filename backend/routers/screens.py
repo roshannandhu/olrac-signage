@@ -922,6 +922,41 @@ def get_tv_google_oauth_url(
     }
 
 
+# The player's package, so an intent: URL can name it and Chrome launches it directly
+# instead of bouncing to the Play Store. Matches applicationId in
+# android-tv/app/build.gradle.kts; there is no build-type suffix, so one value covers both.
+TV_APP_PACKAGE = "com.olrac.signage"
+
+
+def _android_intent_url(deep_link: str) -> str:
+    """Rewrite an "olrac://" deep link into the intent: form a browser will actually open.
+
+    The player registers the custom scheme (AndroidManifest, scheme="olrac" host="auth",
+    BROWSABLE) and MainActivity.onNewIntent handles it -- but none of that is ever reached,
+    because Chrome refuses to resolve a scheme it does not know and fails the navigation
+    with ERR_UNKNOWN_URL_SCHEME. Chrome is what a Custom Tab is, and what every Android TV
+    browser is, so this failed on the panel while working anywhere it was tested by hand.
+
+    That is the "Web page not available" a TV shows at the very end of Google sign-in: the
+    account is authenticated and the screen is bound server side, the sign-in genuinely
+    succeeded, and the panel simply never hears about it and sits on the sign-in screen.
+
+    The intent: syntax is the documented way to hand a browser navigation to an app. The
+    intent it builds carries the same "olrac://auth/..." data, so the manifest filter that
+    is already shipped matches it and no APK rebuild is needed -- this is a backend deploy.
+    """
+    parts = urllib.parse.urlsplit(deep_link)
+    # http(s) is already something a browser can open; only a custom scheme needs this.
+    if not parts.scheme or parts.scheme in ("http", "https"):
+        return deep_link
+    target = f"{parts.netloc}{parts.path}"
+    if parts.query:
+        target += f"?{parts.query}"
+    # Nothing caller-supplied can break out of the fragment: every value reaching a query
+    # here goes through urllib.parse.quote, which percent-encodes both "#" and ";".
+    return f"intent://{target}#Intent;scheme={parts.scheme};package={TV_APP_PACKAGE};end"
+
+
 def _tv_result_page(title: str, heading: str, body_html: str, deep_link: str, accent: str) -> HTMLResponse:
     """The TV's Custom Tab landing page, which then hands back to the player app.
 
@@ -931,7 +966,8 @@ def _tv_result_page(title: str, heading: str, body_html: str, deep_link: str, ac
     operator-controlled, so that was stored XSS in a page that runs on the installer's
     phone.
     """
-    safe_link = html.escape(deep_link, quote=True)
+    launch_url = _android_intent_url(deep_link)
+    safe_link = html.escape(launch_url, quote=True)
     return HTMLResponse(
         content=f"""<!DOCTYPE html>
 <html>
@@ -952,7 +988,7 @@ def _tv_result_page(title: str, heading: str, body_html: str, deep_link: str, ac
         <a id="link" href="{safe_link}" class="btn">Return to Player</a>
     </div>
     <script>
-        window.location.href = {json.dumps(deep_link)};
+        window.location.href = {json.dumps(launch_url)};
         setTimeout(function() {{ window.close(); }}, 2500);
     </script>
 </body>

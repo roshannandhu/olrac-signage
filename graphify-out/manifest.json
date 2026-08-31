@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "android-tv/app/build.gradle.kts": {
-    "mtime": 1788198644.4928,
-    "ast_hash": "1e83691d4a5a8ac91d84f53af1f89d39",
+    "mtime": 1788200563.6998372,
+    "ast_hash": "314795439bc6ab4485de964d339b8cc7",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/MainActivity.kt": {
@@ -515,8 +515,8 @@
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/boot/PlayerLauncher.kt": {
-    "mtime": 1788200211.7517066,
-    "ast_hash": "d874781d6007c4199fd3c2150d088790",
+    "mtime": 1788200557.663921,
+    "ast_hash": "95b05346afe96e0de7fcdc2c0e5ff381",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/data/PlayEventDao.kt": {
@@ -1635,8 +1635,8 @@
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/boot/WatchdogAccessibilityService.kt": {
-    "mtime": 1788200213.6971228,
-    "ast_hash": "e6a06442ef531ee57bbc87871d33fe12",
+    "mtime": 1788200630.443348,
+    "ast_hash": "9a2522c28fa1337d0363bfb8b359488c",
     "semantic_hash": ""
   },
   "tests/test_tv_deep_link.py": {

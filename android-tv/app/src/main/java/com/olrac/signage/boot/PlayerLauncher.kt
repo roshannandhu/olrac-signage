@@ -47,7 +47,7 @@ object PlayerLauncher {
         val intent = playerIntent(context)
 
         // 1. Accessibility Service privileged launch (bypasses all Android 14 background activity restrictions)
-        if (WatchdogAccessibilityService.bringToFront(context)) {
+        if (WatchdogAccessibilityService.bringToFront(context, reason)) {
             Log.i(TAG, "Successfully brought player to front via Accessibility Service (reason=$reason)")
         }
 

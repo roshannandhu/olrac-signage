@@ -13,6 +13,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import com.olrac.signage.MainActivity
 import com.olrac.signage.service.PlaybackService
 
 /**
@@ -29,76 +30,45 @@ class WatchdogAccessibilityService : AccessibilityService() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         Log.d(TAG, "WatchdogAccessibilityService onCreate")
-        scheduleLaunch("onCreate", BOOT_SETTLE_DELAY_MS)
+        launchOlracSignage("onCreate")
     }
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        instance = this
         Log.d(TAG, "WatchdogAccessibilityService onServiceConnected")
-        scheduleLaunch("onServiceConnected", WARM_SETTLE_DELAY_MS)
+        launchOlracSignage("onServiceConnected")
     }
 
-    private fun scheduleLaunch(from: String, delayMs: Long) {
-        if (hasLaunched) {
-            Log.d(TAG, "Already launched from=$from, skipping duplicate")
-            return
-        }
-        hasLaunched = true
+    override fun onDestroy() {
+        super.onDestroy()
+        if (instance == this) instance = null
+    }
 
-        Log.i(TAG, "Scheduling OLRAC Signage launch in ${delayMs}ms from $from")
-        Handler(Looper.getMainLooper()).postDelayed({
-            launchOlracSignage(from)
-        }, delayMs)
+    fun forceBringToFront(reason: String = "remote_command"): Boolean {
+        return try {
+            val intent = Intent(this, MainActivity::class.java).apply {
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                    Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+                )
+            }
+            startActivity(intent)
+            Log.i(TAG, "forceBringToFront executed via AccessibilityService (reason=$reason)")
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "forceBringToFront failed via AccessibilityService", e)
+            false
+        }
     }
 
     private fun launchOlracSignage(from: String) {
-        Log.i(TAG, "launchOlracSignage executing from $from")
-        val intent = Intent(Intent.ACTION_MAIN).apply {
-            component = ComponentName(packageName, "com.olrac.signage.MainActivity")
-            addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK or
-                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
-                Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
-            )
-        }
+        forceBringToFront(from)
 
-        // 1. AlarmManager system dispatch (bypasses OEM background activity restrictions)
-        try {
-            val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-                    (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) PendingIntent.FLAG_IMMUTABLE else 0)
-
-            val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                val options = ActivityOptions.makeBasic().apply {
-                    setPendingIntentBackgroundActivityStartMode(
-                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-                    )
-                }.toBundle()
-                PendingIntent.getActivity(this, 1001, intent, flags, options)
-            } else {
-                PendingIntent.getActivity(this, 1001, intent, flags)
-            }
-
-            val alarmManager = getSystemService(Context.ALARM_SERVICE) as? AlarmManager
-            alarmManager?.set(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                SystemClock.elapsedRealtime() + 2000L,
-                pendingIntent
-            )
-            Log.d(TAG, "AlarmManager scheduled successfully from $from")
-        } catch (e: Exception) {
-            Log.e(TAG, "AlarmManager schedule failed from $from", e)
-        }
-
-        // 2. Direct startActivity
-        try {
-            startActivity(intent)
-            Log.d(TAG, "startActivity called successfully from $from")
-        } catch (e: Exception) {
-            Log.e(TAG, "startActivity failed from $from", e)
-        }
-
-        // 3. Ensure PlaybackService is active
+        // Ensure PlaybackService is active
         try {
             PlaybackService.start(applicationContext, launchPlayer = false)
         } catch (e: Exception) {
@@ -111,11 +81,15 @@ class WatchdogAccessibilityService : AccessibilityService() {
         val currentPkg = event.packageName?.toString() ?: return
 
         // If the system returns to launcher or another non-system app, and the screen is paired, restore player
-        if (currentPkg != packageName && !currentPkg.startsWith("com.android.systemui") && !currentPkg.startsWith("android")) {
+        if (currentPkg != packageName &&
+            !currentPkg.startsWith("com.android.systemui") &&
+            !currentPkg.startsWith("android") &&
+            !currentPkg.contains("settings") &&
+            !currentPkg.contains("packageinstaller")) {
             val deviceState = com.olrac.signage.data.DeviceState(applicationContext)
             if (deviceState.isPaired) {
                 Log.d(TAG, "Watchdog detected foreground package $currentPkg, ensuring OLRAC Signage remains active")
-                scheduleLaunch("watchdog_event", WARM_SETTLE_DELAY_MS)
+                forceBringToFront("watchdog_window_event")
             }
         }
     }
@@ -126,8 +100,10 @@ class WatchdogAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "WatchdogA11y"
-        private const val BOOT_SETTLE_DELAY_MS = 2_000L
-        private const val WARM_SETTLE_DELAY_MS = 1_000L
-        private var hasLaunched = false
+        private var instance: WatchdogAccessibilityService? = null
+
+        fun bringToFront(context: Context, reason: String = "remote_command"): Boolean {
+            return instance?.forceBringToFront(reason) ?: false
+        }
     }
 }

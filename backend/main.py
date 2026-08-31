@@ -108,22 +108,28 @@ async def lifespan(_app: FastAPI):
     finally:
         db.close()
 
-    def _recover_stuck_media():
-        rec_db = database.SessionLocal()
-        try:
-            stuck_items = rec_db.query(models.Content).filter(models.Content.status == "processing").all()
-            if stuck_items:
-                logger.info("Found %d media items in processing state; recovering in background", len(stuck_items))
-                from .worker import process_media_sync
-                for item in stuck_items:
-                    process_media_sync(item.id)
-        except Exception as exc:
-            logger.warning("Failed to recover stuck media processing on startup: %s", exc)
-        finally:
-            rec_db.close()
+    def _media_supervisor_loop():
+        import time
+        while True:
+            rec_db = database.SessionLocal()
+            try:
+                stuck_items = rec_db.query(models.Content).filter(models.Content.status == "processing").all()
+                if stuck_items:
+                    logger.info("Media supervisor found %d items in processing state; ensuring completion", len(stuck_items))
+                    from .worker import process_media_sync
+                    for item in stuck_items:
+                        try:
+                            process_media_sync(item.id)
+                        except Exception as exc_item:
+                            logger.warning("Supervisor error processing media %d: %s", item.id, exc_item)
+            except Exception as exc:
+                logger.warning("Failed in media supervisor loop: %s", exc)
+            finally:
+                rec_db.close()
+            time.sleep(30)
 
     import threading
-    threading.Thread(target=_recover_stuck_media, daemon=True).start()
+    threading.Thread(target=_media_supervisor_loop, daemon=True).start()
 
     arq_worker = None
     worker_task = None

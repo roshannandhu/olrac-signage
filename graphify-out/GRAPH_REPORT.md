@@ -1,16 +1,16 @@
 # Graph Report - OLRAC SIGNAGE  (2026-09-01)
 
 ## Corpus Check
-- 310 files · ~336,237 words
+- 310 files · ~336,296 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2511 nodes · 5738 edges · 197 communities (153 shown, 44 thin omitted)
+- 2511 nodes · 5740 edges · 196 communities (153 shown, 43 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 201 edges (avg confidence: 0.78)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `b3ad0f2f`
+- Built from commit: `308d5477`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -153,7 +153,6 @@
 - test_reinstall_reconnect.py
 - @dnd-kit/sortable
 - content.py
-- HeartbeatRequest
 - test_google_signin.py
 - shadcn
 - emergency/page.tsx
@@ -194,7 +193,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (197 total, 44 thin omitted)
+## Communities (196 total, 43 thin omitted)
 
 ### Community 0 - "test_tv_deep_link.py"
 Cohesion: 0.16
@@ -210,11 +209,11 @@ Nodes (3): PlaylistDao, PlaylistItemEntity, Flow
 
 ### Community 3 - "ApiService.kt"
 Cohesion: 0.10
-Nodes (21): ApiService, AuthMethodsResponse, ContentDto, DeviceAuthRequest, DeviceTokenResponse, EnrollResponse, GoogleOAuthUrlResponse, GooglePollResponse (+13 more)
+Nodes (22): ApiService, AuthMethodsResponse, ContentDto, DeviceAuthRequest, DeviceTokenResponse, EnrollResponse, GoogleOAuthUrlResponse, GooglePollResponse (+14 more)
 
 ### Community 4 - "MainActivity"
-Cohesion: 0.14
-Nodes (7): RegistrationSnapshot, Intent, MainActivity, GooglePollRequest, SignInRequest, ComponentActivity, KeyEvent
+Cohesion: 0.17
+Nodes (5): Intent, MainActivity, GooglePollRequest, ComponentActivity, KeyEvent
 
 ### Community 5 - "team/page.tsx"
 Cohesion: 0.12
@@ -241,8 +240,8 @@ Cohesion: 0.07
 Nodes (28): compilerOptions, allowJs, esModuleInterop, incremental, isolatedModules, jsx, lib, module (+20 more)
 
 ### Community 12 - "ValueError"
-Cohesion: 0.13
-Nodes (13): AppReleaseCreate, AppReleaseResponse, PasswordChange, PlaylistItemUpdate, Partial screen update: only the fields actually present are written. The PUT…, Each day maps to exactly [start, end] as HH:MM. Validated here rather than in…, ScheduleBase, ScheduleResponse (+5 more)
+Cohesion: 0.12
+Nodes (14): AppReleaseCreate, AppReleaseResponse, HeartbeatRequest, PasswordChange, PlaylistItemUpdate, Partial screen update: only the fields actually present are written. The PUT…, Each day maps to exactly [start, end] as HH:MM. Validated here rather than in…, ScheduleBase (+6 more)
 
 ### Community 13 - "test_screen_approval.py"
 Cohesion: 0.26
@@ -389,7 +388,7 @@ Cohesion: 0.83
 Nodes (3): gradlew script, die(), warn()
 
 ### Community 72 - ".onCreate"
-Cohesion: 0.32
+Cohesion: 0.29
 Nodes (13): BrandedMessage(), GoogleLogo(), GoogleSignInScreen(), Bundle, Modifier, PairingScreen(), PinPromptScreen(), secondaryButtonColors() (+5 more)
 
 ### Community 74 - "storage_prefix"
@@ -473,8 +472,8 @@ Cohesion: 0.16
 Nodes (12): MapPoint, TILES, listeners, loadSdk(), MAPS_KEY, MapsWindow, publish(), serverSnapshot() (+4 more)
 
 ### Community 102 - "LaunchState"
-Cohesion: 0.33
-Nodes (7): CheckingLocalState, GoogleSignIn, LaunchState, LaunchStateResolver, Pairing, Playing, SignIn
+Cohesion: 0.29
+Nodes (8): CheckingLocalState, GoogleSignIn, LaunchState, LaunchStateResolver, Pairing, Playing, RegistrationSnapshot, SignIn
 
 ### Community 106 - "UtcDateTime"
 Cohesion: 0.40
@@ -627,7 +626,7 @@ Nodes (3): ScreenBase, ScreenCreate, ScreenResponse
 ## Knowledge Gaps
 - **316 isolated node(s):** `CheckingLocalState`, `GoogleSignIn`, `PLAYED_TO_END`, `SKIPPED`, `FAILED` (+311 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **44 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **43 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -645,4 +644,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `schemas.py` be split into smaller, more focused modules?**
   _Cohesion score 0.08710801393728224 - nodes in this community are weakly interconnected._
 - **Should `ApiService.kt` be split into smaller, more focused modules?**
-  _Cohesion score 0.10338680926916222 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.10084033613445378 - nodes in this community are weakly interconnected._

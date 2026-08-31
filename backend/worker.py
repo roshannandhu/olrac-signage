@@ -255,6 +255,26 @@ def process_media_sync(content_id: int):
         content.status = "ready"
         db.commit()
 
+        # Notify connected dashboard users and screens in real-time
+        try:
+            from .routers.websockets import broadcast_ws_event
+            import asyncio
+            event = {
+                "type": "content_updated",
+                "content_id": content.id,
+                "status": "ready",
+                "duration_ms": content.duration_ms,
+            }
+            if organization_id:
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.create_task(broadcast_ws_event(f"dashboard:{organization_id}", event))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
         # Deliberately after the commit. If this fails the row already points at the
         # rendition, so the cost is an orphaned object -- recoverable -- rather than a
         # content row referring to bytes that are no longer there.

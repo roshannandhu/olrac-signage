@@ -51,9 +51,22 @@ export default function ContentPage() {
 
   const content = useMemo(() => contentQuery.data || [], [contentQuery.data])
 
+  const clientsQuery = useQuery({ queryKey: ['clients'], queryFn: api.getClients })
+  const screensQuery = useQuery({ queryKey: ['screens'], queryFn: api.getScreens })
+  const sellScreens = screensQuery.data || []
+  const plansQuery = useQuery({ queryKey: ['tenant-plans'], queryFn: () => api.getTenantPlans() })
+  const sellClients = clientsQuery.data || []
+  const sellPlans = plansQuery.data || []
+  const chosenPlan = sellPlans.find((plan) => String(plan.id) === sellPlanId)
+
   const [uploadOpen, setUploadOpen] = useState(false)
   const [queue, setQueue] = useState<QueuedUpload[]>([])
   const [tags, setTags] = useState('')
+  // Selling the advert as it is uploaded. Both optional: leaving them blank uploads the
+  // files and nothing else, which is what this dialog did before.
+  const [sellClientId, setSellClientId] = useState('')
+  const [sellPlanId, setSellPlanId] = useState('')
+  const [sellScreenIds, setSellScreenIds] = useState<number[]>([])
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
@@ -119,7 +132,27 @@ export default function ContentPage() {
       if (entry.status === 'done') continue
       patchItem(index, { status: 'uploading', progress: 0, error: undefined })
       try {
-        await api.uploadContent(entry.file, entry.name.trim() || entry.file.name, tags, (percent) => patchItem(index, { progress: percent }))
+        const uploaded = await api.uploadContent(entry.file, entry.name.trim() || entry.file.name, tags, (percent) => patchItem(index, { progress: percent }))
+        // Sold on the way in, if a plan was chosen. Deliberately AFTER the upload resolves:
+        // a booking pointing at content that failed to upload is worse than no booking.
+        if (sellPlanId && uploaded?.id) {
+          try {
+            await api.createPlacement({
+              content_id: uploaded.id,
+              client_id: sellClientId ? Number(sellClientId) : undefined,
+              advertiser: sellClientId ? undefined : 'Unassigned client',
+              plan_id: Number(sellPlanId),
+              price_paise: 0,
+              is_paid: false,
+              starts_at: new Date().toISOString(),
+              targets: sellScreenIds.map((id) => ({ screen_id: id })),
+            })
+          } catch (reason) {
+            // The file is safely uploaded either way, so this must not mark the row failed
+            // and invite the operator to upload it a second time.
+            toast.error(`Uploaded "${entry.name}", but the booking could not be created: ${reason instanceof Error ? reason.message : 'unknown error'}`)
+          }
+        }
         patchItem(index, { status: 'done', progress: 100 })
       } catch (reason) {
         failures += 1
@@ -128,6 +161,7 @@ export default function ContentPage() {
     }
     setUploading(false)
     queryClient.invalidateQueries({ queryKey: ['content'] })
+    if (sellPlanId) queryClient.invalidateQueries({ queryKey: ['placements'] })
 
     const uploaded = queue.length - failures
     if (failures === 0) {
@@ -144,6 +178,9 @@ export default function ContentPage() {
     setUploadOpen(false)
     setQueue([])
     setTags('')
+    setSellClientId('')
+    setSellPlanId('')
+    setSellScreenIds([])
     setDragging(false)
   }
 
@@ -244,6 +281,86 @@ export default function ContentPage() {
                 <Label htmlFor="media-tags">Tags for this batch <span className="text-muted-foreground/70 font-normal">(comma separated)</span></Label>
                 <Input id="media-tags" value={tags} disabled={uploading} onChange={(event) => setTags(event.target.value)} placeholder="lobby, summer, promotion" />
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="sell-plan">Sell on plan <span className="text-muted-foreground/70 font-normal">(optional)</span></Label>
+                  <select
+                    id="sell-plan"
+                    className="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm"
+                    value={sellPlanId}
+                    disabled={uploading}
+                    onChange={(event) => {
+                      setSellPlanId(event.target.value)
+                      const next = sellPlans.find((plan) => String(plan.id) === event.target.value)
+                      // Switching to a smaller plan must not leave more screens picked than
+                      // it covers -- the API would refuse the booking after the upload.
+                      if (next) setSellScreenIds((current) => current.slice(0, next.max_locations))
+                      else setSellScreenIds([])
+                    }}
+                  >
+                    <option value="">Upload only</option>
+                    {sellPlans.map((plan) => (
+                      <option key={plan.id} value={String(plan.id)}>{plan.name} ({plan.duration_days} days)</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sell-client">Client</Label>
+                  <select
+                    id="sell-client"
+                    className="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm"
+                    value={sellClientId}
+                    disabled={uploading || !sellPlanId}
+                    onChange={(event) => setSellClientId(event.target.value)}
+                  >
+                    <option value="">Choose later</option>
+                    {sellClients.map((client) => (
+                      <option key={client.id} value={String(client.id)}>{client.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {chosenPlan ? (
+                <div className="space-y-2">
+                  <Label>
+                    Screens{' '}
+                    <span className="text-muted-foreground/70 font-normal">
+                      ({sellScreenIds.length} of {chosenPlan.max_locations} · {chosenPlan.duration_days} days)
+                    </span>
+                  </Label>
+                  <div className="border-hairline max-h-40 space-y-1 overflow-y-auto rounded-xl border p-2">
+                    {!sellScreens.length && <p className="text-muted-foreground p-2 text-sm">No screens paired yet.</p>}
+                    {sellScreens.map((screen) => {
+                      const picked = sellScreenIds.includes(screen.id)
+                      // Capped in the UI as well as at the API, so the limit is visible
+                      // before the operator has filled in a booking that will be refused.
+                      const full = !picked && sellScreenIds.length >= chosenPlan.max_locations
+                      return (
+                        <label
+                          key={screen.id}
+                          className={`flex items-center gap-3 rounded-lg p-2 text-sm ${full ? 'opacity-40' : 'hover:bg-muted cursor-pointer'}`}
+                        >
+                          <input
+                            type="checkbox"
+                            className="accent-primary size-4"
+                            checked={picked}
+                            disabled={uploading || full}
+                            onChange={(event) => setSellScreenIds((current) =>
+                              event.target.checked ? [...current, screen.id] : current.filter((id) => id !== screen.id))}
+                          />
+                          <span className="truncate">{screen.name || `Screen ${screen.id}`}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    This plan covers {chosenPlan.max_locations} screen{chosenPlan.max_locations === 1 ? '' : 's'} for{' '}
+                    {chosenPlan.duration_days} days. A booking is created per file, priced and dated from the plan, and
+                    the advert comes off the screens automatically when it ends.
+                  </p>
+                </div>
+              ) : null}
 
               <Button className="w-full" disabled={uploading || !pending} onClick={startUploads}>
                 {uploading ? 'Uploading…' : `Upload ${pending} file${pending === 1 ? '' : 's'}`}

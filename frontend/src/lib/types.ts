@@ -316,11 +316,64 @@ export interface PlacementTarget {
   is_placed: boolean
 }
 
+/** What a tenant puts at the top of the report they hand their client. */
+export interface Branding {
+  brand_name: string | null
+  brand_color: string | null
+  /** Already resolved for display; the column holds the host-independent form. */
+  logo_url: string | null
+  /** What the report actually prints, once the workspace-name fallback is applied. */
+  effective_name: string
+}
+
+/** An advertiser this tenant sells to. Reusable across bookings, unlike a typed-in name. */
+export interface Client {
+  id: number
+  name: string
+  client_code: string
+  email: string | null
+  phone: string | null
+  notes: string | null
+  created_at: string
+}
+
+/** A package the tenant sells on to its clients — not the plan OLRAC bills the tenant. */
+export interface TenantPlan {
+  id: number
+  name: string
+  description: string | null
+  duration_days: number
+  max_locations: number
+  ad_slots: number
+  price_paise: number
+  support_tier: string
+  is_active: boolean
+  created_at: string
+}
+
+/** One paid extension of a booking's run. A booking may have several. */
+export interface PlacementExtension {
+  id: number
+  extended_from: string
+  extended_to: string
+  additional_price_paise: number
+  is_paid: boolean
+  notes: string | null
+  created_at: string
+}
+
 /** An advert sold to a client: who, how long, where, and for how much. */
 export interface Placement {
   id: number
   content_id: number
   advertiser: string
+  client: Client | null
+  plan: TenantPlan | null
+  extensions: PlacementExtension[]
+  /** Where the run actually finishes once extensions count. `ends_at` stays as sold. */
+  effective_ends_at: string | null
+  /** The booking plus every extension sold against it. */
+  total_price_paise: number | null
   price_paise: number
   is_paid: boolean
   starts_at: string

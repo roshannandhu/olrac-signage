@@ -1,5 +1,5 @@
 import { useAuthStore } from './store'
-import type { Package, PackageWrite, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, FleetAlert, BookingReport, Placement, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
+import type { Package, PackageWrite, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, BookingReport, Placement, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
 
 const PROD_API_URL = 'https://olrac-signage-32lh.onrender.com'
 const configuredUrl = (process.env.NEXT_PUBLIC_API_URL || PROD_API_URL).replace(/\/$/, '')
@@ -45,6 +45,21 @@ export class ApiError extends Error {
   constructor(message: string, public status: number) {
     super(message)
   }
+}
+
+/**
+ * Save a blob to the user's downloads.
+ *
+ * One implementation because the object URL has to be revoked afterwards, and a copy of
+ * this that forgets to leaks the whole file for the life of the tab.
+ */
+function saveBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 async function authFetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
@@ -240,22 +255,124 @@ export const api = {
   }),
 
   getBookingReport: (placementId: number) => fetchWithAuth<BookingReport>(`/placements/${placementId}/report`),
-  bookingReportPdfUrl: (placementId: number) => `${API_BASE}/placements/${placementId}/report.pdf`,
+
+  // There used to be a `bookingReportPdfUrl` here, rendered straight into an <a href>.
+  // That navigates without the Authorization header, so it 401'd every time -- the exact
+  // trap the comment on downloadCampaignReport below already warned about. The report is
+  // never stored anywhere: the endpoint builds the PDF per request and streams it, so the
+  // only way to get at it is an authenticated fetch.
+  fetchBookingReportPdf: async (placementId: number): Promise<{ blob: Blob; filename: string }> => {
+    const response = await authFetch(`/placements/${placementId}/report.pdf`)
+    if (!response.ok) throw new ApiError('The report could not be generated.', response.status)
+    const disposition = response.headers.get('content-disposition') || ''
+    const match = disposition.match(/filename="?([^"]+)"?/)
+    return { blob: await response.blob(), filename: match?.[1] || `booking-${placementId}-report.pdf` }
+  },
+
+  downloadBookingReport: async (placementId: number) => {
+    const { blob, filename } = await api.fetchBookingReportPdf(placementId)
+    saveBlob(blob, filename)
+  },
+
+  /**
+   * Hand the PDF to the device's share sheet, so a tenant can send it to their client from
+   * WhatsApp, Gmail or anything else installed.
+   *
+   * Returns 'shared' | 'downloaded' so the caller can say which actually happened. Sharing
+   * files is unsupported on desktop Firefox and parts of desktop Chrome, and Safari
+   * additionally wants share() called inside the user gesture -- awaiting the fetch above
+   * can cost that activation and throw NotAllowedError. Every one of those falls back to
+   * saving the file rather than surfacing an error the operator can do nothing about.
+   */
+  shareBookingReport: async (placementId: number, title: string): Promise<'shared' | 'downloaded'> => {
+    const { blob, filename } = await api.fetchBookingReportPdf(placementId)
+    const file = new File([blob], filename, { type: 'application/pdf' })
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title })
+        return 'shared'
+      } catch (error) {
+        // The user dismissing the sheet is not a failure, and must not then dump a file
+        // into their downloads folder as a consolation prize.
+        if ((error as Error)?.name === 'AbortError') return 'shared'
+      }
+    }
+    saveBlob(blob, filename)
+    return 'downloaded'
+  },
   getPlacements: (contentId: number) => fetchWithAuth<Placement[]>(`/placements/?content_id=${contentId}`),
   createPlacement: (data: {
     content_id: number
-    advertiser: string
+    // One or the other: a client record is the supported path, a bare name still works.
+    advertiser?: string
+    client_id?: number | null
+    // Naming a plan fills in price and, when ends_at is omitted, the end date from its
+    // duration. Copied server side, so later repricing leaves this booking alone.
+    plan_id?: number | null
     price_paise: number
     is_paid: boolean
     starts_at: string
-    ends_at: string
+    ends_at?: string
     notes?: string | null
     targets: { screen_id?: number; group_id?: number }[]
   }) => fetchWithAuth<Placement>('/placements/', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
   }),
+
+  addPlacementExtension: (placementId: number, data: {
+    extended_to: string; extended_from?: string
+    additional_price_paise: number; is_paid: boolean; notes?: string | null
+  }) => fetchWithAuth<Placement>(`/placements/${placementId}/extensions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+  }),
+  removePlacementExtension: (placementId: number, extensionId: number) =>
+    fetchWithAuth<Placement>(`/placements/${placementId}/extensions/${extensionId}`, { method: 'DELETE' }),
+
+  getBranding: () => fetchWithAuth<Branding>('/branding/'),
+  updateBranding: (data: { brand_name?: string | null; brand_color?: string | null }) =>
+    fetchWithAuth<Branding>('/branding/', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    }),
+  uploadBrandLogo: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    // No Content-Type header: the browser has to set the multipart boundary itself, and
+    // naming it here produces a body FastAPI cannot parse.
+    return fetchWithAuth<Branding>('/branding/logo', { method: 'POST', body: form })
+  },
+  removeBrandLogo: () => fetchWithAuth<Branding>('/branding/logo', { method: 'DELETE' }),
+
+  getClients: () => fetchWithAuth<Client[]>('/clients/'),
+  createClient: (data: { name: string; email?: string | null; phone?: string | null; notes?: string | null }) =>
+    fetchWithAuth<Client>('/clients/', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    }),
+  updateClient: (id: number, data: Partial<{ name: string; email: string | null; phone: string | null; notes: string | null }>) =>
+    fetchWithAuth<Client>(`/clients/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+    }),
+  deleteClient: (id: number) => fetchWithAuth<{ status: string }>(`/clients/${id}`, { method: 'DELETE' }),
+
+  getTenantPlans: (includeInactive = false) =>
+    fetchWithAuth<TenantPlan[]>(`/tenant-plans/?include_inactive=${includeInactive}`),
+  createTenantPlan: (data: {
+    name: string; description?: string | null; duration_days: number
+    max_locations: number; ad_slots: number; price_paise: number; support_tier: string
+  }) => fetchWithAuth<TenantPlan>('/tenant-plans/', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+  }),
+  updateTenantPlan: (id: number, data: Partial<{
+    name: string; description: string | null; duration_days: number
+    max_locations: number; ad_slots: number; price_paise: number; support_tier: string; is_active: boolean
+  }>) => fetchWithAuth<TenantPlan>(`/tenant-plans/${id}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+  }),
+  deleteTenantPlan: (id: number) =>
+    fetchWithAuth<{ status: string; bookings?: number }>(`/tenant-plans/${id}`, { method: 'DELETE' }),
+
   updatePlacement: (id: number, data: Partial<{
     advertiser: string; price_paise: number; is_paid: boolean
+    client_id: number | null; plan_id: number | null
     starts_at: string; ends_at: string; notes: string | null
   }>) => fetchWithAuth<Placement>(`/placements/${id}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
@@ -349,12 +466,7 @@ export const api = {
   downloadCampaignReport: async (id: number, format: CampaignExportFormat) => {
     const response = await authFetch(`/analytics/campaigns/${id}/export?format=${format}`)
     const blob = await response.blob()
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `campaign_${id}_report.${format === 'excel' ? 'xlsx' : format}`
-    link.click()
-    URL.revokeObjectURL(url)
+    saveBlob(blob, `campaign_${id}_report.${format === 'excel' ? 'xlsx' : format}`)
   },
 
   getAlerts: (includeResolved = false) =>

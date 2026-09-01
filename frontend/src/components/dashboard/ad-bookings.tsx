@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { CalendarRange, FileDown, Layers3, MonitorPlay, Plus, Receipt, Trash2, X } from 'lucide-react'
+import { CalendarRange, FileDown, Layers3, MonitorPlay, Plus, Receipt, Share2, Trash2, X } from 'lucide-react'
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -41,13 +41,46 @@ export function AdBookings({ contentId }: { contentId: number }) {
   const placementsQuery = useQuery({ queryKey: ['placements', contentId], queryFn: () => api.getPlacements(contentId) })
   const screensQuery = useQuery({ queryKey: ['screens'], queryFn: api.getScreens })
   const groupsQuery = useQuery({ queryKey: ['groups'], queryFn: api.getGroups })
+  const clientsQuery = useQuery({ queryKey: ['clients'], queryFn: api.getClients })
+  // Active only: a retired plan should not be sellable, but bookings already on one keep
+  // naming it, which is why the API retires rather than deletes.
+  const tenantPlansQuery = useQuery({ queryKey: ['tenant-plans'], queryFn: () => api.getTenantPlans() })
 
   const placements = placementsQuery.data || []
   const screens = useMemo(() => (screensQuery.data || []) as Screen[], [screensQuery.data])
   const groups = useMemo(() => (groupsQuery.data || []) as ScreenGroup[], [groupsQuery.data])
+  const clients = clientsQuery.data || []
+  const plans = tenantPlansQuery.data || []
+
+  // The PDF is built per request and never stored, so both buttons are a fetch that can
+  // take a second or two on a long campaign. Tracked per placement rather than globally so
+  // one report generating does not disable the buttons on every other row.
+  const [busyReport, setBusyReport] = useState<number | null>(null)
+
+  const runReport = async (placement: Placement, mode: 'share' | 'download') => {
+    setBusyReport(placement.id)
+    try {
+      if (mode === 'download') {
+        await api.downloadBookingReport(placement.id)
+      } else {
+        const outcome = await api.shareBookingReport(placement.id, `Playback report — ${placement.advertiser}`)
+        // Saying "shared" when the browser could not share would be a lie the operator
+        // acts on -- they would tell the client it had been sent.
+        if (outcome === 'downloaded') {
+          toast.info('Sharing is not available in this browser, so the report was downloaded instead.')
+        }
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'The report could not be generated.')
+    } finally {
+      setBusyReport(null)
+    }
+  }
 
   const [createOpen, setCreateOpen] = useState(false)
   const [advertiser, setAdvertiser] = useState('')
+  const [clientId, setClientId] = useState('')
+  const [planId, setPlanId] = useState('')
   const [price, setPrice] = useState('')
   // Lazy initialisers: reading the clock during render is impure and would drift on
   // every re-render.
@@ -67,10 +100,44 @@ export function AdBookings({ contentId }: { contentId: number }) {
   }
   const fail = (error: Error) => toast.error(error.message)
 
+  const [extending, setExtending] = useState<Placement | null>(null)
+  const [extendTo, setExtendTo] = useState('')
+  const [extendPrice, setExtendPrice] = useState('')
+
+  const openExtend = (placement: Placement) => {
+    setExtending(placement)
+    // Default to a fortnight past wherever the run currently finishes, so the common case
+    // is one click and a price. extended_from defaults server side to the same point,
+    // which is what stops an unpaid gap opening mid-campaign.
+    const from = Date.parse(placement.effective_ends_at || placement.ends_at)
+    setExtendTo(new Date(from + 15 * 864e5).toISOString().slice(0, 10))
+    setExtendPrice('')
+  }
+
+  const extend = useMutation({
+    mutationFn: () => api.addPlacementExtension(extending!.id, {
+      extended_to: new Date(`${extendTo}T23:59:59`).toISOString(),
+      additional_price_paise: Math.round(Number(extendPrice || 0) * 100),
+      is_paid: false,
+    }),
+    onSuccess: () => { refresh(); toast.success('Booking extended'); setExtending(null) },
+    onError: fail,
+  })
+
+  const dropExtension = useMutation({
+    mutationFn: ({ id, extensionId }: { id: number; extensionId: number }) =>
+      api.removePlacementExtension(id, extensionId),
+    onSuccess: () => { refresh(); toast.success('Extension removed and the run pulled back in') },
+    onError: fail,
+  })
+
   const create = useMutation({
     mutationFn: () => api.createPlacement({
       content_id: contentId,
-      advertiser: advertiser.trim(),
+      // The API takes one or the other; sending an empty string would fail its min_length.
+      client_id: clientId ? Number(clientId) : undefined,
+      advertiser: clientId ? undefined : advertiser.trim(),
+      plan_id: planId ? Number(planId) : undefined,
       // Rupees in the box, paise on the wire — money never rides on a float.
       price_paise: Math.round(Number(price || 0) * 100),
       is_paid: false,
@@ -80,7 +147,7 @@ export function AdBookings({ contentId }: { contentId: number }) {
     }),
     onSuccess: () => {
       refresh(); toast.success('Booking created and placed')
-      setCreateOpen(false); setAdvertiser(''); setPrice(''); setPicked([])
+      setCreateOpen(false); setAdvertiser(''); setPrice(''); setPicked([]); setClientId(''); setPlanId('')
     },
     onError: fail,
   })
@@ -151,6 +218,8 @@ export function AdBookings({ contentId }: { contentId: number }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <h3 className="text-foreground font-semibold">{placement.advertiser}</h3>
                     <Badge variant={state.tone}>{state.label}</Badge>
+                    {placement.client && <Badge variant="outline">{placement.client.client_code}</Badge>}
+                    {placement.plan && <Badge variant="outline">{placement.plan.name}</Badge>}
                     {placement.price_paise > 0 && (
                       <Badge variant={placement.is_paid ? 'success' : 'warning'}>
                         {rupees(placement.price_paise)} · {placement.is_paid ? 'paid' : 'unpaid'}
@@ -160,6 +229,15 @@ export function AdBookings({ contentId }: { contentId: number }) {
                   <p className="text-muted-foreground mt-1 flex items-center gap-1.5 text-sm">
                     <CalendarRange className="size-3.5" aria-hidden="true" />
                     {asDate(placement.starts_at)} → {asDate(placement.ends_at)}
+                    {/* starts_at/ends_at stay as SOLD. When an extension moved the finish
+                        line, showing only the sold date would tell an operator a running
+                        campaign had ended. */}
+                    {placement.extensions.length > 0 && placement.effective_ends_at && (
+                      <span className="text-foreground">
+                        · extended to {asDate(placement.effective_ends_at)}
+                        {placement.total_price_paise != null && ` (${rupees(placement.total_price_paise)} total)`}
+                      </span>
+                    )}
                   </p>
                 </div>
                 {canEdit && (
@@ -169,12 +247,27 @@ export function AdBookings({ contentId }: { contentId: number }) {
                         Mark {placement.is_paid ? 'unpaid' : 'paid'}
                       </Button>
                     )}
-                    <Button size="sm" variant="outline" render={
-                      // A plain link so the browser handles the download; the API sets the
-                      // filename from the client's name.
-                      <a href={api.bookingReportPdfUrl(placement.id)} target="_blank" rel="noreferrer" />
-                    }>
-                      <FileDown data-icon="inline-start" /> Report
+                    {/* Both fetch the PDF with the auth header. This used to be a plain
+                        <a href> to the endpoint, which navigates WITHOUT the header and so
+                        401'd every time -- the report button had never worked. */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busyReport === placement.id}
+                      onClick={() => runReport(placement, 'share')}
+                    >
+                      <Share2 data-icon="inline-start" /> Share
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busyReport === placement.id}
+                      onClick={() => runReport(placement, 'download')}
+                    >
+                      <FileDown data-icon="inline-start" /> PDF
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => openExtend(placement)}>
+                      <CalendarRange data-icon="inline-start" /> Extend
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => setAddTo(placement)}>
                       <Plus data-icon="inline-start" /> Add places
@@ -226,8 +319,50 @@ export function AdBookings({ contentId }: { contentId: number }) {
           </DialogHeader>
           <div className="max-h-[55vh] space-y-4 overflow-y-auto px-1 pt-2">
             <div className="space-y-2">
-              <Label htmlFor="advertiser">Client</Label>
-              <Input id="advertiser" value={advertiser} onChange={(e) => setAdvertiser(e.target.value)} placeholder="Pittappillil Agencies" autoFocus />
+              <Label htmlFor="client">Client</Label>
+              {/* A saved client carries the contact details the report is addressed to and
+                  emailed with. Typing a name still works for a one-off, which is what
+                  every existing booking did. */}
+              <select
+                id="client"
+                className="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm"
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                autoFocus
+              >
+                <option value="">— Type a name instead —</option>
+                {clients.map((client) => (
+                  <option key={client.id} value={String(client.id)}>{client.name} ({client.client_code})</option>
+                ))}
+              </select>
+              {!clientId && (
+                <Input value={advertiser} onChange={(e) => setAdvertiser(e.target.value)} placeholder="Pittappillil Agencies" aria-label="Advertiser name" />
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="plan">Plan</Label>
+              {/* Choosing one fills price and the end date from its duration. Copied on the
+                  server, so repricing the plan later leaves this booking alone. */}
+              <select
+                id="plan"
+                className="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm"
+                value={planId}
+                onChange={(e) => {
+                  setPlanId(e.target.value)
+                  const plan = plans.find((candidate) => String(candidate.id) === e.target.value)
+                  if (plan) {
+                    setPrice(String(plan.price_paise / 100))
+                    setEndsAt(new Date(Date.parse(`${startsAt}T00:00:00`) + plan.duration_days * 864e5).toISOString().slice(0, 10))
+                  }
+                }}
+              >
+                <option value="">— No plan —</option>
+                {plans.map((plan) => (
+                  <option key={plan.id} value={String(plan.id)}>
+                    {plan.name} — ₹{(plan.price_paise / 100).toLocaleString('en-IN')} / {plan.duration_days} days
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div className="space-y-2">
@@ -273,6 +408,55 @@ export function AdBookings({ contentId }: { contentId: number }) {
       </Dialog>
 
       {/* Add more places to an existing booking */}
+      <Dialog open={Boolean(extending)} onOpenChange={(open) => !open && setExtending(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Extend booking</DialogTitle>
+            <DialogDescription>
+              Sell more time on this campaign. It carries on from where the run currently
+              finishes, so there is no unpaid gap, and the screens are told straight away.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="extend-to">Extend until</Label>
+              <Input id="extend-to" type="date" value={extendTo} onChange={(e) => setExtendTo(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="extend-price">Additional amount (₹)</Label>
+              <Input id="extend-price" type="number" min={0} value={extendPrice} onChange={(e) => setExtendPrice(e.target.value)} placeholder="12500" />
+            </div>
+            {Boolean(extending?.extensions.length) && (
+              <div className="space-y-2">
+                <Label>Existing extensions</Label>
+                <div className="space-y-1">
+                  {extending?.extensions.map((extension) => (
+                    <div key={extension.id} className="bg-muted/40 flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm">
+                      <span>
+                        {asDate(extension.extended_from)} → {asDate(extension.extended_to)} · {rupees(extension.additional_price_paise)}
+                      </span>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        className="text-destructive"
+                        onClick={() => dropExtension.mutate({ id: extending.id, extensionId: extension.id })}
+                        aria-label="Remove this extension"
+                      >
+                        <X />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setExtending(null)}>Cancel</Button>
+            <Button onClick={() => extend.mutate()} disabled={extend.isPending || !extendTo}>Extend</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={Boolean(addTo)} onOpenChange={(open) => !open && setAddTo(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>

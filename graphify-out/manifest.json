@@ -300,8 +300,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/dashboard/content/page.tsx": {
-    "mtime": 1788269423.586271,
-    "ast_hash": "ed4c39efe87b84b78b8ea8b2d6da52fd",
+    "mtime": 1788273852.4425206,
+    "ast_hash": "cd0f9b3f43e796af57cc53ff6b84eaf1",
     "semantic_hash": ""
   },
   "frontend/src/app/dashboard/error.tsx": {

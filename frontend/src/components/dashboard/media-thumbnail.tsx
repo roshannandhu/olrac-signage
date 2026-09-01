@@ -4,19 +4,28 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { ImageIcon, Video } from 'lucide-react'
 import type { ContentItem } from '@/lib/types'
-
 import { resolveMediaUrl } from '@/lib/api'
 
 export function MediaThumbnail({ item, className = '' }: { item: ContentItem; className?: string }) {
   const [hasError, setHasError] = useState(false)
-  const imageSource = !hasError ? resolveMediaUrl(item.thumbnail || (item.type === 'image' ? item.file_url : null)) : null
-  const videoSource = resolveMediaUrl(item.file_url)
+  
+  const rawImageCandidate = item.thumbnail || (item.type === 'image' ? item.file_url : null)
+  const isVideoFile = rawImageCandidate?.toLowerCase().includes('.mp4') || 
+                       rawImageCandidate?.toLowerCase().includes('.mov') || 
+                       rawImageCandidate?.toLowerCase().includes('.webm')
+
+  const resolvedImage = !hasError && !isVideoFile ? resolveMediaUrl(rawImageCandidate) : null
+  const isHttpImage = resolvedImage && (resolvedImage.startsWith('http://') || resolvedImage.startsWith('https://') || resolvedImage.startsWith('/'))
+
+  const resolvedVideo = resolveMediaUrl(item.file_url)
+  const isHttpVideo = resolvedVideo && (resolvedVideo.startsWith('http://') || resolvedVideo.startsWith('https://') || resolvedVideo.startsWith('/'))
+  const videoPosterSource = isHttpVideo ? `${resolvedVideo}${resolvedVideo.includes('#') ? '' : '#t=0.001'}` : undefined
 
   return (
     <div className={`bg-muted relative overflow-hidden ${className}`}>
-      {imageSource ? (
+      {isHttpImage ? (
         <Image
-          src={imageSource}
+          src={resolvedImage}
           alt=""
           fill
           unoptimized
@@ -25,8 +34,15 @@ export function MediaThumbnail({ item, className = '' }: { item: ContentItem; cl
           className="object-cover transition-transform duration-500 group-hover/card:scale-[1.03] motion-reduce:transition-none"
         />
       ) : item.type === 'video' ? (
-        videoSource ? (
-          <video src={videoSource} muted preload="metadata" className="size-full object-cover" aria-label={`${item.name} preview`} />
+        videoPosterSource ? (
+          <video
+            src={videoPosterSource}
+            muted
+            playsInline
+            preload="metadata"
+            className="size-full object-cover"
+            aria-label={`${item.name} preview`}
+          />
         ) : (
           <div className="text-muted-foreground/50 grid size-full place-items-center bg-gradient-to-br from-slate-900 to-slate-800">
             <Video className="size-7 text-primary/70" />
@@ -41,3 +57,4 @@ export function MediaThumbnail({ item, className = '' }: { item: ContentItem; cl
     </div>
   )
 }
+

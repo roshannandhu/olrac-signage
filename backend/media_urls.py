@@ -32,9 +32,9 @@ def storage_prefix(organization) -> str:
 
 
 def get_s3_config() -> dict[str, str]:
-    endpoint = os.getenv("S3_ENDPOINT_URL", "").strip()
-    key_id = os.getenv("AWS_ACCESS_KEY_ID", "").strip()
-    secret = os.getenv("AWS_SECRET_ACCESS_KEY", "").strip()
+    endpoint = os.getenv("S3_ENDPOINT_URL", "https://3fe4487a2b8fd1e2e541bf0e0f4c7c42.r2.cloudflarestorage.com").strip()
+    key_id = os.getenv("AWS_ACCESS_KEY_ID", "734d432aeb20a3f4bbd484ca83a8a82b").strip()
+    secret = os.getenv("AWS_SECRET_ACCESS_KEY", "ef6c0c74667843ec08f396b12ab0e8929d409c8c8062713da09cd17c6c628acf").strip()
     bucket = os.getenv("S3_BUCKET_NAME", "olrac").strip()
     region = (os.getenv("AWS_REGION") or "auto").strip()
     return {

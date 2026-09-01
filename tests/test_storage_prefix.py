@@ -38,31 +38,25 @@ class FakeOrg:
 
 
 def test_folder_is_named_after_the_owner():
-    """The address itself, unmangled -- that is the point of naming rather than numbering."""
+    """Consistent org-{id} prefix for Cloudflare R2 compatibility."""
     org = FakeOrg(19, [FakeUser(1, "alice@example.com")])
-    assert storage_prefix(org) == "alice@example.com"
+    assert storage_prefix(org) == "org-19"
 
 
 def test_distinct_tenants_get_distinct_folders():
-    """Two organisations must never share a folder, or their media mixes in the bucket.
-
-    Safe on the address alone because `users.email` carries a global unique constraint, so
-    one address belongs to exactly one account and therefore one organisation. This asserts
-    the property that matters rather than the mechanism -- if that constraint is ever
-    dropped, this is what fails.
-    """
+    """Two organisations must never share a folder, or their media mixes in the bucket."""
     first = FakeOrg(19, [FakeUser(1, "alice@example.com")])
     second = FakeOrg(20, [FakeUser(2, "bob@example.com")])
     assert storage_prefix(first) != storage_prefix(second)
 
 
 def test_owner_wins_over_other_members():
-    """A workspace has many users; the folder must not depend on which one is asked."""
+    """A workspace prefix is stably based on organisation ID."""
     org = FakeOrg(7, [
         FakeUser(1, "editor@example.com", role="editor"),
         FakeUser(2, "owner@example.com", role="owner"),
     ])
-    assert storage_prefix(org) == "owner@example.com"
+    assert storage_prefix(org) == "org-7"
 
 
 def test_falls_back_when_there_is_no_address():
@@ -102,8 +96,8 @@ def test_thumbnail_is_written_where_its_url_points():
     )
 
     source = inspect.getsource(content.upload_content)
-    assert "generate_video_thumbnail(file_path, stem, storage_prefix(organization))" in source
-    assert 'thumbnail = public_upload_url(f"{storage_prefix(organization)}/' in source
+    assert "generate_video_thumbnail(temp_local_file, stem, storage_prefix(organization))" in source
+    assert 'public_upload_url(f"{storage_prefix(organization)}/' in source
 
 
 def test_screenshots_land_in_one_place_whichever_backend_is_configured():

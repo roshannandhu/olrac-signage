@@ -134,8 +134,8 @@ function buildAlerts(screens: Screen[], content: ContentItem[]): Alert[] {
 }
 
 export default function AlertsPage() {
-  const screensQuery = useQuery({ queryKey: ['screens'], queryFn: api.getScreens, refetchInterval: 30000 })
-  const contentQuery = useQuery({ queryKey: ['content'], queryFn: api.getContent })
+  const screensQuery = useQuery({ queryKey: ['screens'], queryFn: api.getScreens, refetchInterval: 10000 })
+  const contentQuery = useQuery({ queryKey: ['content'], queryFn: api.getContent, refetchInterval: 30000 })
 
   const [severity, setSeverity] = useState<Severity | 'all'>('all')
   const [search, setSearch] = useState('')

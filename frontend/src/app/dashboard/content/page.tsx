@@ -57,7 +57,6 @@ export default function ContentPage() {
   const plansQuery = useQuery({ queryKey: ['tenant-plans'], queryFn: () => api.getTenantPlans() })
   const sellClients = clientsQuery.data || []
   const sellPlans = plansQuery.data || []
-  const chosenPlan = sellPlans.find((plan) => String(plan.id) === sellPlanId)
 
   const [uploadOpen, setUploadOpen] = useState(false)
   const [queue, setQueue] = useState<QueuedUpload[]>([])
@@ -70,6 +69,8 @@ export default function ContentPage() {
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
+
+  const chosenPlan = sellPlans.find((plan) => String(plan.id) === sellPlanId)
 
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<CommonSort>('newest')

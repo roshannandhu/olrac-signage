@@ -24,6 +24,7 @@ from .media_urls import is_s3_enabled, get_s3_config
 UPLOAD_DIR = os.path.join(
     pathlib.Path(__file__).parent.parent.absolute(), "uploads"
 )
+S3_BUCKET = os.getenv("S3_BUCKET_NAME", "olrac-media")
 
 
 def _client():

@@ -60,7 +60,7 @@ export default function ScreensPage() {
 
   // Screens report in on their own cadence; a slow poll keeps the wall of thumbnails
   // roughly live without hammering the API at 500 screens.
-  const screensQuery = useQuery({ queryKey: ['screens'], queryFn: api.getScreens, refetchInterval: 30000 })
+  const screensQuery = useQuery({ queryKey: ['screens'], queryFn: api.getScreens, refetchInterval: 10000 })
   const groupsQuery = useQuery({ queryKey: ['groups'], queryFn: api.getGroups })
   const playlistsQuery = useQuery({ queryKey: ['playlists'], queryFn: api.getPlaylists })
 

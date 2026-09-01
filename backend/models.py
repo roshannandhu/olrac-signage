@@ -430,6 +430,10 @@ class Content(Base):
         "MediaRendition", back_populates="content", cascade="all, delete-orphan",
         lazy="selectin",
     )
+    ad_placements = relationship(
+        "AdPlacement", back_populates="content", cascade="all, delete-orphan",
+        lazy="selectin",
+    )
 
     @property
     def expires_at(self):
@@ -677,7 +681,7 @@ class AdPlacement(Base):
                 latest = extension.extended_to
         return latest
 
-    content = relationship("Content")
+    content = relationship("Content", back_populates="ad_placements")
     organization = relationship("Organization")
     client = relationship("Client")
     plan = relationship("TenantPlan")

@@ -360,8 +360,8 @@
     "semantic_hash": "64d33ed6dea5c0e2fd720b7597b9fe8b"
   },
   "frontend/src/components/dashboard/media-thumbnail.tsx": {
-    "mtime": 1788188000.14395,
-    "ast_hash": "bc2688d2e3996db2d244740ff8552c38",
+    "mtime": 1788274684.6553545,
+    "ast_hash": "39978826ac5250596aff5e34f4db54f5",
     "semantic_hash": ""
   },
   "frontend/src/components/dashboard/page-header.tsx": {
@@ -1085,8 +1085,8 @@
     "semantic_hash": ""
   },
   "backend/media_urls.py": {
-    "mtime": 1788227321.0466015,
-    "ast_hash": "415a238a4412ba8a7062be4df344723a",
+    "mtime": 1788274662.138811,
+    "ast_hash": "7c8d781fc891f96132f7b6b1baf024d7",
     "semantic_hash": ""
   },
   "backend/reports/__init__.py": {

@@ -54,10 +54,6 @@ const toolLinks = [
 ]
 
 const accountLinks = [
-  // Both are owner-and-editor on the API (require_tenant_roles), so neither is ownerOnly:
-  // hiding a page a role is allowed to use is how an editor ends up asking the owner to
-  // add a client for them.
-  { href: '/dashboard/clients', label: 'Clients', icon: Contact, ownerOnly: false },
   { href: '/dashboard/plans', label: 'Plans', icon: Tags, ownerOnly: false },
   { href: '/dashboard/branding', label: 'Branding', icon: Palette, ownerOnly: false },
   { href: '/dashboard/team', label: 'Team', icon: Users, ownerOnly: true },

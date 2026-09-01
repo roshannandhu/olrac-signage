@@ -249,6 +249,23 @@ export const api = {
     }),
   deleteContent: (id: number) => fetchWithAuth(`/content/${id}`, { method: 'DELETE' }),
   retryContentProcessing: (id: number) => fetchWithAuth<ContentItem>(`/content/${id}/retry`, { method: 'POST' }),
+  updateContentClientAd: (
+    contentId: number,
+    body: {
+      name?: string
+      client_name: string
+      client_email?: string
+      client_phone?: string
+      plan_id?: number | null
+      screen_ids?: number[]
+      notes?: string
+    }
+  ) =>
+    fetchWithAuth<ContentItem>(`/content/${contentId}/client-ad`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
 
   generateProvisioningQr: (data: {
     wifi_ssid: string

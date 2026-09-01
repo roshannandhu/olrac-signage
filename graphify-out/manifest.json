@@ -285,8 +285,8 @@
     "semantic_hash": ""
   },
   "frontend/package.json": {
-    "mtime": 1788083577.6283276,
-    "ast_hash": "dfa35dd6fc16ffd87e700cb5979c751f",
+    "mtime": 1788276357.245345,
+    "ast_hash": "c8d684e2f0da8192f6748a02764f8f28",
     "semantic_hash": ""
   },
   "frontend/postcss.config.mjs": {
@@ -360,8 +360,8 @@
     "semantic_hash": "64d33ed6dea5c0e2fd720b7597b9fe8b"
   },
   "frontend/src/components/dashboard/media-thumbnail.tsx": {
-    "mtime": 1788274684.6553545,
-    "ast_hash": "39978826ac5250596aff5e34f4db54f5",
+    "mtime": 1788276421.8959293,
+    "ast_hash": "6faf2297d19285e9bf09cac116c59b1f",
     "semantic_hash": ""
   },
   "frontend/src/components/dashboard/page-header.tsx": {
@@ -440,8 +440,8 @@
     "semantic_hash": "24dc3fd21363a6986ec99d1d43aedb40"
   },
   "frontend/src/lib/api.ts": {
-    "mtime": 1788273301.3491204,
-    "ast_hash": "b95cf7d83a7d300c0109c2e393ddd690",
+    "mtime": 1788276408.7275274,
+    "ast_hash": "44ddfbc3e2a9c75a6b9039b0ffccdf23",
     "semantic_hash": ""
   },
   "frontend/src/lib/format.ts": {
@@ -720,8 +720,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/dashboard/campaigns/page.tsx": {
-    "mtime": 1788273328.2882378,
-    "ast_hash": "36ad2cd8efa245e3f3cb535e82dfb921",
+    "mtime": 1788277035.4447196,
+    "ast_hash": "8568503c1ade175d018f1744265a0986",
     "semantic_hash": ""
   },
   "frontend/src/app/dashboard/emergency/page.tsx": {
@@ -1702,6 +1702,11 @@
   "sample-campaign-report.pdf": {
     "mtime": 1788248994.3083928,
     "ast_hash": "80e7acbc11ef9849226848428d1ff1c7",
+    "semantic_hash": ""
+  },
+  "frontend/src/lib/r2-signer.ts": {
+    "mtime": 1788276395.4133916,
+    "ast_hash": "2bbdc790c84bf26fa8fe15f44b0fa360",
     "semantic_hash": ""
   }
 }

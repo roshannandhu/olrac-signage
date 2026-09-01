@@ -1,14 +1,15 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ArrowLeft, CheckCircle2, Film, MapPin, MonitorPlay, RefreshCw, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, Building2, CheckCircle2, Film, Mail, MapPin, MonitorPlay, Phone, RefreshCw, TriangleAlert } from 'lucide-react'
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { ErrorState } from '@/components/dashboard/error-state'
 import { MediaThumbnail } from '@/components/dashboard/media-thumbnail'
+import { EditClientAdModal } from '@/components/dashboard/edit-client-ad-modal'
 import { ScreenMap } from '@/components/dashboard/screen-map'
 import { AdBookings } from '@/components/dashboard/ad-bookings'
 import { Badge } from '@/components/ui/badge'
@@ -35,6 +36,7 @@ function StatTile({ label, stats }: { label: string; stats: MediaPeriodStats }) 
 export default function AdDetailPage() {
   const params = useParams()
   const contentId = Number(params.id)
+  const [editModalOpen, setEditModalOpen] = useState(false)
 
   const contentQuery = useQuery({ queryKey: ['content'], queryFn: api.getContent })
   const groupsQuery = useQuery({ queryKey: ['groups'], queryFn: api.getGroups })
@@ -109,15 +111,37 @@ export default function AdDetailPage() {
             <MediaThumbnail item={item} className="size-full" />
           </div>
           <div className="min-w-0 flex-1">
-            <h1 className="text-foreground text-2xl font-bold tracking-tight break-words">{item.name}</h1>
-            <p className="text-muted-foreground mt-1 text-sm">
-              <span className="capitalize">{item.type}</span>
-              {orientation && ` • ${orientation}`}
-              {duration && ` • ${duration}`}
-              {` • added ${relativeTime(item.uploaded_at)}`}
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h1 className="text-foreground text-2xl font-bold tracking-tight break-words">{item.name}</h1>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  <span className="capitalize">{item.type}</span>
+                  {orientation && ` • ${orientation}`}
+                  {duration && ` • ${duration}`}
+                  {` • added ${relativeTime(item.uploaded_at)}`}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditModalOpen(true)}
+                className="gap-1.5 shadow-sm border-primary/30 text-primary hover:bg-primary/10"
+              >
+                <Building2 className="size-4" /> Edit Client & Ad Details
+              </Button>
+            </div>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
+              {item.client_name && (
+                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 font-semibold gap-1">
+                  <Building2 className="size-3" /> {item.client_name}
+                </Badge>
+              )}
+              {item.plan_name && (
+                <Badge variant="outline">
+                  {item.plan_name}
+                </Badge>
+              )}
               {item.status === 'ready' && <Badge variant="success"><CheckCircle2 className="size-3" /> Ready to play</Badge>}
               {item.status === 'processing' && <Badge variant="warning">Still processing</Badge>}
               {item.status === 'failed' && <Badge variant="danger"><TriangleAlert className="size-3" /> Processing failed</Badge>}
@@ -126,7 +150,7 @@ export default function AdDetailPage() {
               ))}
             </div>
 
-            {/* The headline answer to "is this ad working?" */}
+            {/* Headline answer to "is this ad working?" */}
             <p className="text-foreground mt-4 text-sm">
               {scheduledOn.length === 0 ? (
                 <span className="text-muted-foreground">Not scheduled on any screen yet.</span>
@@ -144,6 +168,35 @@ export default function AdDetailPage() {
           </div>
         </div>
       </header>
+
+      {/* Client Overview Card */}
+      <div className="mb-6 rounded-2xl border border-primary/20 bg-card p-4 sm:p-5 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="size-8 rounded-lg bg-primary/10 text-primary grid place-items-center">
+              <Building2 className="size-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-foreground">
+                Advertiser / Client: {item.client_name || 'Direct Advertiser'}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                {item.client_email || 'No email registered'}
+                {item.client_phone && ` • ${item.client_phone}`}
+                {item.plan_name && ` • Package: ${item.plan_name}`}
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setEditModalOpen(true)}
+            className="text-xs text-primary font-medium hover:bg-primary/10"
+          >
+            Edit Info
+          </Button>
+        </div>
+      </div>
 
       {item.status === 'failed' && (
         <div className="border-destructive/30 bg-destructive/5 mb-6 rounded-xl border p-4">
@@ -384,6 +437,12 @@ export default function AdDetailPage() {
           </div>
         </TabsPanel>
       </Tabs>
+
+      <EditClientAdModal
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+        contentItem={item}
+      />
     </div>
   )
 }

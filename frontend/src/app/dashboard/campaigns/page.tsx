@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   BarChart3,
+  Building2,
   Calendar,
   Clock,
   Download,
@@ -26,14 +27,15 @@ import { EmptyState } from '@/components/dashboard/empty-state'
 import { ErrorState } from '@/components/dashboard/error-state'
 import { PageHeader } from '@/components/dashboard/page-header'
 import { EmailReportModal } from '@/components/dashboard/email-report-modal'
+import { EditClientAdModal } from '@/components/dashboard/edit-client-ad-modal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTrigger } from '@/components/ui/tabs'
-import { api } from '@/lib/api'
-import type { Placement } from '@/lib/types'
+import { api, resolveMediaUrl } from '@/lib/api'
+import type { ContentItem, Placement } from '@/lib/types'
 
 const rupees = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN')}`
 const asDate = (iso: string) =>
@@ -52,6 +54,7 @@ export default function CampaignsPage() {
   const [filterState, setFilterState] = useState<'all' | 'running' | 'scheduled' | 'ended'>('all')
   const [search, setSearch] = useState('')
   const [selectedPlacementForEmail, setSelectedPlacementForEmail] = useState<Placement | null>(null)
+  const [editingContentItem, setEditingContentItem] = useState<ContentItem | null>(null)
   const [busyReportId, setBusyReportId] = useState<number | null>(null)
 
   const placementsQuery = useQuery({
@@ -269,7 +272,7 @@ export default function CampaignsPage() {
                     <div className="flex items-start gap-3.5 min-w-0 flex-1">
                       {placement.creative_thumbnail_url ? (
                         <img
-                          src={placement.creative_thumbnail_url}
+                          src={resolveMediaUrl(placement.creative_thumbnail_url)}
                           alt=""
                           className="size-14 rounded-xl object-cover border border-border/40 shrink-0 bg-muted"
                         />
@@ -348,6 +351,37 @@ export default function CampaignsPage() {
                       </div>
 
                       <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            setEditingContentItem({
+                              id: placement.content_id,
+                              name: placement.creative_name || `Asset #${placement.content_id}`,
+                              type: 'image',
+                              file_url: '',
+                              thumbnail: placement.creative_thumbnail_url || null,
+                              tags: null,
+                              uploaded_at: placement.created_at || new Date().toISOString(),
+                              file_size_bytes: 0,
+                              expires_at: null,
+                              status: 'ready',
+                              failed_reason: null,
+                              client_id: placement.client?.id,
+                              client_name: clientName,
+                              client_email: placement.client?.email,
+                              client_phone: placement.client?.phone,
+                              plan_id: placement.plan?.id,
+                              screen_ids: placement.targets.map((t) => t.screen_id).filter(Boolean) as number[],
+                              placement_notes: placement.notes,
+                            })
+                          }
+                          title="Edit Client & Ad Details"
+                          className="h-8 px-2 text-xs text-primary"
+                        >
+                          <Building2 className="size-3.5" />
+                        </Button>
+
                         <Button
                           variant="outline"
                           size="sm"
@@ -444,6 +478,15 @@ export default function CampaignsPage() {
         onOpenChange={(open) => {
           if (!open) setSelectedPlacementForEmail(null)
         }}
+      />
+
+      {/* Unified Edit Client & Ad Details Modal */}
+      <EditClientAdModal
+        open={Boolean(editingContentItem)}
+        onOpenChange={(open) => {
+          if (!open) setEditingContentItem(null)
+        }}
+        contentItem={editingContentItem}
       />
     </div>
   )

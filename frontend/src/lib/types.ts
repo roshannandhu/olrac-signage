@@ -36,6 +36,22 @@ export interface ContentItem {
   failed_reason: string | null
   duration_ms?: number | null
   renditions?: MediaRendition[]
+
+  // 1:1 Unified Ad & Client metadata
+  client_id?: number | null
+  client_name?: string | null
+  client_email?: string | null
+  client_phone?: string | null
+  plan_id?: number | null
+  plan_name?: string | null
+  placement_id?: number | null
+  placement_status?: string | null
+  placement_price_paise?: number | null
+  placement_starts_at?: string | null
+  placement_ends_at?: string | null
+  placement_notes?: string | null
+  screen_ids?: number[]
+  screen_names?: string[]
 }
 
 export interface MediaRendition {

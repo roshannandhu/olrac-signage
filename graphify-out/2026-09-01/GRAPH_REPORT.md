@@ -1,16 +1,16 @@
 # Graph Report - OLRAC SIGNAGE  (2026-09-01)
 
 ## Corpus Check
-- 321 files · ~359,445 words
+- 321 files · ~359,492 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2679 nodes · 6279 edges · 207 communities (157 shown, 50 thin omitted)
+- 2679 nodes · 6279 edges · 208 communities (158 shown, 50 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 220 edges (avg confidence: 0.78)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `99623b47`
+- Built from commit: `94c7c5f9`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -71,7 +71,7 @@
 - gradlew
 - .onCreate
 - storage_prefix
-- MediaRenditionResponse
+- model_validator
 - test_media_worker.py
 - eslint.config.mjs
 - next.config.ts
@@ -161,19 +161,20 @@
 - @dnd-kit/core
 - routers/billing.py
 - client_key
-- @dnd-kit/utilities
+- GoogleDevicePollResponse
 - groups.py
 - e2e_test.py
 - AlertSummaryResponse
-- PlaylistBase
+- create_checkout
 - acknowledge_alert
-- ScreenBase
+- PlacementSplit
 - BrandingUpdate
 - ResolveLinkRequest
 - ExtensionCreate
 - GoogleDeviceStartResponse
 - leaflet
 - ProfileUpdate
+- next
 
 ## God Nodes (most connected - your core abstractions)
 1. `TenantScope` - 150 edges
@@ -202,15 +203,15 @@
 ## Import Cycles
 - None detected.
 
-## Communities (207 total, 50 thin omitted)
+## Communities (208 total, 50 thin omitted)
 
 ### Community 0 - "test_tv_deep_link.py"
 Cohesion: 0.16
 Nodes (16): _android_intent_url(), The TV's Custom Tab landing page, which then hands back to the player app.…, Rewrite an "olrac://" deep link into the intent: form a browser will actually…, _tv_result_page(), HTMLResponse, The TV hand-back link must be openable by a browser: python…, The whole bug in one assertion: a raw custom scheme is what Chrome rejects., No APK change: the intent's data must still be the olrac:// URL already… (+8 more)
 
 ### Community 1 - "schemas.py"
-Cohesion: 0.07
-Nodes (49): create_checkout(), AlertResponse, AppReleasePatch, AppVersionResponse, BillingSummaryResponse, BrandingResponse, CheckoutRequest, CheckoutResponse (+41 more)
+Cohesion: 0.08
+Nodes (46): AlertResponse, AppReleasePatch, AppVersionResponse, BillingSummaryResponse, BrandingResponse, ClientBase, ClientCreate, ClientResponse (+38 more)
 
 ### Community 2 - "PlaylistItemEntity"
 Cohesion: 0.24
@@ -249,8 +250,8 @@ Cohesion: 0.07
 Nodes (28): compilerOptions, allowJs, esModuleInterop, incremental, isolatedModules, jsx, lib, module (+20 more)
 
 ### Community 12 - "ValueError"
-Cohesion: 0.09
-Nodes (19): AppReleaseCreate, AppReleaseResponse, PasswordChange, PlacementCreate, PlaylistItemBase, PlaylistItemCreate, PlaylistItemResponse, PlaylistItemUpdate (+11 more)
+Cohesion: 0.10
+Nodes (17): AppReleaseCreate, AppReleaseResponse, HeartbeatRequest, PasswordChange, PlaylistItemUpdate, Partial screen update: only the fields actually present are written. The PUT…, Each day maps to exactly [start, end] as HH:MM. Validated here rather than in…, ScheduleBase (+9 more)
 
 ### Community 13 - "test_screen_approval.py"
 Cohesion: 0.26
@@ -290,7 +291,7 @@ Nodes (15): _detect_lan_host(), get_s3_config(), is_s3_enabled(), media_base_url
 
 ### Community 22 - "dependencies"
 Cohesion: 0.10
-Nodes (21): @base-ui/react, class-variance-authority, clsx, dependencies, @base-ui/react, class-variance-authority, clsx, next (+13 more)
+Nodes (21): @base-ui/react, class-variance-authority, clsx, @dnd-kit/utilities, dependencies, @base-ui/react, class-variance-authority, clsx (+13 more)
 
 ### Community 23 - "devDependencies"
 Cohesion: 0.09
@@ -403,6 +404,10 @@ Nodes (13): BrandedMessage(), GoogleLogo(), GoogleSignInScreen(), Bundle, Modifi
 ### Community 74 - "storage_prefix"
 Cohesion: 0.14
 Nodes (20): Safe, alphanumeric bucket key prefix for an organization., storage_prefix(), FakeOrg, FakeUser, Tenant storage folders are named, unique and stable: python…, Local disk and R2 must file a capture under the same key, or the folder layout…, Stands in for models.Organization; owner_email is a property over .users., Consistent org-{id} prefix for Cloudflare R2 compatibility. (+12 more)
+
+### Community 75 - "model_validator"
+Cohesion: 0.15
+Nodes (7): MediaRenditionResponse, PlacementCreate, PlaylistItemBase, PlaylistItemCreate, PlaylistItemResponse, PlaylistUpdate, model_validator
 
 ### Community 76 - "test_media_worker.py"
 Cohesion: 0.25
@@ -624,21 +629,21 @@ Nodes (15): ensure_billing_catalog(), plan_features(), Plan, Session, billing_su
 Cohesion: 0.67
 Nodes (3): client_key(), Request, Who to count this request against. slowapi's get_remote_address returns…
 
+### Community 194 - "GoogleDevicePollResponse"
+Cohesion: 0.33
+Nodes (4): GoogleDevicePollResponse, Where the approval has got to. `slow_down` is passed through rather than…, Deliberately narrow: /screens/register is unauthenticated, so it must not reuse…, RegisterResponse
+
 ### Community 195 - "groups.py"
 Cohesion: 0.33
 Nodes (12): assign_group_playlist(), create_group(), delete_group(), list_groups(), get, put, Reject a parent that is not ours, is the group itself, or would close a loop.…, serialize_group() (+4 more)
 
-### Community 198 - "PlaylistBase"
-Cohesion: 0.27
-Nodes (6): PlaylistBase, PlaylistCreate, PlaylistResponse, TenantPlanBase, TenantPlanCreate, TenantPlanResponse
+### Community 198 - "create_checkout"
+Cohesion: 0.67
+Nodes (3): create_checkout(), CheckoutRequest, CheckoutResponse
 
 ### Community 199 - "acknowledge_alert"
 Cohesion: 0.25
 Nodes (9): Alert, acknowledge_alert(), alert_summary(), list_alerts(), get, Open alerts, newest first. Resolved ones only when asked for. The default is…, Mark an alert as picked up, without claiming the underlying fault is fixed.…, Counts for the navigation badge, so the header does not fetch the whole list. (+1 more)
-
-### Community 200 - "ScreenBase"
-Cohesion: 0.27
-Nodes (4): HeartbeatRequest, ScreenBase, ScreenCreate, ScreenResponse
 
 ## Knowledge Gaps
 - **318 isolated node(s):** `CheckingLocalState`, `GoogleSignIn`, `PLAYED_TO_END`, `SKIPPED`, `FAILED` (+313 more)
@@ -648,7 +653,7 @@ Nodes (4): HeartbeatRequest, ScreenBase, ScreenCreate, ScreenResponse
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `TenantScope` connect `TenantScope` to `routers/billing.py`, `schemas.py`, `HTTPException`, `groups.py`, `models.py`, `acknowledge_alert`, `branding.py`, `tenancy.py`, `_post`, `content.py`, `screens.py`, `resolve_media_url`, `Organization`, `.query`, `admin.py`, `users.py`?**
+- **Why does `TenantScope` connect `TenantScope` to `routers/billing.py`, `HTTPException`, `groups.py`, `create_checkout`, `models.py`, `acknowledge_alert`, `branding.py`, `tenancy.py`, `_post`, `content.py`, `screens.py`, `resolve_media_url`, `Organization`, `.query`, `admin.py`, `users.py`?**
   _High betweenness centrality (0.035) - this node is a cross-community bridge._
 - **Why does `parse()` connect `parse` to `screens.py`?**
   _High betweenness centrality (0.014) - this node is a cross-community bridge._
@@ -659,6 +664,6 @@ _Questions this graph is uniquely positioned to answer:_
 - **What connects `CheckingLocalState`, `GoogleSignIn`, `PLAYED_TO_END` to the rest of the system?**
   _318 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `schemas.py` be split into smaller, more focused modules?**
-  _Cohesion score 0.07428571428571429 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08140610545790934 - nodes in this community are weakly interconnected._
 - **Should `ApiService.kt` be split into smaller, more focused modules?**
   _Cohesion score 0.10084033613445378 - nodes in this community are weakly interconnected._

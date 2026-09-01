@@ -11,6 +11,7 @@ import { AssetCard, AssetGrid, OverlayBadge } from '@/components/dashboard/asset
 import { BulkActionBar, SelectAllCheckbox } from '@/components/dashboard/bulk-action-bar'
 import { ListToolbar, commonSorts, sortItems, type CommonSort } from '@/components/dashboard/list-toolbar'
 import { MediaThumbnail } from '@/components/dashboard/media-thumbnail'
+import { EditClientAdModal } from '@/components/dashboard/edit-client-ad-modal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -81,6 +82,7 @@ export default function ContentPage() {
   const [sort, setSort] = useState<CommonSort>('newest')
   const [tagFilter, setTagFilter] = useState<string | null>(null)
   const [deleteItem, setDeleteItem] = useState<ContentItem | null>(null)
+  const [editingClientItem, setEditingClientItem] = useState<ContentItem | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [pageDragDepth, setPageDragDepth] = useState(0)
 
@@ -626,13 +628,18 @@ export default function ContentPage() {
                 href={`/dashboard/content/${item.id}`}
                 title={item.name}
                 subtitle={
-                  <>
-                    {/* Only the leading noun is capitalised — `capitalize` on the whole
-                        line title-cases the timestamp into "22 Hours Ago". */}
-                    <span className="capitalize">{item.type}</span>
-                    {orientation && ` • ${orientation}`}
-                    {` • ${relativeTime(item.uploaded_at)}`}
-                  </>
+                  <div className="space-y-1 mt-0.5">
+                    <p className="text-xs font-semibold text-primary truncate flex items-center gap-1">
+                      <Building2 className="size-3 shrink-0" />
+                      <span>{item.client_name || 'Direct Advertiser'}</span>
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/80">
+                      <span className="capitalize">{item.type}</span>
+                      {orientation && ` • ${orientation}`}
+                      {item.screen_ids && item.screen_ids.length > 0 && ` • ${item.screen_ids.length} screen${item.screen_ids.length > 1 ? 's' : ''}`}
+                      {` • ${relativeTime(item.uploaded_at)}`}
+                    </p>
+                  </div>
                 }
                 preview={
                   <>
@@ -649,6 +656,16 @@ export default function ContentPage() {
                 }
                 badges={
                   <>
+                    {item.client_name && (
+                      <OverlayBadge tone="neutral" className="bg-slate-900/90 text-primary border-primary/40 font-semibold text-[10px]">
+                        {item.client_name}
+                      </OverlayBadge>
+                    )}
+                    {item.plan_name && (
+                      <OverlayBadge tone="neutral" className="text-[10px]">
+                        {item.plan_name}
+                      </OverlayBadge>
+                    )}
                     {expiry && <OverlayBadge tone="danger">{expiry}</OverlayBadge>}
                     {item.status === 'failed' && <OverlayBadge tone="danger">Failed</OverlayBadge>}
                   </>
@@ -656,6 +673,9 @@ export default function ContentPage() {
                 cornerBadge={duration ? <OverlayBadge>{duration}</OverlayBadge> : undefined}
                 menu={canEdit ? (
                   <>
+                    <DropdownMenuItem onClick={() => setEditingClientItem(item)} className="font-medium">
+                      <Building2 className="size-4 text-primary" /> Edit Client & Ad Details
+                    </DropdownMenuItem>
                     {item.status === 'failed' && (
                       <DropdownMenuItem onClick={() => retryMutation.mutate(item.id)}>
                         <RefreshCw aria-hidden="true" /> Retry processing
@@ -695,6 +715,13 @@ export default function ContentPage() {
           <DialogFooter showCloseButton><Button variant="destructive" disabled={deleteMutation.isPending} onClick={() => deleteItem && deleteMutation.mutate(deleteItem.id)}>{deleteMutation.isPending ? 'Deleting…' : 'Delete media'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Unified Edit Client & Ad Details Modal */}
+      <EditClientAdModal
+        open={Boolean(editingClientItem)}
+        onOpenChange={(open) => !open && setEditingClientItem(null)}
+        contentItem={editingClientItem}
+      />
     </div>
   )
 }

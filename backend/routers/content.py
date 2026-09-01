@@ -107,6 +107,42 @@ def serialize_content(content: models.Content) -> schemas.ContentResponse:
     payload = schemas.ContentResponse.model_validate(content)
     payload.file_url = resolve_media_url(payload.file_url) or payload.file_url
     payload.thumbnail = resolve_media_url(payload.thumbnail)
+    
+    # 1:1 Ad & Client enriched metadata
+    placements = getattr(content, "ad_placements", [])
+    if placements:
+        latest = sorted(placements, key=lambda p: p.id, reverse=True)[0]
+        payload.placement_id = latest.id
+        payload.client_id = latest.client_id
+        if latest.client:
+            payload.client_name = latest.client.name
+            payload.client_email = latest.client.email
+            payload.client_phone = latest.client.phone
+        elif latest.advertiser:
+            payload.client_name = latest.advertiser
+
+        if latest.plan:
+            payload.plan_id = latest.plan_id
+            payload.plan_name = latest.plan.name
+
+        payload.placement_price_paise = latest.price_paise
+        payload.placement_starts_at = latest.starts_at
+        payload.placement_ends_at = latest.effective_ends_at if hasattr(latest, "effective_ends_at") else latest.ends_at
+        payload.placement_notes = latest.notes
+
+        target_screens = []
+        target_screen_names = []
+        for t in getattr(latest, "targets", []):
+            if t.screen_id:
+                target_screens.append(t.screen_id)
+                screen = getattr(t, "screen", None)
+                if screen and screen.name:
+                    target_screen_names.append(screen.name)
+                else:
+                    target_screen_names.append(f"Screen #{t.screen_id}")
+        payload.screen_ids = target_screens
+        payload.screen_names = target_screen_names
+
     return payload
 
 
@@ -310,6 +346,107 @@ def update_content(
         raise HTTPException(status_code=404, detail="Content not found")
     content.name = payload.name.strip()
     content.tags = payload.tags.strip() if payload.tags else None
+    scope.db.commit()
+    scope.db.refresh(content)
+    return serialize_content(content)
+
+
+@router.put("/{content_id}/client-ad", response_model=schemas.ContentResponse)
+def update_content_client_ad(
+    content_id: int,
+    payload: schemas.ContentClientAdUpdate,
+    scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
+):
+    content = scope.get(models.Content, content_id)
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    
+    if payload.name and payload.name.strip():
+        content.name = payload.name.strip()
+
+    # Find or create Client
+    client_name = payload.client_name.strip()
+    client = scope.db.query(models.Client).filter(
+        models.Client.organization_id == scope.organization_id,
+        models.Client.name.ilike(client_name)
+    ).first()
+
+    if not client:
+        import re, random
+        base_code = re.sub(r'[^A-Za-z0-9]', '', client_name.upper())[:6] or "CLNT"
+        rand_suffix = f"{random.randint(100, 999)}"
+        client = models.Client(
+            organization_id=scope.organization_id,
+            name=client_name,
+            client_code=f"{base_code}{rand_suffix}",
+            email=payload.client_email.strip() if payload.client_email else None,
+            phone=payload.client_phone.strip() if payload.client_phone else None,
+            notes=payload.notes.strip() if payload.notes else None,
+        )
+        scope.db.add(client)
+        scope.db.flush()
+    else:
+        if payload.client_email is not None:
+            client.email = payload.client_email.strip() if payload.client_email else None
+        if payload.client_phone is not None:
+            client.phone = payload.client_phone.strip() if payload.client_phone else None
+        if payload.notes is not None:
+            client.notes = payload.notes.strip() if payload.notes else None
+
+    # Find existing placement or create new
+    from .placements import _place, _unplace
+    from datetime import timedelta
+    placement = scope.db.query(models.AdPlacement).filter(
+        models.AdPlacement.organization_id == scope.organization_id,
+        models.AdPlacement.content_id == content.id
+    ).order_by(models.AdPlacement.id.desc()).first()
+
+    plan = scope.get(models.TenantPlan, payload.plan_id) if payload.plan_id else None
+
+    if not placement:
+        now = models.utcnow()
+        duration_days = plan.duration_days if plan else 30
+        price_paise = plan.price_paise if plan else 0
+        placement = models.AdPlacement(
+            organization_id=scope.organization_id,
+            content_id=content.id,
+            client_id=client.id,
+            advertiser=client.name,
+            plan_id=plan.id if plan else None,
+            price_paise=price_paise,
+            starts_at=now,
+            ends_at=now + timedelta(days=duration_days),
+            notes=payload.notes,
+        )
+        scope.db.add(placement)
+        scope.db.flush()
+    else:
+        placement.client_id = client.id
+        placement.advertiser = client.name
+        if plan:
+            placement.plan_id = plan.id
+            placement.price_paise = plan.price_paise
+        if payload.notes is not None:
+            placement.notes = payload.notes.strip() if payload.notes else None
+
+    # Update assigned screens if provided
+    if payload.screen_ids is not None:
+        target_screen_ids = set(payload.screen_ids)
+        current_targets = list(placement.targets)
+        
+        # Remove targets not in target_screen_ids
+        for target in current_targets:
+            if target.screen_id and target.screen_id not in target_screen_ids:
+                _unplace(scope, target)
+                scope.db.delete(target)
+        
+        # Add new targets
+        existing_screen_ids = {t.screen_id for t in placement.targets if t.screen_id}
+        for s_id in target_screen_ids:
+            if s_id not in existing_screen_ids:
+                ref = schemas.PlacementTargetRef(screen_id=s_id)
+                _place(scope, placement, ref)
+
     scope.db.commit()
     scope.db.refresh(content)
     return serialize_content(content)

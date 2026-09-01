@@ -359,6 +359,22 @@ class ContentResponse(ContentBase):
     status: str
     failed_reason: Optional[str] = None
     renditions: List[MediaRenditionResponse] = []
+    
+    # 1:1 Ad & Client unified metadata
+    client_id: Optional[int] = None
+    client_name: Optional[str] = None
+    client_email: Optional[str] = None
+    client_phone: Optional[str] = None
+    plan_id: Optional[int] = None
+    plan_name: Optional[str] = None
+    placement_id: Optional[int] = None
+    placement_status: Optional[str] = None
+    placement_price_paise: Optional[int] = None
+    placement_starts_at: Optional[datetime] = None
+    placement_ends_at: Optional[datetime] = None
+    placement_notes: Optional[str] = None
+    screen_ids: List[int] = []
+    screen_names: List[str] = []
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -377,6 +393,16 @@ class ContentResponse(ContentBase):
 
 class ContentUpdate(ContentBase):
     pass
+
+
+class ContentClientAdUpdate(BaseModel):
+    name: Optional[str] = None
+    client_name: str
+    client_email: Optional[str] = None
+    client_phone: Optional[str] = None
+    plan_id: Optional[int] = None
+    screen_ids: Optional[List[int]] = None
+    notes: Optional[str] = None
 
 
 class ScheduleBase(BaseModel):

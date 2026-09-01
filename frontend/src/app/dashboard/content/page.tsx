@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useBulkSelection } from '@/hooks/use-bulk-selection'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, ImageIcon, RefreshCw, Search, Trash2, Upload, UploadCloud, Video, X } from 'lucide-react'
+import { Building2, CheckCircle2, ImageIcon, Plus, RefreshCw, Search, Sparkles, Target, Trash2, Upload, UploadCloud, Users, Video, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { ErrorState } from '@/components/dashboard/error-state'
@@ -59,10 +59,15 @@ export default function ContentPage() {
   const sellPlans = plansQuery.data || []
 
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [uploadMode, setUploadMode] = useState<'ad' | 'general'>('ad')
   const [queue, setQueue] = useState<QueuedUpload[]>([])
   const [tags, setTags] = useState('')
-  // Selling the advert as it is uploaded. Both optional: leaving them blank uploads the
-  // files and nothing else, which is what this dialog did before.
+
+  // Client Selection / Creation state
+  const [isNewClient, setIsNewClient] = useState(false)
+  const [newClientName, setNewClientName] = useState('')
+  const [newClientEmail, setNewClientEmail] = useState('')
+  const [newClientPhone, setNewClientPhone] = useState('')
   const [sellClientId, setSellClientId] = useState('')
   const [sellPlanId, setSellPlanId] = useState('')
   const [sellScreenIds, setSellScreenIds] = useState<number[]>([])
@@ -77,8 +82,6 @@ export default function ContentPage() {
   const [tagFilter, setTagFilter] = useState<string | null>(null)
   const [deleteItem, setDeleteItem] = useState<ContentItem | null>(null)
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
-  // Dragging over the whole page, not just the dialog — depth counting because dragenter
-  // and dragleave also fire for every child element the pointer crosses.
   const [pageDragDepth, setPageDragDepth] = useState(0)
 
   const allTags = useMemo(() => [...new Set(content.flatMap((item) => item.tags?.split(',').map((tag) => tag.trim()).filter(Boolean) || []))].sort(), [content])
@@ -95,8 +98,6 @@ export default function ContentPage() {
 
   const bulkDelete = useMutation({
     mutationFn: async () => {
-      // Sequential: the worker cleans up renditions per asset and parallel deletes make it
-      // contend with itself for the same files.
       for (const id of bulk.selected) await api.deleteContent(id)
     },
     onSuccess: () => {
@@ -125,33 +126,77 @@ export default function ContentPage() {
     setQueue((current) => current.map((entry, position) => position === index ? { ...entry, ...patch } : entry))
 
   const startUploads = async () => {
+    if (uploadMode === 'ad') {
+      if (isNewClient && !newClientName.trim()) {
+        toast.error('Please enter the client / advertiser company name')
+        return
+      }
+      if (!isNewClient && !sellClientId) {
+        toast.error('Please select an advertiser client or click + Quick Add Client')
+        return
+      }
+      if (!sellPlanId) {
+        toast.error('Please select a pricing plan for this ad')
+        return
+      }
+      if (!sellScreenIds.length) {
+        toast.error('Please select at least 1 screen to deploy this ad')
+        return
+      }
+    }
+
     setUploading(true)
-    // Sequential on purpose: signage assets are large, and firing a dozen parallel
-    // multipart requests at the media worker starves every one of them.
+    let resolvedClientId: number | undefined = undefined
+    let resolvedClientName = ''
+
+    if (uploadMode === 'ad') {
+      if (isNewClient) {
+        try {
+          const created = await api.createClient({
+            name: newClientName.trim(),
+            email: newClientEmail.trim() || undefined,
+            phone: newClientPhone.trim() || undefined,
+          })
+          resolvedClientId = created.id
+          resolvedClientName = created.name
+          queryClient.invalidateQueries({ queryKey: ['clients'] })
+        } catch (err) {
+          toast.error(`Could not create client: ${(err as Error).message}`)
+          setUploading(false)
+          return
+        }
+      } else {
+        resolvedClientId = Number(sellClientId)
+        resolvedClientName = sellClients.find((c) => c.id === resolvedClientId)?.name || 'Client'
+      }
+    }
+
     let failures = 0
     for (const [index, entry] of queue.entries()) {
       if (entry.status === 'done') continue
       patchItem(index, { status: 'uploading', progress: 0, error: undefined })
       try {
-        const uploaded = await api.uploadContent(entry.file, entry.name.trim() || entry.file.name, tags, (percent) => patchItem(index, { progress: percent }))
-        // Sold on the way in, if a plan was chosen. Deliberately AFTER the upload resolves:
-        // a booking pointing at content that failed to upload is worse than no booking.
-        if (sellPlanId && uploaded?.id) {
+        const uploaded = await api.uploadContent(
+          entry.file,
+          entry.name.trim() || entry.file.name,
+          tags,
+          (percent) => patchItem(index, { progress: percent })
+        )
+
+        if (uploadMode === 'ad' && uploaded?.id) {
           try {
             await api.createPlacement({
               content_id: uploaded.id,
-              client_id: sellClientId ? Number(sellClientId) : undefined,
-              advertiser: sellClientId ? undefined : 'Unassigned client',
+              client_id: resolvedClientId,
+              advertiser: resolvedClientName,
               plan_id: Number(sellPlanId),
-              price_paise: 0,
+              price_paise: chosenPlan ? chosenPlan.price_paise : 0,
               is_paid: false,
               starts_at: new Date().toISOString(),
               targets: sellScreenIds.map((id) => ({ screen_id: id })),
             })
           } catch (reason) {
-            // The file is safely uploaded either way, so this must not mark the row failed
-            // and invite the operator to upload it a second time.
-            toast.error(`Uploaded "${entry.name}", but the booking could not be created: ${reason instanceof Error ? reason.message : 'unknown error'}`)
+            toast.error(`Uploaded "${entry.name}", but ad booking failed: ${reason instanceof Error ? reason.message : 'unknown error'}`)
           }
         }
         patchItem(index, { status: 'done', progress: 100 })
@@ -160,13 +205,22 @@ export default function ContentPage() {
         patchItem(index, { status: 'error', error: reason instanceof Error ? reason.message : 'Upload failed' })
       }
     }
+
     setUploading(false)
     queryClient.invalidateQueries({ queryKey: ['content'] })
-    if (sellPlanId) queryClient.invalidateQueries({ queryKey: ['placements'] })
+    queryClient.invalidateQueries({ queryKey: ['placements'] })
+    queryClient.invalidateQueries({ queryKey: ['all-placements'] })
+    queryClient.invalidateQueries({ queryKey: ['clients'] })
+    queryClient.invalidateQueries({ queryKey: ['playlists'] })
+    queryClient.invalidateQueries({ queryKey: ['screens'] })
 
     const uploaded = queue.length - failures
     if (failures === 0) {
-      toast.success(`${uploaded} file${uploaded === 1 ? '' : 's'} uploaded`)
+      if (uploadMode === 'ad') {
+        toast.success(`${uploaded} ad${uploaded === 1 ? '' : 's'} uploaded & booked for ${resolvedClientName}!`)
+      } else {
+        toast.success(`${uploaded} file${uploaded === 1 ? '' : 's'} uploaded`)
+      }
       closeUpload(false)
     } else {
       toast.error(`${failures} of ${queue.length} upload${queue.length === 1 ? '' : 's'} failed`)
@@ -174,11 +228,21 @@ export default function ContentPage() {
   }
 
   const closeUpload = (open: boolean) => {
-    if (open) { setUploadOpen(true); return }
+    if (open) {
+      setUploadOpen(true)
+      if (!sellPlanId && sellPlans.length > 0) {
+        setSellPlanId(String(sellPlans[0].id))
+      }
+      return
+    }
     if (uploading) return
     setUploadOpen(false)
     setQueue([])
     setTags('')
+    setIsNewClient(false)
+    setNewClientName('')
+    setNewClientEmail('')
+    setNewClientPhone('')
     setSellClientId('')
     setSellPlanId('')
     setSellScreenIds([])
@@ -205,24 +269,197 @@ export default function ContentPage() {
       <DialogTrigger render={<Button />}><Upload data-icon="inline-start" /> Upload media</DialogTrigger>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Upload media</DialogTitle>
-          <DialogDescription>Drop as many images and videos as you like. Each player caches them for offline playback.</DialogDescription>
+          <DialogTitle>Upload media &amp; ad creatives</DialogTitle>
+          <DialogDescription>Add advert creatives for clients or general signage content.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 pt-2">
+        <div className="space-y-4 pt-1">
+          {/* Mode Switcher */}
+          <div className="flex items-center gap-1 p-1 bg-muted/60 rounded-xl border border-border/40">
+            <button
+              type="button"
+              onClick={() => setUploadMode('ad')}
+              className={`flex-1 py-1.5 px-3 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                uploadMode === 'ad'
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Target className="size-3.5 text-primary dark:text-brand" />
+              Client Advertisement
+            </button>
+            <button
+              type="button"
+              onClick={() => setUploadMode('general')}
+              className={`flex-1 py-1.5 px-3 text-xs font-semibold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                uploadMode === 'general'
+                  ? 'bg-card text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <ImageIcon className="size-3.5" />
+              General Media
+            </button>
+          </div>
+
+          {/* Client Details Section when in 'ad' mode */}
+          {uploadMode === 'ad' && (
+            <div className="rounded-xl border border-border/70 bg-muted/30 p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
+                  <Building2 className="size-3.5 text-primary dark:text-brand" /> Advertiser Client *
+                </Label>
+                <button
+                  type="button"
+                  onClick={() => setIsNewClient(!isNewClient)}
+                  className="text-xs text-primary dark:text-brand hover:underline font-medium flex items-center gap-1 cursor-pointer"
+                >
+                  {isNewClient ? '← Pick existing client' : '+ Quick Add Client'}
+                </button>
+              </div>
+
+              {isNewClient ? (
+                <div className="space-y-2 pt-1 border-t border-border/40">
+                  <div>
+                    <Label htmlFor="new-client-name" className="text-[11px] text-muted-foreground">Company Name *</Label>
+                    <Input
+                      id="new-client-name"
+                      placeholder="e.g. BrightMart Supermarket"
+                      value={newClientName}
+                      disabled={uploading}
+                      onChange={(e) => setNewClientName(e.target.value)}
+                      className="h-8 text-xs mt-1"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label htmlFor="new-client-email" className="text-[11px] text-muted-foreground">Email (for reports)</Label>
+                      <Input
+                        id="new-client-email"
+                        type="email"
+                        placeholder="contact@brightmart.com"
+                        value={newClientEmail}
+                        disabled={uploading}
+                        onChange={(e) => setNewClientEmail(e.target.value)}
+                        className="h-8 text-xs mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="new-client-phone" className="text-[11px] text-muted-foreground">Phone</Label>
+                      <Input
+                        id="new-client-phone"
+                        placeholder="+91 98765 43210"
+                        value={newClientPhone}
+                        disabled={uploading}
+                        onChange={(e) => setNewClientPhone(e.target.value)}
+                        className="h-8 text-xs mt-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <select
+                  id="sell-client"
+                  className="border-input bg-background h-9 w-full rounded-lg border px-3 text-xs"
+                  value={sellClientId}
+                  disabled={uploading}
+                  onChange={(event) => setSellClientId(event.target.value)}
+                >
+                  <option value="">-- Choose existing client --</option>
+                  {sellClients.map((client) => (
+                    <option key={client.id} value={String(client.id)}>
+                      {client.name} ({client.client_code})
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {/* Plan selector */}
+              <div className="space-y-1.5 pt-1">
+                <Label htmlFor="sell-plan" className="text-xs font-semibold text-foreground">Pricing Plan *</Label>
+                <select
+                  id="sell-plan"
+                  className="border-input bg-background h-9 w-full rounded-lg border px-3 text-xs"
+                  value={sellPlanId}
+                  disabled={uploading}
+                  onChange={(event) => {
+                    setSellPlanId(event.target.value)
+                    const next = sellPlans.find((plan) => String(plan.id) === event.target.value)
+                    if (next) setSellScreenIds((current) => current.slice(0, next.max_locations))
+                    else setSellScreenIds([])
+                  }}
+                >
+                  <option value="">-- Select plan --</option>
+                  {sellPlans.map((plan) => (
+                    <option key={plan.id} value={String(plan.id)}>
+                      {plan.name} (₹{(plan.price_paise / 100).toLocaleString('en-IN')} · {plan.duration_days} days · up to {plan.max_locations} screens)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Screen selector */}
+              {chosenPlan && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-foreground">Target Screens *</Label>
+                    <span className="text-[10px] text-muted-foreground">
+                      {sellScreenIds.length} of {chosenPlan.max_locations} selected
+                    </span>
+                  </div>
+                  <div className="border-hairline max-h-32 space-y-1 overflow-y-auto rounded-xl border p-2 bg-card">
+                    {!sellScreens.length && <p className="text-muted-foreground p-2 text-xs">No screens paired yet.</p>}
+                    {sellScreens.map((screen) => {
+                      const picked = sellScreenIds.includes(screen.id)
+                      const full = !picked && sellScreenIds.length >= chosenPlan.max_locations
+                      return (
+                        <label
+                          key={screen.id}
+                          className={`flex items-center justify-between rounded-lg p-1.5 text-xs transition-colors ${
+                            full ? 'opacity-40' : 'hover:bg-muted/60 cursor-pointer'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <input
+                              type="checkbox"
+                              className="accent-primary size-3.5 rounded"
+                              checked={picked}
+                              disabled={uploading || full}
+                              onChange={(event) =>
+                                setSellScreenIds((current) =>
+                                  event.target.checked ? [...current, screen.id] : current.filter((id) => id !== screen.id)
+                                )
+                              }
+                            />
+                            <span className="truncate font-medium text-foreground">{screen.name || `Screen ${screen.id}`}</span>
+                          </div>
+                          <Badge variant={screen.status === 'online' ? 'success' : 'outline'} className="text-[9px] uppercase py-0 px-1.5">
+                            {screen.status}
+                          </Badge>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Drag & drop zone */}
           <div
             onDragOver={(event) => { event.preventDefault(); setDragging(true) }}
             onDragLeave={() => setDragging(false)}
             onDrop={(event) => { event.preventDefault(); setDragging(false); addFiles(event.dataTransfer.files) }}
             className={cn(
-              'rounded-2xl border border-dashed px-6 py-8 text-center transition-colors',
+              'rounded-2xl border border-dashed px-6 py-6 text-center transition-colors',
               dragging ? 'border-primary bg-primary/5' : 'border-border bg-muted/40',
             )}
           >
             <UploadCloud className="text-muted-foreground/60 mx-auto size-7" aria-hidden="true" />
-            <p className="text-foreground mt-3 text-sm font-medium">Drop files here</p>
-            <p className="text-muted-foreground/70 mt-1 text-xs">Images and video, as many as you need</p>
-            <Button type="button" variant="outline" size="sm" className="bg-card mt-4" disabled={uploading} onClick={() => fileInput.current?.click()}>
+            <p className="text-foreground mt-2 text-sm font-medium">Drop media files here</p>
+            <p className="text-muted-foreground/70 mt-0.5 text-xs">Images and video formats supported</p>
+            <Button type="button" variant="outline" size="sm" className="bg-card mt-3" disabled={uploading} onClick={() => fileInput.current?.click()}>
               Choose files
             </Button>
             <input
@@ -237,9 +474,9 @@ export default function ContentPage() {
 
           {queue.length > 0 && (
             <>
-              <ul className="max-h-64 space-y-2 overflow-y-auto pr-1">
+              <ul className="max-h-48 space-y-2 overflow-y-auto pr-1">
                 {queue.map((entry, index) => (
-                  <li key={`${entry.file.name}-${index}`} className="border-hairline rounded-xl border p-3">
+                  <li key={`${entry.file.name}-${index}`} className="border-hairline rounded-xl border p-2.5 bg-card">
                     <div className="flex items-center gap-2">
                       {entry.status === 'done'
                         ? <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
@@ -251,13 +488,13 @@ export default function ContentPage() {
                         disabled={uploading || entry.status === 'done'}
                         aria-label={`Display name for ${entry.file.name}`}
                         onChange={(event) => patchItem(index, { name: event.target.value })}
-                        className="h-8 flex-1 text-sm"
+                        className="h-8 flex-1 text-xs"
                       />
                       {!uploading && entry.status !== 'done' && (
                         <button
                           type="button"
                           onClick={() => setQueue((current) => current.filter((_, position) => position !== index))}
-                          className="text-muted-foreground/50 hover:text-destructive grid size-7 shrink-0 place-items-center rounded-lg"
+                          className="text-muted-foreground/50 hover:text-destructive grid size-7 shrink-0 place-items-center rounded-lg cursor-pointer"
                           aria-label={`Remove ${entry.file.name} from the queue`}
                         >
                           <X className="size-4" />
@@ -278,93 +515,13 @@ export default function ContentPage() {
                 ))}
               </ul>
 
-              <div className="space-y-2">
-                <Label htmlFor="media-tags">Tags for this batch <span className="text-muted-foreground/70 font-normal">(comma separated)</span></Label>
-                <Input id="media-tags" value={tags} disabled={uploading} onChange={(event) => setTags(event.target.value)} placeholder="lobby, summer, promotion" />
+              <div className="space-y-1">
+                <Label htmlFor="media-tags" className="text-xs text-muted-foreground">Tags <span className="font-normal">(optional, comma separated)</span></Label>
+                <Input id="media-tags" value={tags} disabled={uploading} onChange={(event) => setTags(event.target.value)} placeholder="summer, promo, food" className="h-8 text-xs" />
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="sell-plan">Sell on plan <span className="text-muted-foreground/70 font-normal">(optional)</span></Label>
-                  <select
-                    id="sell-plan"
-                    className="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm"
-                    value={sellPlanId}
-                    disabled={uploading}
-                    onChange={(event) => {
-                      setSellPlanId(event.target.value)
-                      const next = sellPlans.find((plan) => String(plan.id) === event.target.value)
-                      // Switching to a smaller plan must not leave more screens picked than
-                      // it covers -- the API would refuse the booking after the upload.
-                      if (next) setSellScreenIds((current) => current.slice(0, next.max_locations))
-                      else setSellScreenIds([])
-                    }}
-                  >
-                    <option value="">Upload only</option>
-                    {sellPlans.map((plan) => (
-                      <option key={plan.id} value={String(plan.id)}>{plan.name} ({plan.duration_days} days)</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="sell-client">Client</Label>
-                  <select
-                    id="sell-client"
-                    className="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm"
-                    value={sellClientId}
-                    disabled={uploading || !sellPlanId}
-                    onChange={(event) => setSellClientId(event.target.value)}
-                  >
-                    <option value="">Choose later</option>
-                    {sellClients.map((client) => (
-                      <option key={client.id} value={String(client.id)}>{client.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              {chosenPlan ? (
-                <div className="space-y-2">
-                  <Label>
-                    Screens{' '}
-                    <span className="text-muted-foreground/70 font-normal">
-                      ({sellScreenIds.length} of {chosenPlan.max_locations} · {chosenPlan.duration_days} days)
-                    </span>
-                  </Label>
-                  <div className="border-hairline max-h-40 space-y-1 overflow-y-auto rounded-xl border p-2">
-                    {!sellScreens.length && <p className="text-muted-foreground p-2 text-sm">No screens paired yet.</p>}
-                    {sellScreens.map((screen) => {
-                      const picked = sellScreenIds.includes(screen.id)
-                      // Capped in the UI as well as at the API, so the limit is visible
-                      // before the operator has filled in a booking that will be refused.
-                      const full = !picked && sellScreenIds.length >= chosenPlan.max_locations
-                      return (
-                        <label
-                          key={screen.id}
-                          className={`flex items-center gap-3 rounded-lg p-2 text-sm ${full ? 'opacity-40' : 'hover:bg-muted cursor-pointer'}`}
-                        >
-                          <input
-                            type="checkbox"
-                            className="accent-primary size-4"
-                            checked={picked}
-                            disabled={uploading || full}
-                            onChange={(event) => setSellScreenIds((current) =>
-                              event.target.checked ? [...current, screen.id] : current.filter((id) => id !== screen.id))}
-                          />
-                          <span className="truncate">{screen.name || `Screen ${screen.id}`}</span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                  <p className="text-muted-foreground text-xs">
-                    This plan covers {chosenPlan.max_locations} screen{chosenPlan.max_locations === 1 ? '' : 's'} for{' '}
-                    {chosenPlan.duration_days} days. A booking is created per file, priced and dated from the plan, and
-                    the advert comes off the screens automatically when it ends.
-                  </p>
-                </div>
-              ) : null}
 
               <Button className="w-full" disabled={uploading || !pending} onClick={startUploads}>
-                {uploading ? 'Uploading…' : `Upload ${pending} file${pending === 1 ? '' : 's'}`}
+                {uploading ? 'Uploading & Booking…' : uploadMode === 'ad' ? `Upload & Book ${pending} Ad${pending === 1 ? '' : 's'}` : `Upload ${pending} file${pending === 1 ? '' : 's'}`}
               </Button>
             </>
           )}

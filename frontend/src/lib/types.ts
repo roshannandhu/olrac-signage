@@ -334,6 +334,8 @@ export interface Client {
   email: string | null
   phone: string | null
   notes: string | null
+  active_campaigns_count?: number
+  total_spent_paise?: number
   created_at: string
 }
 
@@ -366,12 +368,15 @@ export interface PlacementExtension {
 export interface Placement {
   id: number
   content_id: number
+  creative_name?: string | null
+  creative_thumbnail_url?: string | null
   advertiser: string
   client: Client | null
   plan: TenantPlan | null
   extensions: PlacementExtension[]
   /** Where the run actually finishes once extensions count. `ends_at` stays as sold. */
   effective_ends_at: string | null
+  days_remaining?: number | null
   /** The booking plus every extension sold against it. */
   total_price_paise: number | null
   price_paise: number

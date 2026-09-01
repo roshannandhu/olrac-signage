@@ -3,8 +3,9 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { CalendarRange, FileDown, Layers3, MonitorPlay, Plus, Receipt, Share2, Trash2, X } from 'lucide-react'
+import { CalendarRange, FileDown, Layers3, Mail, MonitorPlay, Plus, Receipt, Share2, Trash2, X } from 'lucide-react'
 import { EmptyState } from '@/components/dashboard/empty-state'
+import { EmailReportModal } from '@/components/dashboard/email-report-modal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -78,6 +79,7 @@ export function AdBookings({ contentId }: { contentId: number }) {
   }
 
   const [createOpen, setCreateOpen] = useState(false)
+  const [emailPlacement, setEmailPlacement] = useState<Placement | null>(null)
   const [advertiser, setAdvertiser] = useState('')
   const [clientId, setClientId] = useState('')
   const [planId, setPlanId] = useState('')
@@ -265,6 +267,14 @@ export function AdBookings({ contentId }: { contentId: number }) {
                       onClick={() => runReport(placement, 'download')}
                     >
                       <FileDown data-icon="inline-start" /> PDF
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEmailPlacement(placement)}
+                      title="Email report to client"
+                    >
+                      <Mail data-icon="inline-start" /> Email
                     </Button>
                     <Button size="sm" variant="outline" onClick={() => openExtend(placement)}>
                       <CalendarRange data-icon="inline-start" /> Extend
@@ -518,6 +528,14 @@ export function AdBookings({ contentId }: { contentId: number }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <EmailReportModal
+        placement={emailPlacement}
+        open={Boolean(emailPlacement)}
+        onOpenChange={(open) => {
+          if (!open) setEmailPlacement(null)
+        }}
+      />
     </div>
   )
 }

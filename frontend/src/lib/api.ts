@@ -300,7 +300,10 @@ export const api = {
     saveBlob(blob, filename)
     return 'downloaded'
   },
+  getAllPlacements: () => fetchWithAuth<Placement[]>('/placements/'),
   getPlacements: (contentId: number) => fetchWithAuth<Placement[]>(`/placements/?content_id=${contentId}`),
+  getEmailStatus: () => fetchWithAuth<{ is_configured: boolean; sender: string | null; missing_variables: string[] }>('/placements/email-status'),
+  emailBookingReport: (placementId: number) => fetchWithAuth<{ status: string; to: string }>(`/placements/${placementId}/email`, { method: 'POST' }),
   createPlacement: (data: {
     content_id: number
     // One or the other: a client record is the supported path, a bare name still works.

@@ -219,14 +219,24 @@ def sync_placement_window(scope: TenantScope, placement: models.AdPlacement) -> 
 def _serialize(scope: TenantScope, placement: models.AdPlacement) -> schemas.PlacementResponse:
     screen_names = dict(scope.db.query(models.Screen.id, models.Screen.name).all())
     group_names = dict(scope.db.query(models.ScreenGroup.id, models.ScreenGroup.name).all())
+    now = models.utcnow()
+    ends = effective_ends_at(placement)
+    days_left = max(0, (ends - now).days) if ends > now else 0
+    content = placement.content or scope.get(models.Content, placement.content_id)
+    creative_name = content.name if content else None
+    creative_thumb = resolve_media_url(content.thumbnail or content.file_url) if content else None
+
     return schemas.PlacementResponse(
         id=placement.id,
         content_id=placement.content_id,
+        creative_name=creative_name,
+        creative_thumbnail_url=creative_thumb,
         advertiser=placement.advertiser,
         client=schemas.ClientResponse.model_validate(placement.client) if placement.client else None,
         plan=schemas.TenantPlanResponse.model_validate(placement.plan) if placement.plan else None,
         extensions=[schemas.ExtensionResponse.model_validate(e) for e in placement.extensions],
-        effective_ends_at=effective_ends_at(placement),
+        effective_ends_at=ends,
+        days_remaining=days_left,
         total_price_paise=total_price_paise(placement),
         price_paise=placement.price_paise,
         is_paid=placement.is_paid,
@@ -923,7 +933,18 @@ def _render_report(scope: TenantScope, placement: models.AdPlacement) -> tuple[b
     return build_pdf(report), f"{safe} - playback report.pdf"
 
 
-@router.post("/{placement_id}/report/email")
+@router.get("/email-status")
+def email_status():
+    from .. import mailer
+    configured = mailer.is_configured()
+    return {
+        "is_configured": configured,
+        "sender": mailer.sender() if configured else None,
+        "missing_variables": [] if configured else mailer.missing_configuration(),
+    }
+
+
+@router.post("/{placement_id}/email")
 def email_booking_report(
     placement_id: int,
     scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),

@@ -191,6 +191,14 @@ export default function ClientsPage() {
                     <span className="truncate">{client.phone || 'No phone'}</span>
                   </p>
                 </div>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/50 pt-3 text-xs">
+                  <Badge variant={(client.active_campaigns_count ?? 0) > 0 ? 'success' : 'outline'} className="text-[11px]">
+                    {(client.active_campaigns_count ?? 0)} active campaign{(client.active_campaigns_count ?? 0) === 1 ? '' : 's'}
+                  </Badge>
+                  <span className="text-muted-foreground font-mono font-medium">
+                    ₹{(((client.total_spent_paise ?? 0) / 100)).toLocaleString('en-IN')} billed
+                  </span>
+                </div>
               </CardContent>
             </Card>
           ))}

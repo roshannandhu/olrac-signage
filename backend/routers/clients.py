@@ -44,9 +44,41 @@ def next_client_code(scope: TenantScope) -> str:
     return f"CLT{highest + 1:05d}"
 
 
+def _serialize_client(scope: TenantScope, client: models.Client) -> schemas.ClientResponse:
+    now = models.utcnow()
+    placements = scope.db.query(models.AdPlacement).filter(
+        models.AdPlacement.client_id == client.id
+    ).all()
+    active_count = 0
+    total_spent = 0
+    for p in placements:
+        ends = p.ends_at
+        p_total = p.price_paise
+        for ext in p.extensions:
+            p_total += ext.additional_price_paise
+            if ext.extended_to > ends:
+                ends = ext.extended_to
+        total_spent += p_total
+        if ends >= now and p.starts_at <= now:
+            active_count += 1
+
+    return schemas.ClientResponse(
+        id=client.id,
+        name=client.name,
+        client_code=client.client_code,
+        email=client.email,
+        phone=client.phone,
+        notes=client.notes,
+        created_at=client.created_at,
+        active_campaigns_count=active_count,
+        total_spent_paise=total_spent,
+    )
+
+
 @router.get("/", response_model=list[schemas.ClientResponse])
 def list_clients(scope: TenantScope = Depends(get_tenant_scope)):
-    return scope.query(models.Client).order_by(models.Client.name).all()
+    clients = scope.query(models.Client).order_by(models.Client.name).all()
+    return [_serialize_client(scope, c) for c in clients]
 
 
 @router.post("/", response_model=schemas.ClientResponse, status_code=201)
@@ -75,7 +107,7 @@ def create_client(
     scope.db.add(client)
     scope.db.commit()
     scope.db.refresh(client)
-    return client
+    return _serialize_client(scope, client)
 
 
 @router.get("/{client_id}", response_model=schemas.ClientResponse)
@@ -83,7 +115,7 @@ def get_client(client_id: int, scope: TenantScope = Depends(get_tenant_scope)):
     client = scope.get(models.Client, client_id)
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    return client
+    return _serialize_client(scope, client)
 
 
 @router.put("/{client_id}", response_model=schemas.ClientResponse)
@@ -114,7 +146,7 @@ def update_client(
 
     scope.db.commit()
     scope.db.refresh(client)
-    return client
+    return _serialize_client(scope, client)
 
 
 @router.delete("/{client_id}")

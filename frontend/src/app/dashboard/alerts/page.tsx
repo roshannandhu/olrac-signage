@@ -1,13 +1,28 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, BellOff, DownloadCloud, HardDrive, MonitorX, PauseCircle, RefreshCw, XCircle } from 'lucide-react'
+import { toast } from 'sonner'
+import {
+  AlertTriangle,
+  BellOff,
+  Check,
+  CheckCheck,
+  DownloadCloud,
+  HardDrive,
+  MonitorX,
+  PauseCircle,
+  RefreshCw,
+  Volume2,
+  VolumeX,
+  XCircle,
+} from 'lucide-react'
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { ErrorState } from '@/components/dashboard/error-state'
 import { ListToolbar } from '@/components/dashboard/list-toolbar'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
@@ -26,20 +41,12 @@ type Alert = {
   at: string | null
 }
 
-/** A screen quiet for this long is a fault, not a slow heartbeat. */
 const OFFLINE_HOURS = 1
-/** Below this a player cannot cache the next advert. */
 const LOW_STORAGE_MB = 500
 
 const hoursSince = (value: string | null | undefined) =>
   value ? (Date.now() - Date.parse(value)) / 3_600_000 : Infinity
 
-/**
- * Derived rather than stored.
- *
- * Every condition here is already visible in data the console polls, so persisting an
- * alert table would only add a way for the two to disagree.
- */
 function buildAlerts(screens: Screen[], content: ContentItem[]): Alert[] {
   const alerts: Alert[] = []
 
@@ -83,7 +90,6 @@ function buildAlerts(screens: Screen[], content: ContentItem[]): Alert[] {
       })
     }
 
-    // A rollout that stalled. Left alone these quietly never update.
     if (screen.update_status === 'failed') {
       alerts.push({
         id: `update-${screen.id}`,
@@ -96,7 +102,6 @@ function buildAlerts(screens: Screen[], content: ContentItem[]): Alert[] {
       })
     }
 
-    // Online and idle is worse than offline: the screen looks fine and sells nothing.
     if (screen.status === 'online' && screen.playback_state === 'idle') {
       alerts.push({
         id: `idle-${screen.id}`,
@@ -126,7 +131,6 @@ function buildAlerts(screens: Screen[], content: ContentItem[]): Alert[] {
     }
   }
 
-  // Criticals first, then most recent — the order an operator would triage in.
   return alerts.sort((a, b) => {
     if (a.severity !== b.severity) return a.severity === 'critical' ? -1 : 1
     return Date.parse(b.at || '0') - Date.parse(a.at || '0')
@@ -138,78 +142,198 @@ export default function AlertsPage() {
   const contentQuery = useQuery({ queryKey: ['content'], queryFn: api.getContent, refetchInterval: 30000 })
 
   const [severity, setSeverity] = useState<Severity | 'all'>('all')
+  const [showMuted, setShowMuted] = useState(false)
   const [search, setSearch] = useState('')
+  const [mutedAlerts, setMutedAlerts] = useState<Record<string, number>>({})
+
+  // Load muted alerts from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('olrac_muted_alerts')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        // Cleanup expired mutes (older than 24 hours)
+        const now = Date.now()
+        const activeMutes: Record<string, number> = {}
+        for (const [key, ts] of Object.entries(parsed)) {
+          if (typeof ts === 'number' && now - ts < 24 * 3600 * 1000) {
+            activeMutes[key] = ts
+          }
+        }
+        setMutedAlerts(activeMutes)
+      }
+    } catch {
+      // Ignore localStorage read errors
+    }
+  }, [])
+
+  const saveMutes = (mutes: Record<string, number>) => {
+    setMutedAlerts(mutes)
+    try {
+      localStorage.setItem('olrac_muted_alerts', JSON.stringify(mutes))
+    } catch {
+      // Ignore
+    }
+  }
+
+  const muteAlert = (id: string, e?: React.MouseEvent) => {
+    e?.preventDefault()
+    e?.stopPropagation()
+    const next = { ...mutedAlerts, [id]: Date.now() }
+    saveMutes(next)
+    toast.success('Alert acknowledged and snoozed for 24h.')
+  }
+
+  const unmuteAlert = (id: string, e?: React.MouseEvent) => {
+    e?.preventDefault()
+    e?.stopPropagation()
+    const next = { ...mutedAlerts }
+    delete next[id]
+    saveMutes(next)
+    toast.info('Alert un-muted.')
+  }
+
+  const acknowledgeAll = () => {
+    const next = { ...mutedAlerts }
+    const now = Date.now()
+    for (const a of alerts) {
+      next[a.id] = now
+    }
+    saveMutes(next)
+    toast.success('All current alerts acknowledged and snoozed.')
+  }
 
   const alerts = useMemo(
     () => buildAlerts(screensQuery.data || [], contentQuery.data || []),
     [screensQuery.data, contentQuery.data],
   )
 
+  const activeAlerts = useMemo(() => alerts.filter((a) => !mutedAlerts[a.id]), [alerts, mutedAlerts])
+  const mutedCount = useMemo(() => alerts.filter((a) => Boolean(mutedAlerts[a.id])).length, [alerts, mutedAlerts])
+
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
-    return alerts.filter((alert) => {
+    const pool = showMuted ? alerts : activeAlerts
+    return pool.filter((alert) => {
       const matchesSeverity = severity === 'all' || alert.severity === severity
       const matchesSearch = !term || alert.title.toLowerCase().includes(term) || alert.detail.toLowerCase().includes(term)
       return matchesSeverity && matchesSearch
     })
-  }, [alerts, severity, search])
+  }, [alerts, activeAlerts, showMuted, severity, search])
 
-  const criticals = alerts.filter((alert) => alert.severity === 'critical').length
+  const activeCriticals = activeAlerts.filter((alert) => alert.severity === 'critical').length
 
   if (screensQuery.isError || contentQuery.isError) {
     return <ErrorState message="Alerts could not be loaded." onRetry={() => { screensQuery.refetch(); contentQuery.refetch() }} />
   }
 
   return (
-    <div>
+    <div className="space-y-6">
       <ListToolbar
         title="Alerts"
         action={
-          alerts.length > 0
-            ? <Badge variant={criticals ? 'danger' : 'warning'}>{criticals ? `${criticals} critical` : `${alerts.length} to review`}</Badge>
-            : undefined
+          <div className="flex items-center gap-2">
+            {activeAlerts.length > 0 && (
+              <Button variant="outline" size="sm" onClick={acknowledgeAll} className="h-8 text-xs gap-1.5">
+                <CheckCheck className="size-3.5 text-emerald-600 dark:text-emerald-400" /> Acknowledge all
+              </Button>
+            )}
+            {activeAlerts.length > 0 ? (
+              <Badge variant={activeCriticals ? 'danger' : 'warning'}>
+                {activeCriticals ? `${activeCriticals} critical` : `${activeAlerts.length} to review`}
+              </Badge>
+            ) : (
+              <Badge variant="success">All clear</Badge>
+            )}
+          </div>
         }
         search={{ value: search, onChange: setSearch }}
         filters={
           <>
             {(['all', 'critical', 'warning'] as const).map((value) => (
               <DropdownMenuItem key={value} onClick={() => setSeverity(value)} className={severity === value ? 'bg-accent font-medium' : undefined}>
-                <span className="capitalize">{value === 'all' ? 'All alerts' : value}</span>
+                <span className="capitalize">{value === 'all' ? 'All severities' : value}</span>
               </DropdownMenuItem>
             ))}
+            <DropdownMenuItem onClick={() => setShowMuted(!showMuted)} className={showMuted ? 'bg-accent font-medium' : undefined}>
+              <span>{showMuted ? 'Showing acknowledged alerts' : `Show acknowledged (${mutedCount})`}</span>
+            </DropdownMenuItem>
           </>
         }
       />
 
       {screensQuery.isLoading ? (
         <div className="space-y-3">{Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-20 rounded-xl" />)}</div>
-      ) : !alerts.length ? (
-        <EmptyState icon={BellOff} title="Nothing needs attention" description="Every screen is reporting in and all content processed cleanly." />
       ) : !filtered.length ? (
-        <EmptyState icon={RefreshCw} title="No matching alerts" description="Try a different search term or severity." />
+        <EmptyState
+          icon={BellOff}
+          title={showMuted ? 'No acknowledged alerts' : 'Nothing needs attention'}
+          description={showMuted ? 'No alerts are currently snoozed.' : 'Every screen is reporting in and all content processed cleanly.'}
+        />
       ) : (
         <div className="space-y-3">
           {filtered.map((alert) => {
             const Icon = alert.icon
             const critical = alert.severity === 'critical'
+            const isMuted = Boolean(mutedAlerts[alert.id])
+
             return (
-              <Link
+              <div
                 key={alert.id}
-                href={alert.href}
-                className="ring-hairline bg-card focus-visible:ring-ring flex items-start gap-4 rounded-xl p-4 ring-1 transition-shadow hover:shadow-md focus-visible:ring-2 focus-visible:outline-none"
+                className={`ring-hairline bg-card flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl p-4 ring-1 transition-shadow hover:shadow-md ${
+                  isMuted ? 'opacity-60 bg-muted/20' : ''
+                }`}
               >
-                <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${critical ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
-                  <Icon className="size-5" aria-hidden="true" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-foreground font-semibold">{alert.title}</h2>
-                    <Badge variant={critical ? 'danger' : 'warning'}>{alert.severity}</Badge>
+                <Link href={alert.href} className="flex items-start gap-4 min-w-0 flex-1 group">
+                  <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${
+                    isMuted
+                      ? 'bg-muted text-muted-foreground'
+                      : critical
+                      ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                  }`}>
+                    <Icon className="size-5" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h2 className="text-foreground font-semibold group-hover:text-primary transition-colors">{alert.title}</h2>
+                      <Badge variant={critical ? 'danger' : 'warning'}>{alert.severity}</Badge>
+                      {isMuted && (
+                        <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                          Acknowledged / Snoozed
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-muted-foreground mt-1 text-sm">{alert.detail}</p>
                   </div>
-                  <p className="text-muted-foreground mt-1 text-sm">{alert.detail}</p>
+                </Link>
+
+                <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                  {alert.at && <span className="text-muted-foreground/70 text-xs">{relativeTime(alert.at)}</span>}
+
+                  {isMuted ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => unmuteAlert(alert.id, e)}
+                      title="Restore alert"
+                      className="h-8 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                    >
+                      <Volume2 className="size-3.5" /> Unmute
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(e) => muteAlert(alert.id, e)}
+                      title="Acknowledge and snooze for 24h"
+                      className="h-8 px-2.5 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                    >
+                      <Check className="size-3.5 text-emerald-600 dark:text-emerald-400" /> Acknowledge
+                    </Button>
+                  )}
                 </div>
-                {alert.at && <span className="text-muted-foreground/70 shrink-0 text-xs">{relativeTime(alert.at)}</span>}
-              </Link>
+              </div>
             )
           })}
         </div>

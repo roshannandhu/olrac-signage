@@ -1,16 +1,16 @@
 # Graph Report - OLRAC SIGNAGE  (2026-09-01)
 
 ## Corpus Check
-- 310 files · ~336,296 words
+- 310 files · ~336,594 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2511 nodes · 5740 edges · 196 communities (153 shown, 43 thin omitted)
+- 2511 nodes · 5742 edges · 196 communities (153 shown, 43 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 201 edges (avg confidence: 0.78)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `308d5477`
+- Built from commit: `46d97461`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -209,11 +209,11 @@ Nodes (3): PlaylistDao, PlaylistItemEntity, Flow
 
 ### Community 3 - "ApiService.kt"
 Cohesion: 0.10
-Nodes (22): ApiService, AuthMethodsResponse, ContentDto, DeviceAuthRequest, DeviceTokenResponse, EnrollResponse, GoogleOAuthUrlResponse, GooglePollResponse (+14 more)
+Nodes (21): ApiService, AuthMethodsResponse, ContentDto, DeviceAuthRequest, DeviceTokenResponse, EnrollResponse, GoogleOAuthUrlResponse, GooglePollResponse (+13 more)
 
 ### Community 4 - "MainActivity"
-Cohesion: 0.17
-Nodes (5): Intent, MainActivity, GooglePollRequest, ComponentActivity, KeyEvent
+Cohesion: 0.14
+Nodes (7): RegistrationSnapshot, Intent, MainActivity, GooglePollRequest, SignInRequest, ComponentActivity, KeyEvent
 
 ### Community 5 - "team/page.tsx"
 Cohesion: 0.12
@@ -388,7 +388,7 @@ Cohesion: 0.83
 Nodes (3): gradlew script, die(), warn()
 
 ### Community 72 - ".onCreate"
-Cohesion: 0.29
+Cohesion: 0.32
 Nodes (13): BrandedMessage(), GoogleLogo(), GoogleSignInScreen(), Bundle, Modifier, PairingScreen(), PinPromptScreen(), secondaryButtonColors() (+5 more)
 
 ### Community 74 - "storage_prefix"
@@ -472,8 +472,8 @@ Cohesion: 0.16
 Nodes (12): MapPoint, TILES, listeners, loadSdk(), MAPS_KEY, MapsWindow, publish(), serverSnapshot() (+4 more)
 
 ### Community 102 - "LaunchState"
-Cohesion: 0.29
-Nodes (8): CheckingLocalState, GoogleSignIn, LaunchState, LaunchStateResolver, Pairing, Playing, RegistrationSnapshot, SignIn
+Cohesion: 0.33
+Nodes (7): CheckingLocalState, GoogleSignIn, LaunchState, LaunchStateResolver, Pairing, Playing, SignIn
 
 ### Community 106 - "UtcDateTime"
 Cohesion: 0.40
@@ -634,7 +634,7 @@ _Questions this graph is uniquely positioned to answer:_
 - **Why does `TenantScope` connect `TenantScope` to `_post`, `playlists.py`, `utcnow`, `acknowledge_alert`, `Organization`, `main.py`, `get_redis`, `content.py`, `screens.py`, `admin.py`, `HTTPException`?**
   _High betweenness centrality (0.028) - this node is a cross-community bridge._
 - **Why does `utcnow()` connect `utcnow` to `_post`, `playlists.py`, `test_p6_websockets.py`, `acknowledge_alert`, `models.py`, `run`, `create_access_token`, `Organization`, `get_redis`, `content.py`, `screens.py`, `database.py`, `TenantScope`, `admin.py`, `HTTPException`, `google_device.py`, `test_release_rollout.py`?**
-  _High betweenness centrality (0.011) - this node is a cross-community bridge._
+  _High betweenness centrality (0.010) - this node is a cross-community bridge._
 - **Why does `dependencies` connect `dependencies` to `scripts`, `@dnd-kit/utilities`, `next-themes`, `react`, `tw-animate-css`, `@types/leaflet`, `leaflet`, `@types/qrcode.react`, `@dnd-kit/sortable`, `recharts`, `lucide-react`, `shadcn`, `@dnd-kit/core`?**
   _High betweenness centrality (0.009) - this node is a cross-community bridge._
 - **Are the 69 inferred relationships involving `HTTPException` (e.g. with `health_check()` and `approve_tenant()`) actually correct?**
@@ -644,4 +644,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `schemas.py` be split into smaller, more focused modules?**
   _Cohesion score 0.08710801393728224 - nodes in this community are weakly interconnected._
 - **Should `ApiService.kt` be split into smaller, more focused modules?**
-  _Cohesion score 0.10084033613445378 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.10338680926916222 - nodes in this community are weakly interconnected._

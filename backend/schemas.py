@@ -841,6 +841,8 @@ class ClientResponse(ClientBase):
 
     id: int
     client_code: str
+    active_campaigns_count: int = 0
+    total_spent_paise: int = 0
     created_at: datetime
 
 
@@ -972,6 +974,8 @@ class PlacementTargetResponse(BaseModel):
 class PlacementResponse(BaseModel):
     id: int
     content_id: int
+    creative_name: Optional[str] = None
+    creative_thumbnail_url: Optional[str] = None
     advertiser: str
     client: Optional[ClientResponse] = None
     plan: Optional[TenantPlanResponse] = None
@@ -979,12 +983,13 @@ class PlacementResponse(BaseModel):
     # starts_at/ends_at stay as SOLD; this is where the run actually finishes once
     # extensions are counted, and it is what the dashboard should show as "ends".
     effective_ends_at: Optional[datetime] = None
+    days_remaining: Optional[int] = None
     total_price_paise: Optional[int] = None
     price_paise: int
     is_paid: bool
     starts_at: datetime
     ends_at: datetime
-    notes: Optional[str]
+    notes: Optional[str] = None
     created_at: datetime
     targets: List[PlacementTargetResponse] = []
 

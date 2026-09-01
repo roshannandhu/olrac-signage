@@ -24,14 +24,12 @@ export function MediaThumbnail({ item, className = '' }: { item: ContentItem; cl
   return (
     <div className={`bg-muted relative overflow-hidden ${className}`}>
       {isHttpImage ? (
-        <Image
+        <img
           src={resolvedImage}
-          alt=""
-          fill
-          unoptimized
+          alt={item.name}
           onError={() => setHasError(true)}
-          sizes="(max-width: 768px) 100vw, 25vw"
-          className="object-cover transition-transform duration-500 group-hover/card:scale-[1.03] motion-reduce:transition-none"
+          loading="lazy"
+          className="size-full object-cover transition-transform duration-500 group-hover/card:scale-[1.03] motion-reduce:transition-none"
         />
       ) : item.type === 'video' ? (
         videoPosterSource ? (

@@ -23,8 +23,13 @@ if (typeof window !== 'undefined') {
 
 export const WS_BASE = API_BASE.replace(/^http/, 'ws')
 
+import { presignR2Url } from './r2-signer'
+
 export function resolveMediaUrl(urlStr: string | null | undefined): string | undefined {
   if (!urlStr) return undefined
+  if (urlStr.startsWith('s3://') || urlStr.startsWith('r2://')) {
+    return presignR2Url(urlStr)
+  }
   if (urlStr.startsWith('/uploads/')) {
     return `${API_HOST}${urlStr}`
   }

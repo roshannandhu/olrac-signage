@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Contact, Mail, Phone, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -74,6 +74,17 @@ export default function ClientsPage() {
   }
   const clients = clientsQuery.data || []
 
+  const [search, setSearch] = useState('')
+  const filteredClients = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    if (!term) return clients
+    return clients.filter((c) =>
+      c.name.toLowerCase().includes(term) ||
+      (c.client_code && c.client_code.toLowerCase().includes(term)) ||
+      (c.email && c.email.toLowerCase().includes(term))
+    )
+  }, [clients, search])
+
   const openFor = (client: Client | null) => {
     if (client) {
       setEditing(client); setName(client.name); setEmail(client.email || ''); setPhone(client.phone || '')
@@ -124,20 +135,30 @@ export default function ClientsPage() {
         ) : undefined}
       />
 
+      {clients.length > 0 && (
+        <div className="max-w-sm">
+          <Input
+            placeholder="Search clients by name, code, or email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+      )}
+
       {clientsQuery.isLoading ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-32" />)}
         </div>
-      ) : !clients.length ? (
+      ) : !filteredClients.length ? (
         <EmptyState
           icon={Contact}
-          title="No clients yet"
-          description="Add the advertisers you sell to. You can then book an advert against a client and share their campaign report."
-          action={canEdit ? <Button onClick={() => openFor(null)}>Add client</Button> : undefined}
+          title={search ? "No matching clients" : "No clients yet"}
+          description={search ? "Try a different search term." : "Add the advertisers you sell to. You can then book an advert against a client and share their campaign report."}
+          action={canEdit && !search ? <Button onClick={() => openFor(null)}>Add client</Button> : undefined}
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {clients.map((client) => (
+          {filteredClients.map((client) => (
             <Card key={client.id} className="ring-hairline bg-card border-0 ring-1">
               <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-3">

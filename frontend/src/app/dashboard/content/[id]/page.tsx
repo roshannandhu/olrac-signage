@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/dashboard/empty-state'
 import { ErrorState } from '@/components/dashboard/error-state'
 import { MediaThumbnail } from '@/components/dashboard/media-thumbnail'
 import { ScreenMap } from '@/components/dashboard/screen-map'
+import { AdBookings } from '@/components/dashboard/ad-bookings'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -155,10 +156,15 @@ export default function AdDetailPage() {
       <Tabs defaultValue="playback">
         <TabsList>
           <TabsTrigger value="playback">Playback</TabsTrigger>
+          <TabsTrigger value="bookings">Ad Bookings &amp; Reports</TabsTrigger>
           <TabsTrigger value="places">Groups &amp; screens</TabsTrigger>
           <TabsTrigger value="technical">Technical</TabsTrigger>
           <TabsIndicator />
         </TabsList>
+
+        <TabsPanel value="bookings">
+          <AdBookings contentId={contentId} />
+        </TabsPanel>
 
         <TabsPanel value="playback">
           {reportQuery.isLoading ? (

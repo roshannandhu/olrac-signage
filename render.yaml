@@ -63,6 +63,25 @@ services:
         sync: false
       - key: CORS_ORIGINS          # the dashboard's origin, e.g. https://<x>.workers.dev
         sync: false
+
+      # Client campaign reports are emailed from here. Without these the dashboard's
+      # "email to client" answers 503 with the missing names -- the PDF download still
+      # works, so this is optional rather than required.
+      - key: SMTP_HOST             # e.g. smtp.gmail.com, email-smtp.<region>.amazonaws.com
+        sync: false
+      - key: SMTP_PORT             # 587 for STARTTLS, 465 for implicit TLS
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM             # the From address clients see
+        sync: false
+
+      # Static map imagery on the client report. Without it the report still generates and
+      # prints the locations as a list instead -- see backend/maps.py.
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
       - key: PUBLIC_BASE_URL       # this service's own https URL, stamped into media links
         sync: false
 

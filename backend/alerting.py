@@ -30,6 +30,12 @@ SCREEN_IDLE = "screen_idle"
 LOW_STORAGE = "low_storage"
 UPDATE_FAILED = "update_failed"
 CONTENT_FAILED = "content_failed"
+CAMPAIGN_ENDING = "campaign_ending"
+
+# How much notice an operator gets that a booking is about to finish. A week is enough to
+# reach the advertiser and sell the extension; a day is a scramble, and a month is noise
+# that gets acknowledged and ignored.
+CAMPAIGN_ENDING_WITHIN = timedelta(days=7)
 
 # A screen reporting less than this has no room to cache what it is about to be told to
 # play, so it will start failing downloads shortly.
@@ -37,11 +43,9 @@ LOW_STORAGE_MB = 500
 
 # How long a screen must be unreachable before it is worth telling someone.
 #
-# Deliberately far longer than SCREEN_OFFLINE_AFTER_SECONDS, which exists to grey out a
-# tile in the dashboard. A TV rebooting, a router restarting, or a shop's power dipping all
-# produce a gap of a minute or two many times a week; alerting on those trains people to
-# ignore the alerts, which is worse than not sending them.
-OFFLINE_ALERT_AFTER = timedelta(minutes=15)
+# Set aggressively low (1 minute) for immediate operator awareness. The heartbeat
+# interval is ~60s, so a screen that misses one cycle is flagged immediately.
+OFFLINE_ALERT_AFTER = timedelta(minutes=1)
 
 
 @dataclass(frozen=True)
@@ -54,6 +58,11 @@ class AlertCondition:
     detail: str
     screen_id: Optional[int] = None
     content_id: Optional[int] = None
+    # Overrides what the key is built from, without changing what the row points at.
+    # A booking alert has to key on the BOOKING: two clients running the same creative
+    # would otherwise both key on that content_id, collapse onto one alert, and only the
+    # first would ever be raised -- so the second client's campaign ends unnoticed.
+    ref: Optional[int] = None
 
     @property
     def dedupe_key(self) -> str:
@@ -64,7 +73,9 @@ class AlertCondition:
         wake to some 2,880 identical messages. Keyed this way, the second pass recognises
         the alert it raised on the first and leaves it alone.
         """
-        target = self.screen_id if self.screen_id is not None else self.content_id
+        target = self.ref
+        if target is None:
+            target = self.screen_id if self.screen_id is not None else self.content_id
         return f"{self.kind}:{target}"
 
 
@@ -240,13 +251,55 @@ def evaluate_content(content) -> list[AlertCondition]:
     )]
 
 
-def evaluate_all(screens: Iterable, contents: Iterable, now: datetime) -> dict[str, AlertCondition]:
-    """Every current condition for one organisation, keyed for reconciliation."""
+def evaluate_placement(placement, now: datetime) -> list[AlertCondition]:
+    """Warn while there is still time to sell the extension.
+
+    Nothing told an operator a campaign was about to finish, so the first sign was an
+    advertiser noticing their advert had stopped -- which is the worst possible moment to
+    open a renewal conversation.
+
+    Resolution is automatic: the reconciler closes any alert whose condition stops being
+    true, so extending the booking clears this on the next pass without anyone dismissing
+    anything.
+    """
+    ends = getattr(placement, "effective_ends_at", None) or placement.ends_at
+    if ends is None:
+        return []
+    # Already finished is not "ending soon" -- that alert would never resolve, and an
+    # operator cannot act on it either.
+    if ends <= now or ends - now > CAMPAIGN_ENDING_WITHIN:
+        return []
+
+    days = max(0, round((ends - now).total_seconds() / 86400))
+    advertiser = getattr(placement, "advertiser", None) or "A client"
+    return [AlertCondition(
+        kind=CAMPAIGN_ENDING,
+        severity=WARNING,
+        title=f"{advertiser}'s campaign ends in {days} day{'' if days == 1 else 's'}",
+        detail=(
+            f"The booking finishes on {ends:%d %b %Y}. Extend it to keep the advert running, "
+            "or it will stop playing on every screen it was placed on."
+        ),
+        content_id=getattr(placement, "content_id", None),
+        ref=placement.id,
+    )]
+
+
+def evaluate_all(screens: Iterable, contents: Iterable, now: datetime,
+                 placements: Iterable = ()) -> dict[str, AlertCondition]:
+    """Every current condition for one organisation, keyed for reconciliation.
+
+    `placements` defaults to empty so the existing callers and tests keep working; the
+    worker passes the real list.
+    """
     found: dict[str, AlertCondition] = {}
     for screen in screens:
         for condition in evaluate_screen(screen, now):
             found[condition.dedupe_key] = condition
     for content in contents:
         for condition in evaluate_content(content):
+            found[condition.dedupe_key] = condition
+    for placement in placements:
+        for condition in evaluate_placement(placement, now):
             found[condition.dedupe_key] = condition
     return found

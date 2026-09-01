@@ -54,16 +54,39 @@ def _ensure_schema() -> None:
         # already manages from one this process is about to create.
         alembic_owns_it = inspect(engine).has_table("alembic_version")
 
-        Base.metadata.create_all(bind=engine)
-
-        if alembic_owns_it:
-            return
-
         here = pathlib.Path(__file__).parent
         config = Config(str(here / "alembic.ini"))
         # Absolute, because alembic.ini's script_location is relative to the working
         # directory and this runs from wherever the process was started.
         config.set_main_option("script_location", str(here / "alembic"))
+
+        if alembic_owns_it:
+            # Migrate, rather than returning and hoping somebody remembered.
+            #
+            # create_all() adds MISSING TABLES but never alters an existing one, so a
+            # release that adds a column to a table already in the database left that column
+            # absent while every new table appeared -- the schema looked half-applied and
+            # the failure surfaced as "column organizations.brand_name does not exist" on
+            # essentially every authenticated request, because Organization is loaded on
+            # nearly all of them.
+            #
+            # render.yaml documents running `alembic upgrade head` by hand because
+            # preDeployCommand needs a paid instance. That is a step between a green deploy
+            # and a working one, performed by a person, at the moment the new code is
+            # already live and failing. Doing it here closes that window.
+            #
+            # Safe to run on every boot: `upgrade head` is a no-op when there is nothing to
+            # apply, and the advisory lock below means a second worker waits rather than
+            # running the same migration twice.
+            command.upgrade(config, "head")
+            logger.info("database migrated to head")
+            # After the migrations, so a table a migration was supposed to create is created
+            # by that migration and not silently conjured by create_all first -- which would
+            # then make the migration fail on "relation already exists".
+            Base.metadata.create_all(bind=engine)
+            return
+
+        Base.metadata.create_all(bind=engine)
         command.stamp(config, "head")
         logger.info("new database: schema created and stamped at head")
 
@@ -128,8 +151,129 @@ async def lifespan(_app: FastAPI):
                 rec_db.close()
             time.sleep(30)
 
+    def _screen_health_monitor_loop():
+        """Detect offline screens every 30 seconds and trigger immediate alerts.
+
+        The arq reconciler runs every minute, but that means a screen can be offline
+        for up to 2 minutes (1 min threshold + 1 min cron gap) before an alert fires.
+        This tighter loop cuts that to ~30 seconds by checking `last_seen` directly
+        and publishing alerts via Redis pub/sub for immediate dashboard delivery.
+        """
+        import asyncio as _asyncio
+        import time
+        from datetime import datetime, timezone, timedelta
+        from . import alerting
+        from .routers.screens import screen_offline_after_seconds
+
+        _loop = _asyncio.new_event_loop()
+
+        def _redis_publish(org_id: int, payload_str: str):
+            """Best-effort publish on the thread's own event loop."""
+            try:
+                r = database.get_redis()
+                _loop.run_until_complete(r.publish(f"dashboard:{org_id}", payload_str))
+            except Exception as exc:
+                logger.debug("Health monitor Redis publish failed: %s", exc)
+
+        while True:
+            rec_db = database.SessionLocal()
+            try:
+                now = datetime.now(timezone.utc)
+                offline_threshold = now - timedelta(seconds=screen_offline_after_seconds())
+
+                # Find screens that are marked online but haven't been seen recently
+                stale_screens = (
+                    rec_db.query(models.Screen)
+                    .filter(
+                        models.Screen.status == "online",
+                        models.Screen.last_seen < offline_threshold,
+                    )
+                    .all()
+                )
+
+                if stale_screens:
+                    # Flip status to offline
+                    changed_org_ids = set()
+                    for screen in stale_screens:
+                        screen.status = "offline"
+                        changed_org_ids.add(screen.organization_id)
+                        logger.info(
+                            "Health monitor: screen %d (%s) marked offline (last_seen %s)",
+                            screen.id,
+                            screen.name or "unnamed",
+                            screen.last_seen,
+                        )
+                    rec_db.commit()
+
+                    # Run immediate alert evaluation for affected orgs
+                    for org_id in changed_org_ids:
+                        try:
+                            org_screens = (
+                                rec_db.query(models.Screen)
+                                .filter(models.Screen.organization_id == org_id)
+                                .all()
+                            )
+                            org_contents = (
+                                rec_db.query(models.Content)
+                                .filter(models.Content.organization_id == org_id)
+                                .all()
+                            )
+                            current = alerting.evaluate_all(org_screens, org_contents, now)
+                            open_alerts = {
+                                a.dedupe_key: a
+                                for a in rec_db.query(models.Alert).filter(
+                                    models.Alert.organization_id == org_id,
+                                    models.Alert.resolved_at.is_(None),
+                                ).all()
+                            }
+
+                            for key, condition in current.items():
+                                if key in open_alerts:
+                                    continue
+                                alert = models.Alert(
+                                    organization_id=org_id,
+                                    kind=condition.kind,
+                                    severity=condition.severity,
+                                    screen_id=condition.screen_id,
+                                    content_id=condition.content_id,
+                                    title=condition.title,
+                                    detail=condition.detail,
+                                    dedupe_key=key,
+                                    notified=[],
+                                )
+                                rec_db.add(alert)
+                                try:
+                                    rec_db.commit()
+                                except Exception:
+                                    rec_db.rollback()
+                                    continue
+                                rec_db.refresh(alert)
+
+                                # Push via Redis pub/sub for instant dashboard delivery
+                                import json as _json
+                                payload = _json.dumps({
+                                    "type": "alert_raised",
+                                    "alert": {
+                                        "id": alert.id,
+                                        "severity": alert.severity,
+                                        "title": alert.title,
+                                        "detail": alert.detail,
+                                    },
+                                })
+                                _redis_publish(org_id, payload)
+
+                        except Exception as org_exc:
+                            logger.warning("Health monitor alert eval failed for org %d: %s", org_id, org_exc)
+
+            except Exception as exc:
+                logger.warning("Failed in screen health monitor loop: %s", exc)
+            finally:
+                rec_db.close()
+            time.sleep(30)
+
     import threading
     threading.Thread(target=_media_supervisor_loop, daemon=True).start()
+    threading.Thread(target=_screen_health_monitor_loop, daemon=True, name="screen-health-monitor").start()
 
     arq_worker = None
     worker_task = None
@@ -268,8 +412,13 @@ async def health_check(db: Session = Depends(database.get_db)):
     # Render and most PaaS hosts is discarded on the next deploy: the row survives, the
     # file does not, and the dashboard lists media that 404s everywhere.
     from .media_urls import is_s3_enabled
+    from .mailer import is_configured as email_configured
 
     object_storage = is_s3_enabled()
+    # Reported, not fatal. Nothing in the fleet depends on mail -- but a tenant who clicks
+    # "email this report to the client" and is told it went is owed the truth, and the
+    # place to find out is here rather than from the client who never received it.
+    email_ready = email_configured()
 
     warnings = []
     if ephemeral:
@@ -306,6 +455,7 @@ async def health_check(db: Session = Depends(database.get_db)):
         "host": url.host or url.database,
         "redis": "connected" if redis_ok else "unreachable",
         "object_storage": "configured" if object_storage else "local disk (ephemeral)",
+        "email": "configured" if email_ready else "not configured (SMTP_HOST/SMTP_FROM unset)",
         # Loud on purpose: these are the states where everything looks fine and either
         # every write is discarded on the next deploy, or nothing is being processed.
         "warning": "; ".join(warnings) or None,
@@ -315,9 +465,9 @@ async def health_check(db: Session = Depends(database.get_db)):
 # One import, at the point of use. There were two of these -- an identical line at the
 # top of the file and this one -- so adding a router meant remembering to edit both.
 from .routers import (
-    admin, alerts, analytics, auth, billing, content, emergency, enrollment_tokens,
+    admin, alerts, analytics, auth, billing, branding, clients, content, emergency, enrollment_tokens,
     groups, placements, playlists, provisioning, releases, screens, screenshots,
-    users, websockets,
+    tenant_plans, users, websockets,
 )
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
@@ -327,6 +477,9 @@ app.include_router(groups.router, prefix="/api/groups", tags=["groups"])
 app.include_router(content.router, prefix="/api/content", tags=["content"])
 app.include_router(playlists.router, prefix="/api/playlists", tags=["playlists"])
 app.include_router(placements.router, prefix="/api/placements", tags=["placements"])
+app.include_router(clients.router, prefix="/api/clients", tags=["clients"])
+app.include_router(branding.router, prefix="/api/branding", tags=["branding"])
+app.include_router(tenant_plans.router, prefix="/api/tenant-plans", tags=["tenant-plans"])
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(websockets.router, prefix="/api/ws", tags=["Websockets"])
 app.include_router(billing.router, prefix="/api/billing", tags=["billing"])

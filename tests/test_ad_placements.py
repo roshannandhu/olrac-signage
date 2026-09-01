@@ -159,6 +159,68 @@ try:
     assert client.post("/api/placements/", json=body, headers=rival_auth).status_code == 404
     print("  ok  another organisation sees nothing and cannot book against this advert")
 
+    # --- a finished campaign is actually taken off the screen --------------------------
+    # The player already refused to PLAY an expired item, so nothing looked wrong -- but it
+    # stayed in every sync payload and each panel went on caching the video for a campaign
+    # that had ended. The sweep is what makes the file go away.
+    import asyncio
+    from backend.worker import prune_finished_bookings
+
+    long_over = client.post("/api/placements/", headers=auth, json={
+        "content_id": ad.id, "advertiser": "Last Winter", "price_paise": 1000, "is_paid": True,
+        "starts_at": (now - timedelta(days=60)).isoformat(),
+        "ends_at": (now - timedelta(days=30)).isoformat(),
+        "targets": [{"screen_id": a.id}],
+    })
+    assert long_over.status_code == 201, long_over.text
+    over_id = long_over.json()["id"]
+
+    db.expire_all()
+    over_target = db.query(models.AdPlacementTarget).filter(
+        models.AdPlacementTarget.placement_id == over_id
+    ).one()
+    over_item_id = over_target.playlist_item_id
+    assert over_item_id, "the finished booking should have placed an item to begin with"
+
+    asyncio.run(prune_finished_bookings({}))
+
+    db.expire_all()
+    assert db.query(models.PlaylistItem).filter(
+        models.PlaylistItem.id == over_item_id
+    ).first() is None, "a finished campaign's playlist item was left on the screen"
+
+    # The hand-made item on that same playlist must be untouched. The sweep reaches items
+    # only through AdPlacementTarget, so an operator's own item is invisible to it -- and
+    # deleting one would take content off a screen nobody sold.
+    assert db.query(models.PlaylistItem).filter(
+        models.PlaylistItem.id == manual_id
+    ).first(), "the sweep destroyed a hand-made playlist item"
+
+    # The booking survives: it is the record of a sale, and its report has to keep
+    # answering for it long after the advert came down.
+    assert client.get(f"/api/placements/{over_id}/report", headers=auth).status_code == 200
+    print("  ok  a finished campaign's item is swept, the hand-made item and the sale survive")
+
+    # A campaign that only just ended is inside the grace period, because an extension sold
+    # an hour late must not find the advert already torn down.
+    just_over = client.post("/api/placements/", headers=auth, json={
+        "content_id": ad.id, "advertiser": "Yesterday", "price_paise": 1000, "is_paid": True,
+        "starts_at": (now - timedelta(days=10)).isoformat(),
+        "ends_at": (now - timedelta(hours=6)).isoformat(),
+        "targets": [{"screen_id": b.id}],
+    })
+    assert just_over.status_code == 201, just_over.text
+    db.expire_all()
+    fresh_target = db.query(models.AdPlacementTarget).filter(
+        models.AdPlacementTarget.placement_id == just_over.json()["id"]
+    ).one()
+    asyncio.run(prune_finished_bookings({}))
+    db.expire_all()
+    assert db.query(models.PlaylistItem).filter(
+        models.PlaylistItem.id == fresh_target.playlist_item_id
+    ).first(), "a campaign that ended hours ago was swept inside its grace period"
+    print("  ok  a campaign that just ended is left alone during the grace period")
+
     print("ad placements: all checks passed")
 finally:
     try:

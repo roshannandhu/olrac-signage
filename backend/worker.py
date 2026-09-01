@@ -367,7 +367,15 @@ async def reconcile_alerts(ctx):
                 Content.organization_id == org_id
             ).all()
 
-            current = alerting.evaluate_all(screens, contents, now)
+            # Only bookings that have not already finished: a campaign that ended last
+            # month can never satisfy the "ending soon" window, so loading it is pure cost
+            # on an estate with years of history.
+            placements = db.query(models.AdPlacement).filter(
+                models.AdPlacement.organization_id == org_id,
+                models.AdPlacement.ends_at >= now - alerting.CAMPAIGN_ENDING_WITHIN,
+            ).all()
+
+            current = alerting.evaluate_all(screens, contents, now, placements)
             open_alerts = {
                 a.dedupe_key: a
                 for a in db.query(models.Alert).filter(
@@ -645,6 +653,63 @@ async def prune_screenshots(ctx):
         db.close()
 
 
+async def prune_finished_bookings(ctx):
+    """Delete the playlist items belonging to campaigns that have finished.
+
+    sync_tv already stops sending an expired item, which is what frees the panel. This is
+    the other half: without it the rows accumulate forever, so the playlists page fills
+    with adverts that stopped months ago and every playlist query carries them.
+
+    Reached ONLY through AdPlacementTarget, so nothing hand-made is ever touched -- an
+    operator's own playlist item has no target row pointing at it and is invisible here.
+    The booking itself is kept: it is the record of a sale, and the report has to keep
+    answering for it long after the advert came down.
+    """
+    from datetime import timedelta
+
+    from . import models as _models
+
+    db = SessionLocal()
+    removed = 0
+    try:
+        now = _models.utcnow()
+        # A grace period, not `< now`: the effective end can move when an extension is
+        # sold, and deleting an item minutes after it lapsed would take an advert down that
+        # the tenant is mid-way through renewing.
+        cutoff = now - timedelta(days=2)
+        targets = (
+            db.query(_models.AdPlacementTarget)
+            .join(_models.AdPlacement, _models.AdPlacement.id == _models.AdPlacementTarget.placement_id)
+            .filter(_models.AdPlacementTarget.playlist_item_id.isnot(None))
+            .all()
+        )
+        for target in targets:
+            placement = target.placement
+            if not placement or placement.effective_ends_at > cutoff:
+                continue
+            item = db.query(_models.PlaylistItem).filter(
+                _models.PlaylistItem.id == target.playlist_item_id
+            ).first()
+            if not item:
+                continue
+            playlist = item.playlist
+            db.delete(item)
+            # The target keeps the booking's shape for the report; it just no longer points
+            # at a live item. SET NULL is what the foreign key already does on delete.
+            target.playlist_item_id = None
+            if playlist:
+                playlist.updated_at = _models.utcnow()
+            removed += 1
+        db.commit()
+        if removed:
+            print(f"Removed {removed} playlist items from finished bookings.")
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        print(f"Error pruning finished bookings: {exc}")
+    finally:
+        db.close()
+
+
 class WorkerSettings:
     functions = [process_media]
     cron_jobs = [
@@ -660,6 +725,8 @@ class WorkerSettings:
         # delete, so running it 24x more often costs little and caps the peak at an hour.
         cron(prune_play_logs, minute={0}),
         cron(prune_screenshots, hour=3, minute=30),
+        # After the screenshot prune, in the same quiet window.
+        cron(prune_finished_bookings, hour=3, minute=45),
         # Once a day is plenty: rollups accrue at ~36k rows/day, not 864k, and the
         # retention window is over a year. Off the hour to stay clear of the raw prune.
         cron(prune_play_log_rollups, hour=4, minute=0),

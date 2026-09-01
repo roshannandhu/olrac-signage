@@ -120,9 +120,9 @@ def player_sync_interval_seconds() -> int:
 
 def screen_offline_after_seconds() -> int:
     try:
-        configured = int(os.getenv("SCREEN_OFFLINE_AFTER_SECONDS", "150"))
+        configured = int(os.getenv("SCREEN_OFFLINE_AFTER_SECONDS", "90"))
     except ValueError:
-        configured = 150
+        configured = 90
     return max(60, min(configured, 3600))
 
 
@@ -1955,6 +1955,18 @@ async def sync_tv(
         playlist_payload = schemas.PlaylistResponse.model_validate(playlist)
         valid_items = []
         for item in playlist_payload.items:
+            # An item whose paid window has closed is not sent at all.
+            #
+            # The player already refuses to PLAY it (ScheduleEvaluator.isActive checks
+            # endAt), so nothing was visibly wrong -- but it stayed in every sync payload
+            # and every panel went on downloading and storing the video for a campaign that
+            # had ended. After a year of bookings a screen is caching dead media for adverts
+            # nobody sold. Dropping it here is what makes the file actually go away.
+            #
+            # start_at is deliberately NOT filtered: a screen has to fetch tomorrow's advert
+            # today, or it has nothing cached when the window opens.
+            if item.end_at and as_aware_utc(item.end_at) <= as_aware_utc(models.utcnow()):
+                continue
             if item.content.status in {"ready", "processing"}:
                 rendition = select_rendition(item.content, screen)
                 if rendition:

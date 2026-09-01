@@ -34,19 +34,19 @@ def test_a_healthy_screen_raises_nothing():
 
 
 def test_a_brief_gap_is_not_an_alert():
-    # A TV rebooting or a router restarting produces a gap of a minute or two many times a
-    # week. Alerting on those teaches people to ignore alerts, which is worse than silence.
-    s = screen(status="offline", last_seen=NOW - timedelta(minutes=5))
+    # A TV rebooting produces a gap of a few seconds. Under the 1-minute threshold
+    # this should not raise an alert.
+    s = screen(status="offline", last_seen=NOW - timedelta(seconds=30))
     assert alerting.evaluate_screen(s, NOW) == []
 
 
 def test_a_sustained_outage_is_critical():
-    s = screen(status="offline", last_seen=NOW - timedelta(minutes=20))
+    s = screen(status="offline", last_seen=NOW - timedelta(minutes=5))
     found = alerting.evaluate_screen(s, NOW)
     assert kinds(found) == {alerting.SCREEN_OFFLINE}
     assert found[0].severity == alerting.CRITICAL
     assert "Lobby TV" in found[0].title
-    assert "20m" in found[0].detail
+    assert "5m" in found[0].detail
 
 
 def test_a_long_outage_reads_in_hours():
@@ -250,6 +250,64 @@ def test_an_open_screen_still_alerts_normally():
     s = screen(operating_mode="hours", operating_hours=OPEN_9_TO_9,
                status="offline", last_seen=NOW - timedelta(hours=8))
     assert kinds(alerting.evaluate_screen(s, NOW)) == {alerting.SCREEN_OFFLINE}
+
+
+# --- campaigns about to finish ---------------------------------------------------------
+#
+# Nothing told an operator a booking was ending, so the first sign was the advertiser
+# noticing their advert had stopped -- the worst moment to open a renewal conversation.
+
+
+def booking(**overrides):
+    base = dict(id=1, advertiser="BrightMart", content_id=7,
+                ends_at=NOW + timedelta(days=3), effective_ends_at=NOW + timedelta(days=3))
+    base.update(overrides)
+    return SimpleNamespace(**base)
+
+
+def test_a_campaign_ending_this_week_is_flagged():
+    found = alerting.evaluate_placement(booking(), NOW)
+    assert kinds(found) == {alerting.CAMPAIGN_ENDING}, found
+    assert "BrightMart" in found[0].title
+    assert "3 days" in found[0].title, found[0].title
+
+
+def test_a_campaign_ending_later_is_not_flagged_yet():
+    """Warning a month out is noise that gets acknowledged and then ignored."""
+    assert alerting.evaluate_placement(booking(effective_ends_at=NOW + timedelta(days=30)), NOW) == []
+
+
+def test_a_campaign_that_already_ended_is_not_flagged():
+    """It would never resolve, and there is nothing left to sell before it stops."""
+    assert alerting.evaluate_placement(booking(effective_ends_at=NOW - timedelta(days=1)), NOW) == []
+
+
+def test_an_extension_is_what_clears_the_warning():
+    """The reconciler closes any alert whose condition stops being true, so selling the
+    extension is the whole dismissal mechanism -- nobody has to tick anything off."""
+    ending = booking()
+    assert alerting.evaluate_placement(ending, NOW)
+    extended = booking(effective_ends_at=NOW + timedelta(days=21))
+    assert alerting.evaluate_placement(extended, NOW) == []
+
+
+def test_two_bookings_of_one_creative_raise_two_alerts():
+    """The bug this pins. dedupe_key falls back to content_id, so two clients running the
+    same advert would collapse onto one alert and only the first would ever be raised --
+    the second client's campaign then ends with nobody warned."""
+    a = alerting.evaluate_placement(booking(id=1, advertiser="BrightMart", content_id=7), NOW)[0]
+    b = alerting.evaluate_placement(booking(id=2, advertiser="Phoenix", content_id=7), NOW)[0]
+    assert a.dedupe_key != b.dedupe_key, (a.dedupe_key, b.dedupe_key)
+    assert a.dedupe_key == "campaign_ending:1", a.dedupe_key
+    # The row still points at the creative, so the dashboard can link to the advert.
+    assert a.content_id == 7 and b.content_id == 7
+
+
+def test_evaluate_all_still_works_without_placements():
+    """Defaulted, so the existing callers and every test above keep working unchanged."""
+    assert alerting.evaluate_all([], [], NOW) == {}
+    keyed = alerting.evaluate_all([], [], NOW, [booking()])
+    assert list(keyed) == ["campaign_ending:1"], keyed
 
 
 if __name__ == "__main__":

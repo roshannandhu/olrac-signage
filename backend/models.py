@@ -1,7 +1,7 @@
 import secrets
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, String, Text, Time, JSON, Float
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, String, Text, Time, UniqueConstraint, JSON, Float
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.types import TypeDecorator
 
@@ -75,6 +75,18 @@ class Organization(Base):
     # Per-tenant quotas set by Super Admin. 0 = unlimited (default).
     max_screens = Column(Integer, nullable=False, default=0)
     max_ad_slots = Column(Integer, nullable=False, default=0)
+
+    # What a CLIENT sees at the top of their campaign report. `name` is the workspace name
+    # an operator picked when signing up ("Roshan's Workspace"); it is not necessarily the
+    # trading name they want printed on a document they hand to an advertiser. Null falls
+    # back to `name`, so a tenant that sets none loses nothing.
+    brand_name = Column(String, nullable=True)
+    # Stored like every other asset: "s3://<key>" or "/uploads/<path>", resolved on read by
+    # media_urls.resolve_media_url. Never an absolute URL baked in at upload time -- that is
+    # what left every media row pointing at a stale localhost.
+    logo_url = Column(String, nullable=True)
+    brand_color = Column(String(9), nullable=True)
+
     created_at = Column(UtcDateTime, nullable=False, default=utcnow)
 
     users = relationship("User", back_populates="organization")
@@ -553,6 +565,71 @@ class EnrollmentToken(Base):
     organization = relationship("Organization")
 
 
+class Client(Base):
+    """The advertiser a booking is sold to, and how to reach them.
+
+    Bookings carried the client as a free-text `advertiser` string, which was enough to
+    label a row and nothing else: the same customer spelled two ways became two customers,
+    there was nowhere to keep the address a report has to be emailed to, and "everything we
+    ran for this client" could not be asked at all.
+
+    Tenant-scoped, because one tenant's client list is not another's -- two tenants may
+    legitimately both sell to "BrightMart" and neither should see the other's record.
+    """
+
+    __tablename__ = "clients"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    # Shown on the report as the client's reference. Unique per tenant rather than
+    # globally: it is a label for the customer's own filing, not a system identifier.
+    client_code = Column(String(20), nullable=False)
+    email = Column(String, nullable=True)
+    phone = Column(String(40), nullable=True)
+    notes = Column(String, nullable=True)
+    created_at = Column(UtcDateTime, nullable=False, default=utcnow)
+    updated_at = Column(UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    organization = relationship("Organization")
+
+    __table_args__ = (
+        UniqueConstraint("organization_id", "client_code", name="uq_clients_org_code"),
+    )
+
+
+class TenantPlan(Base):
+    """A package a tenant sells to its own clients.
+
+    Distinct from `Plan`, which is what OLRAC bills the TENANT. This is the other side of
+    the business: what the tenant in turn sells to an advertiser. Sharing one table would
+    have let a tenant edit the plan they are billed on, and shown OLRAC's pricing to their
+    customers.
+
+    A booking COPIES price and duration from here rather than reading through to it, so
+    repricing a plan never changes what a client was already billed. See routers/placements.
+    """
+
+    __tablename__ = "tenant_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    duration_days = Column(Integer, nullable=False, default=30)
+    max_locations = Column(Integer, nullable=False, default=1)
+    ad_slots = Column(Integer, nullable=False, default=1)
+    price_paise = Column(BigInteger, nullable=False, default=0)
+    support_tier = Column(String(40), nullable=False, default="Basic Support")
+    # Retired rather than deleted: a plan that has been sold must keep resolving for the
+    # bookings that name it, so the list hides it instead of removing the row.
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(UtcDateTime, nullable=False, default=utcnow)
+    updated_at = Column(UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    organization = relationship("Organization")
+
+
 class AdPlacement(Base):
     """An advert sold to a client: what runs, for whom, when, and for how much.
 
@@ -567,7 +644,14 @@ class AdPlacement(Base):
     id = Column(Integer, primary_key=True, index=True)
     organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
     content_id = Column(Integer, ForeignKey("content.id", ondelete="CASCADE"), nullable=False, index=True)
+    # Kept alongside client_id, not replaced by it. It is NOT NULL on every existing row,
+    # and the report still has to name somebody when a booking predates the clients table
+    # or its client was removed. Written from the client on save, so the two agree.
     advertiser = Column(String, nullable=False)
+    client_id = Column(Integer, ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True)
+    # SET NULL for the same reason: deleting a plan must not delete the bookings sold on
+    # it. The commercial terms were copied onto the booking anyway.
+    plan_id = Column(Integer, ForeignKey("tenant_plans.id", ondelete="SET NULL"), nullable=True, index=True)
     # Stored in the smallest currency unit so money never touches a float.
     price_paise = Column(BigInteger, nullable=False, default=0)
     is_paid = Column(Boolean, nullable=False, default=False)
@@ -577,9 +661,33 @@ class AdPlacement(Base):
     created_at = Column(UtcDateTime, nullable=False, default=utcnow)
     updated_at = Column(UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
+    @property
+    def effective_ends_at(self):
+        """When the run actually finishes, extensions counted.
+
+        starts_at/ends_at stay as SOLD -- they are the original deal and an invoice should
+        still be able to show it. On the model rather than in one router because the alert
+        that warns "this campaign ends soon" has to agree with the report about when that
+        is; reading `ends_at` there would have warned about an extended campaign on its
+        original date and then never again.
+        """
+        latest = self.ends_at
+        for extension in self.extensions:
+            if extension.extended_to > latest:
+                latest = extension.extended_to
+        return latest
+
     content = relationship("Content")
     organization = relationship("Organization")
+    client = relationship("Client")
+    plan = relationship("TenantPlan")
     targets = relationship("AdPlacementTarget", back_populates="placement", cascade="all, delete-orphan")
+    extensions = relationship(
+        "AdPlacementExtension",
+        back_populates="placement",
+        cascade="all, delete-orphan",
+        order_by="AdPlacementExtension.extended_from",
+    )
 
 
 class AdPlacementTarget(Base):
@@ -598,6 +706,11 @@ class AdPlacementTarget(Base):
     # SET NULL rather than CASCADE: if an operator deletes the item by hand on the screen
     # page, the booking should survive as a record of what was sold, just no longer placed.
     playlist_item_id = Column(Integer, ForeignKey("playlist_items.id", ondelete="SET NULL"), nullable=True)
+    # When this place was actually added to the booking, which is not the same as when the
+    # booking starts. A screen added on the 10th of a campaign that began on the 1st plays
+    # from the 10th, and its report figures have to be divided by the days it really ran --
+    # otherwise it reads as an underperforming location rather than a late addition.
+    assigned_at = Column(UtcDateTime, nullable=False, default=utcnow)
     created_at = Column(UtcDateTime, nullable=False, default=utcnow)
 
     __table_args__ = (
@@ -611,6 +724,37 @@ class AdPlacementTarget(Base):
     screen = relationship("Screen")
     group = relationship("ScreenGroup")
     playlist_item = relationship("PlaylistItem")
+
+
+class AdPlacementExtension(Base):
+    """One paid extension of a booking's run.
+
+    A row per extension rather than an `extended_to` column on the booking, because a
+    campaign that does well is extended more than once and the client's invoice has to
+    show each one. Collapsing them into a single field would overwrite the record of the
+    first sale every time a second was made.
+
+    The booking's own starts_at/ends_at stay as SOLD. The effective end is the latest
+    extension's `extended_to`, which is what the report and the placed playlist items use.
+    """
+
+    __tablename__ = "ad_placement_extensions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    placement_id = Column(Integer, ForeignKey("ad_placements.id", ondelete="CASCADE"), nullable=False, index=True)
+    extended_from = Column(UtcDateTime, nullable=False)
+    extended_to = Column(UtcDateTime, nullable=False)
+    # Smallest currency unit, like AdPlacement.price_paise, so money never touches a float.
+    additional_price_paise = Column(BigInteger, nullable=False, default=0)
+    is_paid = Column(Boolean, nullable=False, default=False)
+    notes = Column(String, nullable=True)
+    created_at = Column(UtcDateTime, nullable=False, default=utcnow)
+
+    placement = relationship("AdPlacement", back_populates="extensions")
+
+    __table_args__ = (
+        CheckConstraint("extended_to > extended_from", name="ck_extension_window_forward"),
+    )
 
 
 class PlayLog(Base):

@@ -797,6 +797,108 @@ class PlayLogBatchRequest(BaseModel):
 
 # --- Ad bookings ---------------------------------------------------------------------
 
+class BrandingUpdate(BaseModel):
+    """What a tenant may put on the report they hand to their own client."""
+
+    brand_name: Optional[str] = Field(default=None, max_length=120)
+    # "#RRGGBB". Validated rather than trusted: it is written straight into a PDF colour
+    # and into inline style on the dashboard, so anything else is both a render failure and
+    # an injection surface.
+    brand_color: Optional[str] = Field(default=None, pattern=r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+
+
+class BrandingResponse(BaseModel):
+    brand_name: Optional[str] = None
+    brand_color: Optional[str] = None
+    # Resolved for display; the column holds the host-independent form.
+    logo_url: Optional[str] = None
+    # What the report actually prints, once the fallback to the workspace name is applied.
+    effective_name: str
+
+
+class ClientBase(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = Field(default=None, max_length=40)
+    notes: Optional[str] = None
+
+
+class ClientCreate(ClientBase):
+    # Optional: the router generates the next code for the tenant when it is not given, so
+    # the common case is one field (a name) rather than inventing a reference by hand.
+    client_code: Optional[str] = Field(default=None, max_length=20)
+
+
+class ClientUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = Field(default=None, max_length=40)
+    notes: Optional[str] = None
+
+
+class ClientResponse(ClientBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    client_code: str
+    created_at: datetime
+
+
+class TenantPlanBase(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: Optional[str] = None
+    duration_days: int = Field(default=30, ge=1, le=3650)
+    max_locations: int = Field(default=1, ge=1)
+    ad_slots: int = Field(default=1, ge=1)
+    price_paise: int = Field(default=0, ge=0)
+    support_tier: str = Field(default="Basic Support", max_length=40)
+
+
+class TenantPlanCreate(TenantPlanBase):
+    pass
+
+
+class TenantPlanUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=120)
+    description: Optional[str] = None
+    duration_days: Optional[int] = Field(default=None, ge=1, le=3650)
+    max_locations: Optional[int] = Field(default=None, ge=1)
+    ad_slots: Optional[int] = Field(default=None, ge=1)
+    price_paise: Optional[int] = Field(default=None, ge=0)
+    support_tier: Optional[str] = Field(default=None, max_length=40)
+    is_active: Optional[bool] = None
+
+
+class TenantPlanResponse(TenantPlanBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    is_active: bool
+    created_at: datetime
+
+
+class ExtensionCreate(BaseModel):
+    """Extend a booking's run. `extended_from` defaults to where the booking currently ends."""
+
+    extended_to: datetime
+    extended_from: Optional[datetime] = None
+    additional_price_paise: int = Field(default=0, ge=0)
+    is_paid: bool = False
+    notes: Optional[str] = None
+
+
+class ExtensionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    extended_from: datetime
+    extended_to: datetime
+    additional_price_paise: int
+    is_paid: bool
+    notes: Optional[str] = None
+    created_at: datetime
+
+
 class PlacementTargetRef(BaseModel):
     """One place a booking runs. Exactly one of the two ids is set."""
 
@@ -812,23 +914,37 @@ class PlacementTargetRef(BaseModel):
 
 class PlacementCreate(BaseModel):
     content_id: int
-    advertiser: str = Field(min_length=1, max_length=200)
+    # Still accepted, and still what is stored on the row, but a client_id overrides it:
+    # naming a client is the supported path and the string then follows the client record.
+    advertiser: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    client_id: Optional[int] = None
+    # Naming a plan fills in price and ends_at from it when those are not given. The values
+    # are COPIED, never read through -- repricing a plan must not rebill a sold booking.
+    plan_id: Optional[int] = None
     price_paise: int = Field(default=0, ge=0)
     is_paid: bool = False
     starts_at: datetime
-    ends_at: datetime
+    # Optional only when a plan is named: the plan's duration_days then sets it, which is
+    # the point of selling by package rather than by date.
+    ends_at: Optional[datetime] = None
     notes: Optional[str] = None
     targets: List[PlacementTargetRef] = []
 
     @model_validator(mode="after")
     def valid_window(self):
-        if self.ends_at <= self.starts_at:
+        if self.ends_at is None and self.plan_id is None:
+            raise ValueError("give an end date, or a plan to take the duration from")
+        if self.ends_at is not None and self.ends_at <= self.starts_at:
             raise ValueError("the end date must be after the start date")
+        if not self.advertiser and self.client_id is None:
+            raise ValueError("a booking needs either a client or an advertiser name")
         return self
 
 
 class PlacementUpdate(BaseModel):
     advertiser: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    client_id: Optional[int] = None
+    plan_id: Optional[int] = None
     price_paise: Optional[int] = Field(default=None, ge=0)
     is_paid: Optional[bool] = None
     starts_at: Optional[datetime] = None
@@ -857,6 +973,13 @@ class PlacementResponse(BaseModel):
     id: int
     content_id: int
     advertiser: str
+    client: Optional[ClientResponse] = None
+    plan: Optional[TenantPlanResponse] = None
+    extensions: List[ExtensionResponse] = []
+    # starts_at/ends_at stay as SOLD; this is where the run actually finishes once
+    # extensions are counted, and it is what the dashboard should show as "ends".
+    effective_ends_at: Optional[datetime] = None
+    total_price_paise: Optional[int] = None
     price_paise: int
     is_paid: bool
     starts_at: datetime

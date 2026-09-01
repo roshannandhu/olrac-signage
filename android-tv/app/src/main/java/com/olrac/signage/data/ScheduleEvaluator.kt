@@ -34,8 +34,10 @@ object ScheduleEvaluator {
 
     private fun parseDateTime(value: String?): LocalDateTime? {
         if (value.isNullOrBlank()) return null
-        return runCatching { LocalDateTime.parse(value) }.getOrElse {
-            runCatching { OffsetDateTime.parse(value).toLocalDateTime() }.getOrNull()
+        return runCatching {
+            OffsetDateTime.parse(value).atZoneSameInstant(java.time.ZoneId.systemDefault()).toLocalDateTime()
+        }.getOrElse {
+            runCatching { LocalDateTime.parse(value) }.getOrNull()
         }
     }
 

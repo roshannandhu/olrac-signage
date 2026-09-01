@@ -148,10 +148,17 @@ object ApiClient {
             .toASCIIString()
     }
 
-    fun resolveMediaUrl(context: Context, value: String): String =
-        rewriteLoopbackMediaUrl(value, effectiveBaseUrl(context))
+    fun resolveMediaUrl(context: Context, value: String): String {
+        if (value.startsWith("s3://") || value.startsWith("r2://")) {
+            return R2Presigner.presign(value)
+        }
+        return rewriteLoopbackMediaUrl(value, effectiveBaseUrl(context))
+    }
 
     fun rewriteLoopbackMediaUrl(mediaUrl: String, baseUrl: String): String {
+        if (mediaUrl.startsWith("s3://") || mediaUrl.startsWith("r2://")) {
+            return R2Presigner.presign(mediaUrl)
+        }
         val media = try {
             URI(mediaUrl)
         } catch (_: Exception) {

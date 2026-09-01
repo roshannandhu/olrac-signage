@@ -32,4 +32,7 @@ data class PlaylistItemEntity(
     val rotation: Int = 0,
     // "contain" letterboxes the whole frame, "cover" fills the panel and crops.
     val fitMode: String = "contain"
-)
+) {
+    val isVideo: Boolean get() = type.startsWith("video", ignoreCase = true)
+    val isImage: Boolean get() = type.startsWith("image", ignoreCase = true)
+}

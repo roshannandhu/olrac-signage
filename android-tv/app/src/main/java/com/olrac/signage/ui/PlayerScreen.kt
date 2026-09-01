@@ -175,7 +175,7 @@ private fun DualSurfacePlayer(
     val transitionSpec = TransitionSpecResolver.resolve(currentItem)
 
     LaunchedEffect(currentItem.id, nextItem.id, currentSlot, playbackEpoch) {
-        preparePlayer(players[currentSlot], currentItem, autoPlay = currentItem.type == "video")
+        preparePlayer(players[currentSlot], currentItem, autoPlay = currentItem.isVideo)
         if (playlist.size > 1) {
             preparePlayer(players[incomingSlot], nextItem, autoPlay = false)
         }
@@ -190,10 +190,6 @@ private fun DualSurfacePlayer(
     ) {
         val durationMs = PlayCompletion.durationMs(startedAtMs, finishedAtMs)
         val prefs = context.getSharedPreferences("signage_prefs", android.content.Context.MODE_PRIVATE)
-        // null, not 0, when the device has never reached the server. The upload uses that
-        // to tell "corrected with a known offset" apart from "never corrected at all", and
-        // repairs only the latter. Storing 0 made the two indistinguishable, so a week of
-        // plays from a clock-skewed TV kept its wrong hours forever.
         val offset = if (prefs.contains("server_time_offset_ms")) {
             prefs.getLong("server_time_offset_ms", 0L)
         } else {
@@ -204,24 +200,16 @@ private fun DualSurfacePlayer(
             timeZone = java.util.TimeZone.getTimeZone("UTC")
         }
 
-        // A span that cannot be true tells us nothing about delivery, so it must not be
-        // allowed to claim a complete play.
         val effectiveReason = if (
             reason == PlayEndReason.PLAYED_TO_END &&
             !PlayCompletion.isPlausible(startedAtMs, finishedAtMs)
         ) PlayEndReason.INTERRUPTED else reason
 
-        // 1970 Clock Drift Edge Case: If the TV lost power offline and has no RTC battery, 
-        // it resets to Jan 1 1970. Day-parting is broken and we cannot mathematically prove 
-        // when this ad played if NTP syncs before the next heartbeat. Flag it so it isn't billed.
-        val isTimeValid = startedAtMs > 1704067200000L // Jan 1, 2024
+        val isTimeValid = startedAtMs > 1704067200000L
         val finalError = if (!isTimeValid && error == null) "time_invalid_rtc_reset" else error
         
-        // Also discard any stale offset from a previous timeline if the clock reset.
         val effectiveOffset = if (isTimeValid) offset else null
 
-        // Same id the checkpoint minted for this play, so a crash between this insert and
-        // the checkpoint being cleared cannot produce a second record for it.
         val eventId = prefs.getString(CHECKPOINT_EVENT_ID, null)
             ?.takeIf { prefs.getInt(CHECKPOINT_ITEM_ID, -1) == item.id }
             ?: java.util.UUID.randomUUID().toString()
@@ -230,7 +218,7 @@ private fun DualSurfacePlayer(
             eventId = eventId,
             mediaId = item.contentId.takeIf { it > 0 },
             playlistId = item.playlistId,
-            campaignId = null, // Derived server side from the playlist; see routers/screens.py
+            campaignId = null,
             deviceStartedAt = formatter.format(java.util.Date(startedAtMs)),
             deviceFinishedAt = formatter.format(java.util.Date(finishedAtMs)),
             correctedStartedAt = formatter.format(java.util.Date(startedAtMs + (effectiveOffset ?: 0L))),
@@ -245,7 +233,6 @@ private fun DualSurfacePlayer(
         dao.insert(event)
         clearPlayCheckpoint(context)
 
-        // Trigger immediate background upload so dashboard play counters update in real time
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             try {
                 com.olrac.signage.service.ProofOfPlayReporter.flush(context)
@@ -253,8 +240,6 @@ private fun DualSurfacePlayer(
         }
         com.olrac.signage.service.ProofOfPlayWorker.enqueueNow(context)
 
-        // Keep the queue bounded. Only ever trims when the backlog is already enormous,
-        // which the drain loop in ProofOfPlayWorker now makes very unlikely.
         if (playsSinceQueueCheck.incrementAndGet() >= QUEUE_CHECK_EVERY) {
             playsSinceQueueCheck.set(0)
             trimQueueIfOversized(dao)
@@ -268,7 +253,7 @@ private fun DualSurfacePlayer(
             val outgoingSlot = currentSlot
             val outgoingPlayer = players[outgoingSlot]
 
-            if (outgoingItem.type == "video") {
+            if (outgoingItem.isVideo) {
                 outgoingPlayer.videoDecoderCounters?.let { counters ->
                     counters.ensureUpdated()
                     val baseline = visiblePlaybackBaselines[outgoingPlayer] ?: DecoderSnapshot(0, 0)
@@ -291,7 +276,7 @@ private fun DualSurfacePlayer(
             clearPlayCheckpoint(context)
 
             if (playlist.size == 1) {
-                if (outgoingItem.type == "video") {
+                if (outgoingItem.isVideo) {
                     outgoingPlayer.seekTo(0)
                     outgoingPlayer.playWhenReady = true
                 }
@@ -305,9 +290,9 @@ private fun DualSurfacePlayer(
             val targetPlayer = players[targetSlot]
             preparePlayer(targetPlayer, targetItem, autoPlay = false)
 
-            val targetReady = when (targetItem.type) {
-                "video" -> awaitPlayerReady(targetPlayer)
-                "image" -> isImageDecodable(targetItem.localPath)
+            val targetReady = when {
+                targetItem.isVideo -> awaitPlayerReady(targetPlayer)
+                targetItem.isImage -> isImageDecodable(targetItem.localPath)
                 else -> false
             }
             if (!targetReady) {
@@ -315,8 +300,6 @@ private fun DualSurfacePlayer(
                     targetItem.id,
                     "Unable to prepare ${targetItem.type} item ${targetItem.id}; cached media is missing or corrupt"
                 )
-                // Retain the last good frame and skip the bad item instead of
-                // exposing a black surface.
                 val fallbackIndex = (targetIndex + 1) % playlist.size
                 if (fallbackIndex == activeIndex) {
                     playbackEpoch++
@@ -328,7 +311,7 @@ private fun DualSurfacePlayer(
                 return@withLock
             }
 
-            if (targetItem.type == "video") {
+            if (targetItem.isVideo) {
                 targetPlayer.volume = 0f
                 targetPlayer.playWhenReady = true
             }
@@ -348,21 +331,20 @@ private fun DualSurfacePlayer(
             outgoingPlayer.playWhenReady = false
             outgoingPlayer.volume = 0f
             targetPlayer.volume = 1f
+            currentSlot = targetSlot
             currentIndex = targetIndex
             currentItemId = targetItem.id
-            currentSlot = targetSlot
             transitionProgress.snapTo(0f)
+            playbackEpoch++
         }
     }
 
-    val supervisor = remember(players) {
+    val supervisor = remember(playlist, players, context) {
         com.olrac.signage.service.PlayerSupervisor(
             context = context,
             players = players,
             telemetry = telemetry,
             currentItemId = { currentItemId },
-            // The supervisor only skips an item it could not play, so this must never be
-            // recorded as a completed play -- that is the case the advertiser is paying for.
             onSkipItem = { scope.launch { advance(PlayEndReason.SKIPPED) } },
             onReloadPlaylist = onReloadPlaylist
         )
@@ -374,7 +356,7 @@ private fun DualSurfacePlayer(
     }
 
     LaunchedEffect(currentItem.id, currentSlot, playbackEpoch, transitionSpec) {
-        if (currentItem.type == "image") {
+        if (currentItem.isImage) {
             if (!isImageDecodable(currentItem.localPath)) {
                 telemetry.reportError(
                     currentItem.id,
@@ -388,8 +370,6 @@ private fun DualSurfacePlayer(
             if (currentItemStartedAtMs == null) currentItemStartedAtMs = System.currentTimeMillis()
             val imageStartedAt = currentItemStartedAtMs ?: System.currentTimeMillis()
             writePlayCheckpoint(context, currentItem, imageStartedAt, imageStartedAt)
-            // Slept in slices so the checkpoint stays current; a power cut then loses at
-            // most CHECKPOINT_INTERVAL_MS of the record rather than the whole play.
             val totalMs = currentItem.duration.coerceAtLeast(1) * 1_000L
             var elapsed = 0L
             while (elapsed < totalMs) {
@@ -399,7 +379,7 @@ private fun DualSurfacePlayer(
                 writePlayCheckpoint(context, currentItem, imageStartedAt, System.currentTimeMillis())
             }
             advance(PlayEndReason.PLAYED_TO_END)
-        } else if (currentItem.type == "video") {
+        } else if (currentItem.isVideo) {
             val activePlayer = players[currentSlot]
             val transitionLeadMs = if (transitionSpec.type == TransitionType.NONE) {
                 100L
@@ -659,7 +639,9 @@ private suspend fun isImageDecodable(localPath: String?): Boolean = withContext(
     if (!file.isFile || file.length() == 0L) return@withContext false
     val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeFile(file.absolutePath, options)
-    options.outWidth > 0 && options.outHeight > 0
+    if (options.outWidth > 0 && options.outHeight > 0) return@withContext true
+    // Fallback: If BitmapFactory had difficulty (e.g. animated/special formats), allow non-empty file
+    file.length() > 32L
 }
 
 @Composable
@@ -691,8 +673,8 @@ private fun PlaybackSurface(
             },
         contentAlignment = Alignment.Center
     ) {
-        when (item.type) {
-            "video" -> AndroidView(
+        when {
+            item.isVideo -> AndroidView(
                 factory = { context ->
                     (LayoutInflater.from(context).inflate(R.layout.player_surface, null, false) as PlayerView).apply {
                         setShutterBackgroundColor(AndroidColor.TRANSPARENT)
@@ -703,7 +685,7 @@ private fun PlaybackSurface(
                 modifier = Modifier.fillMaxSize()
             )
 
-            "image" -> AsyncImage(
+            item.isImage -> AsyncImage(
                 model = item.localPath?.let(::File),
                 contentDescription = "Signage image",
                 contentScale = imageScale,
@@ -759,7 +741,14 @@ private fun Modifier.transitionLayer(
 }
 
 private fun preparePlayer(player: ExoPlayer, item: PlaylistItemEntity, autoPlay: Boolean) {
-    if (item.type != "video" || item.localPath.isNullOrBlank()) {
+    if (!item.isVideo || item.localPath.isNullOrBlank()) {
+        player.pause()
+        player.clearMediaItems()
+        return
+    }
+
+    val file = File(item.localPath)
+    if (!file.isFile || file.length() == 0L) {
         player.pause()
         player.clearMediaItems()
         return
@@ -770,7 +759,7 @@ private fun preparePlayer(player: ExoPlayer, item: PlaylistItemEntity, autoPlay:
         player.setMediaItem(
             MediaItem.Builder()
                 .setMediaId(mediaId)
-                .setUri(Uri.fromFile(File(item.localPath)))
+                .setUri(Uri.fromFile(file))
                 .build()
         )
         player.prepare()

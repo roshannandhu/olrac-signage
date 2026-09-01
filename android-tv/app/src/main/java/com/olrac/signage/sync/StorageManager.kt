@@ -75,13 +75,6 @@ class StorageManager(private val context: Context) {
                     output.fd.sync()
                 }
 
-                if (expectedSizeBytes != null && expectedSizeBytes > 0 && downloadedBytes != expectedSizeBytes) {
-                    Log.e(TAG, "Size mismatch for ${finalFile.name}: expected $expectedSizeBytes, got $downloadedBytes")
-                    // Do NOT delete the temporary file if it's truncated, allow it to resume next sync
-                    if (downloadedBytes > expectedSizeBytes) temporaryFile.delete()
-                    return@withContext null
-                }
-
                 // Do a single SHA-256 pass over the completed file
                 val md = MessageDigest.getInstance("SHA-256")
                 temporaryFile.inputStream().use { input ->
@@ -93,9 +86,15 @@ class StorageManager(private val context: Context) {
                 }
                 
                 val actualSha256 = md.digest().joinToString("") { "%02x".format(it) }
-                if (!expectedSha256.isNullOrEmpty() && !actualSha256.equals(expectedSha256, ignoreCase = true)) {
-                    Log.e(TAG, "SHA256 mismatch for ${finalFile.name}: expected $expectedSha256, got $actualSha256")
-                    temporaryFile.delete()
+                if (!expectedSha256.isNullOrEmpty()) {
+                    if (!actualSha256.equals(expectedSha256, ignoreCase = true)) {
+                        Log.e(TAG, "SHA256 mismatch for ${finalFile.name}: expected $expectedSha256, got $actualSha256")
+                        temporaryFile.delete()
+                        return@withContext null
+                    }
+                } else if (expectedSizeBytes != null && expectedSizeBytes > 0 && downloadedBytes != expectedSizeBytes) {
+                    Log.e(TAG, "Size mismatch for ${finalFile.name}: expected $expectedSizeBytes, got $downloadedBytes")
+                    if (downloadedBytes > expectedSizeBytes) temporaryFile.delete()
                     return@withContext null
                 }
             }

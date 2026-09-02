@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -22,6 +22,11 @@ from .billing import ensure_billing_catalog
 from .database import Base, engine
 
 logger = logging.getLogger(__name__)
+
+# Set when the boot-time migration could not complete, so /api/health can report the
+# drift rather than leaving an operator to discover it from a column error later.
+SCHEMA_MIGRATION_ERROR: str | None = None
+
 
 def _ensure_schema() -> None:
     """Build the schema on a brand-new database, and stamp it so Alembic can take over.
@@ -78,8 +83,30 @@ def _ensure_schema() -> None:
             # Safe to run on every boot: `upgrade head` is a no-op when there is nothing to
             # apply, and the advisory lock below means a second worker waits rather than
             # running the same migration twice.
-            command.upgrade(config, "head")
-            logger.info("database migrated to head")
+            try:
+                command.upgrade(config, "head")
+                logger.info("database migrated to head")
+            except Exception as exc:  # noqa: BLE001
+                # Migrating on boot must never stop the service booting.
+                #
+                # Not hypothetical: the previous behaviour ran create_all on every start, so
+                # a database can already hold a table that a LATER migration also creates,
+                # and `upgrade head` then dies on "relation already exists" -- which is
+                # exactly what this repo's local development database does. Refusing to
+                # start there turns schema drift into a total outage, and on a restart of an
+                # already-live service that outage is immediate.
+                #
+                # So log it loudly, continue to create_all below (which still brings any
+                # missing TABLE into being), and report it on /api/health. What is lost is
+                # ALTERs -- new columns on existing tables -- which is precisely the state
+                # this code was in before the migration step was added.
+                global SCHEMA_MIGRATION_ERROR
+                SCHEMA_MIGRATION_ERROR = str(exc).splitlines()[0][:300]
+                logger.error(
+                    "SCHEMA MIGRATION FAILED -- this database may be missing columns this "
+                    "build expects. Run `alembic -c backend/alembic.ini upgrade head` "
+                    "against it by hand. Cause: %s", SCHEMA_MIGRATION_ERROR,
+                )
             # After the migrations, so a table a migration was supposed to create is created
             # by that migration and not silently conjured by create_all first -- which would
             # then make the migration fail on "relation already exists".
@@ -375,6 +402,57 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
+# How long a signature handed to a client stays good. Generous on purpose: a TV pulls a
+# several-hundred-megabyte advert in ranged requests over a long stretch, and a short
+# window expired mid-download and looked exactly like a corrupt file.
+_MEDIA_SIGNATURE_SECONDS = 6 * 3600
+# Strictly less than the above, so a redirect cached by a browser can never outlive the
+# URL it points at.
+_MEDIA_REDIRECT_CACHE_SECONDS = 60
+
+
+@app.get("/api/media/{key:path}")
+def serve_media(key: str):
+    """Stable URL for a stored object; signs the real one fresh on every request.
+
+    This is the only place a media signature is produced. `resolve_media_url` hands out
+    this path instead of a presigned URL precisely so that nothing downstream ever holds a
+    credential or an expiry: a URL cached by a browser, written into a TV's local database
+    months ago or embedded in a report still resolves, because the signing happens when the
+    link is followed rather than when it was handed out.
+
+    Deliberately unauthenticated. The key contains the upload's UUID, so knowing it is the
+    capability -- the same posture as the presigned URL this replaces, which was equally a
+    bearer link, and which the dashboard had no way to authenticate anyway because an
+    <img> tag cannot carry a token.
+    """
+    from .media_urls import get_s3_config, is_s3_enabled, s3_client
+
+    # The key goes straight into an S3 request, so it must not be able to climb out of the
+    # prefix it was minted under.
+    if not key or key.startswith("/") or ".." in key.split("/"):
+        raise HTTPException(status_code=404, detail="Not found")
+    if not is_s3_enabled():
+        # Local storage is served by the /uploads mount above and never reaches here, so
+        # this only fires for an s3:// row in a deployment that has since lost its
+        # credentials. Saying so beats a blank image.
+        raise HTTPException(status_code=503, detail="Object storage is not configured")
+
+    cfg = get_s3_config()
+    target = s3_client().generate_presigned_url(
+        "get_object",
+        Params={"Bucket": cfg["bucket"], "Key": key},
+        ExpiresIn=_MEDIA_SIGNATURE_SECONDS,
+    )
+    # 307 rather than 302: players re-issue their Range header on the follow-up, which is
+    # what lets a TV seek within a long advert.
+    return RedirectResponse(
+        target,
+        status_code=307,
+        headers={"Cache-Control": f"private, max-age={_MEDIA_REDIRECT_CACHE_SECONDS}"},
+    )
+
+
 @app.get("/api/health")
 async def health_check(db: Session = Depends(database.get_db)):
     """Liveness, plus WHICH database is actually behind it.
@@ -456,6 +534,8 @@ async def health_check(db: Session = Depends(database.get_db)):
         "redis": "connected" if redis_ok else "unreachable",
         "object_storage": "configured" if object_storage else "local disk (ephemeral)",
         "email": "configured" if email_ready else "not configured (SMTP_HOST/SMTP_FROM unset)",
+        # Absent when the boot migration succeeded, which is the normal case.
+        "schema_migration_error": SCHEMA_MIGRATION_ERROR,
         # Loud on purpose: these are the states where everything looks fine and either
         # every write is discarded on the next deploy, or nothing is being processed.
         "warning": "; ".join(warnings) or None,
@@ -492,59 +572,22 @@ app.include_router(enrollment_tokens.router, prefix="/api", tags=["enrollment-to
 app.include_router(provisioning.router, prefix="/api/provisioning", tags=["provisioning"])
 
 
-@app.get("/login", response_class=HTMLResponse)
-def login_page(request: Request, code: str = None):
-    return """
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>OLRAC SIGNAGE — Connect Display</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-        <style>
-            * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
-            body { background: #070A0F; color: #FFFFFF; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
-            .card { background: #0D131F; border: 1px solid #1E293B; border-radius: 20px; max-width: 440px; width: 100%; padding: 40px 32px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
-            .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px; background: rgba(104, 224, 160, 0.1); border: 1px solid rgba(104, 224, 160, 0.25); border-radius: 100px; color: #68E0A0; font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 20px; }
-            h1 { font-size: 24px; font-weight: 700; margin-bottom: 8px; color: #FFFFFF; }
-            p { font-size: 14px; color: #94A3B8; line-height: 1.5; margin-bottom: 28px; }
-            .google-btn { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; padding: 14px 20px; background: #FFFFFF; color: #1F1F1F; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; text-decoration: none; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
-            .google-btn:hover { background: #F1F3F4; transform: translateY(-1px); }
-            .success-state { display: none; margin-top: 20px; padding: 16px; background: rgba(104, 224, 160, 0.1); border-radius: 12px; border: 1px solid #68E0A0; color: #68E0A0; font-weight: 600; font-size: 14px; }
-        </style>
-    </head>
-    <body>
-        <div class="card">
-            <div class="badge">OLRAC SIGNAGE CLOUD</div>
-            <h1>Authorize Display</h1>
-            <p>Your TV screen is ready to join your workspace fleet. Sign in with Google to approve.</p>
-            <button class="google-btn" onclick="approveScreen()">
-                <svg width="20" height="20" viewBox="0 0 24 24">
-                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-                </svg>
-                Continue with Google
-            </button>
-            <div id="success" class="success-state">
-                ✓ Display Authorized! Returning to TV playback...
-            </div>
-        </div>
-        <script>
-            function approveScreen() {
-                document.getElementById('success').style.display = 'block';
-                setTimeout(() => {
-                    window.location.href = 'intent://com.olrac.signage#Intent;scheme=olrac;package=com.olrac.signage;end';
-                }, 1200);
-            }
-        </script>
-    </body>
-    </html>
-    """
+# The API used to serve its own hand-written /login page here: a dark "Authorize Display"
+# card with a Google button. It is gone, and was not converted, for two reasons.
+#
+# It was a mock. `approveScreen()` ran no OAuth at all -- it revealed a success message and
+# fired an intent: deep link 1.2 seconds later, so it told an installer their display was
+# authorised while authorising nothing. The real flow is google/oauth-url ->
+# google/oauth-callback in routers/screens.py, and nothing in the TV app or the dashboard
+# ever linked here.
+#
+# It also duplicated a route the Next.js dashboard already owns. Two /login pages on two
+# origins is a thing to explain forever.
+#
+# The OAuth landing pages in routers/screens.py stay server-rendered on purpose: Google
+# redirects the TV's browser to redirect_uri on THIS origin, so they cannot move to the
+# dashboard without breaking the sign-in this session already spent a long time fixing.
+
 
 @app.get("/")
 def read_root():

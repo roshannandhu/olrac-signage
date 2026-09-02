@@ -229,5 +229,59 @@ def test_media_selection():
 
     print("All media selection tests passed.")
 
+def test_a_constrained_panel_is_never_handed_the_master():
+    """Filtering everything out must not fall through to the biggest file we own.
+
+    When every rendition was ruled out, select_rendition returned None and the caller in
+    sync_tv then left content.file_url alone -- which is the ORIGINAL MASTER, the single
+    largest and heaviest asset in the library. So the panels least able to decode anything
+    were handed the hardest file, while one capable TV played the same advert fine. That is
+    the "it only plays on one television" report.
+
+    Four ordinary set-ups empty the list, none of them exotic.
+    """
+    from types import SimpleNamespace
+    from backend.media_selection import select_rendition
+
+    def rendition(width, height, codec="h264"):
+        return SimpleNamespace(width=width, height=height, codec=codec,
+                               file_size_bytes=width * height, sha256=f"{width}x{height}",
+                               file_url=f"s3://r-{width}x{height}.mp4")
+
+    def panel(**overrides):
+        base = dict(screen_width=1920, screen_height=1080, supported_video_codecs=["video/avc"],
+                    max_decode_width=1920, max_decode_height=1080, total_ram_mb=2048)
+        base.update(overrides)
+        return SimpleNamespace(**base)
+
+    cases = [
+        ("a 720p panel offered only 1080p and above",
+         [rendition(1920, 1080), rendition(2560, 1440)],
+         panel(screen_width=1280, screen_height=720, total_ram_mb=1024)),
+        ("a portrait panel offered only landscape renditions",
+         [rendition(1280, 720), rendition(1920, 1080)],
+         panel(screen_width=1080, screen_height=1920)),
+        ("a portrait advert taller than a landscape panel",
+         [rendition(1080, 1920)],
+         panel()),
+        ("a panel whose codec list matches nothing we hold",
+         [rendition(1280, 720), rendition(1920, 1080)],
+         panel(supported_video_codecs=["video/hevc"])),
+    ]
+    for label, renditions, screen in cases:
+        chosen = select_rendition(SimpleNamespace(renditions=renditions), screen)
+        assert chosen is not None, f"{label}: fell through to the full-size master"
+        # The smallest on offer: closer to playable than the master, which is larger still.
+        assert chosen.file_url == min(
+            renditions, key=lambda r: r.width * r.height
+        ).file_url, f"{label}: expected the smallest rendition, got {chosen.file_url}"
+
+    # A content with no renditions at all still has nothing to choose, and the caller's
+    # fallback to the original is correct there -- case 6 of the suite above depends on it.
+    assert select_rendition(SimpleNamespace(renditions=[]), panel()) is None
+    print("  ok  a constrained panel gets the smallest rendition, never the master")
+
+
 if __name__ == "__main__":
+    test_a_constrained_panel_is_never_handed_the_master()
     test_media_selection()

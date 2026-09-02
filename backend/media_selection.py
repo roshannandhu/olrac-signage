@@ -85,7 +85,19 @@ def select_rendition(content: schemas.ContentResponse, screen: models.Screen) ->
         ]
         
     if not valid_renditions:
-        return None
+        # Every rendition was filtered out -- but returning None here hands the caller
+        # `content.file_url`, which is the ORIGINAL MASTER: the single largest and heaviest
+        # file we hold. That is the exact opposite of what a panel this constrained needs,
+        # and it is why an advert played on one capable TV and on none of the others.
+        #
+        # Four ordinary situations empty the list: a 720p panel with only 1080p renditions,
+        # a portrait panel with landscape renditions, a portrait advert taller than a
+        # landscape panel, and a panel whose codec list matches nothing. In every one of
+        # them the smallest rendition is closer to playable than the master is.
+        #
+        # Same reasoning Rule 2 already applies to a screen that has reported nothing about
+        # itself; it simply was not applied here.
+        return min(content.renditions, key=lambda r: (r.width or 0) * (r.height or 0))
         
     # Sort remaining renditions by resolution/size (pick the largest remaining)
     # We can use file_size_bytes or width * height as a proxy for "largest"

@@ -104,10 +104,11 @@ def generate_video_thumbnail(video_path: str, stem: str, prefix: str) -> str | N
 
 
 def serialize_content(content: models.Content) -> schemas.ContentResponse:
+    # ContentResponse.absolutise_urls already resolved file_url and thumbnail; doing it
+    # again here was a no-op that made it look like there were two places media URLs got
+    # built.
     payload = schemas.ContentResponse.model_validate(content)
-    payload.file_url = resolve_media_url(payload.file_url) or payload.file_url
-    payload.thumbnail = resolve_media_url(payload.thumbnail)
-    
+
     # 1:1 Ad & Client enriched metadata
     placements = getattr(content, "ad_placements", [])
     if placements:

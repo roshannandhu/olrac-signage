@@ -18,13 +18,13 @@ import os
 import pathlib
 import shutil
 from typing import Optional
+from urllib.parse import unquote
 
 from .media_urls import is_s3_enabled, get_s3_config
 
 UPLOAD_DIR = os.path.join(
     pathlib.Path(__file__).parent.parent.absolute(), "uploads"
 )
-S3_BUCKET = os.getenv("S3_BUCKET_NAME", "olrac-media")
 
 
 def _client():
@@ -76,6 +76,57 @@ def fetch_to(stored_url: str, destination: pathlib.Path) -> pathlib.Path:
         raise FileNotFoundError(f"File not found: {source}")
     shutil.copy2(source, destination)
     return destination
+
+
+def read(location: str | None) -> Optional[bytes]:
+    """Bytes of a stored object, read straight from wherever it lives. Never raises.
+
+    Accepts a stored location ("s3://<key>", "/uploads/<key>") or any of the public URLs
+    `resolve_media_url` builds from one, and returns None for anything else -- a genuinely
+    external URL, or an object that is not there.
+
+    This exists for the server-side renderers. The PDF reports used to fetch their own
+    public URL over HTTP for every image on a page they were already rendering: the API
+    called itself back through the load balancer, which needs the deployment to be publicly
+    reachable from inside its own container, costs a round trip per image under a 10s
+    timeout, and now would mean following a redirect just to reach bytes this process can
+    already read. A report is generated with the same credentials that wrote the object.
+    """
+    if not location:
+        return None
+
+    path = location.split("?", 1)[0]
+    if "://" in path and not path.startswith("s3://"):
+        # Drop scheme and host, keeping the path. A URL with no path is not one of ours.
+        rest = path.split("://", 1)[1]
+        if "/" not in rest:
+            return None
+        path = rest[rest.index("/"):]
+
+    if "/uploads/" in path:
+        local = pathlib.Path(UPLOAD_DIR) / unquote(path.split("/uploads/", 1)[1])
+        root = pathlib.Path(UPLOAD_DIR).resolve()
+        try:
+            if local.resolve().is_relative_to(root) and local.is_file():
+                return local.read_bytes() or None
+        except (OSError, ValueError):
+            pass
+        return None
+
+    if path.startswith("s3://"):
+        key = path[len("s3://"):]
+    elif "/api/media/" in path:
+        key = path.split("/api/media/", 1)[1]
+    else:
+        return None
+
+    if not key or not is_s3_enabled():
+        return None
+    try:
+        cfg = get_s3_config()
+        return _client().get_object(Bucket=cfg["bucket"], Key=unquote(key))["Body"].read() or None
+    except Exception:
+        return None
 
 
 def store(local_path: pathlib.Path, key: str, content_type: Optional[str] = None) -> str:

@@ -47,13 +47,11 @@ def _restore_process_globals():
     file that reaches for a global without thinking about the one after it.
     """
     saved_upload_dir = media_storage.UPLOAD_DIR
-    saved_bucket = media_storage.S3_BUCKET
     saved_env = {name: os.environ.get(name) for name in _LEAKY_ENV}
     try:
         yield
     finally:
         media_storage.UPLOAD_DIR = saved_upload_dir
-        media_storage.S3_BUCKET = saved_bucket
         for name, value in saved_env.items():
             if value is None:
                 os.environ.pop(name, None)
@@ -137,9 +135,15 @@ def s3():
     os.environ["AWS_ACCESS_KEY_ID"] = "testing"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
     os.environ["AWS_REGION"] = "us-east-1"
-    os.environ["S3_ENDPOINT_URL"] = ""
+    # Named explicitly, because moto only intercepts an AWS-shaped endpoint. This used to
+    # be "" to mean "no custom endpoint", which reached boto3 as an empty endpoint_url and
+    # raised ValueError -- the failure was invisible because moto was not installed, so
+    # every object-storage check in this file silently skipped instead of running.
+    os.environ["S3_ENDPOINT_URL"] = "https://s3.us-east-1.amazonaws.com"
+    # The bucket comes from get_s3_config() alone now. media_storage used to shadow it
+    # with its own module global defaulting to "olrac-media" -- a second, different
+    # answer to "which bucket?" that nothing read but everything could have.
     os.environ["S3_BUCKET_NAME"] = BUCKET
-    media_storage.S3_BUCKET = BUCKET
 
     with moto.mock_aws():
         boto3.client("s3", region_name="us-east-1").create_bucket(Bucket=BUCKET)
@@ -187,3 +191,74 @@ def test_s3_fetch_creates_missing_parent_directories(s3):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# --- read: what the server-side renderers use -----------------------------------------
+#
+# The PDF reports fetched their own public URL over HTTP for every image on the page. That
+# needed the deployment to be reachable from inside its own container, cost a round trip
+# per image, and once media URLs became a redirect it cost two -- all to reach bytes this
+# process can read directly with the credentials it already wrote them with.
+
+
+def test_read_local_file():
+    with tempfile.TemporaryDirectory() as tmp:
+        local_mode(tmp)
+        source = Path(tmp) / "org-7" / "logo.png"
+        source.parent.mkdir(parents=True)
+        source.write_bytes(b"png-bytes")
+
+        assert media_storage.read("/uploads/org-7/logo.png") == b"png-bytes"
+        # The absolute form resolve_media_url hands out must work too -- that is what the
+        # report actually receives.
+        assert media_storage.read("https://api.example.com/uploads/org-7/logo.png") == b"png-bytes"
+        assert media_storage.read("/uploads/org-7/missing.png") is None
+
+
+def test_read_refuses_to_climb_out_of_the_uploads_root():
+    with tempfile.TemporaryDirectory() as tmp:
+        local_mode(tmp)
+        secret = Path(tmp).parent / "outside.txt"
+        secret.write_bytes(b"not yours")
+        try:
+            assert media_storage.read(f"/uploads/../{secret.name}") is None
+        finally:
+            secret.unlink()
+
+
+def test_read_object_storage_by_key_and_by_public_url(s3):
+    s3.put_object(Bucket=BUCKET, Key="org-7/creative.jpg", Body=b"jpeg-bytes")
+
+    assert media_storage.read("s3://org-7/creative.jpg") == b"jpeg-bytes"
+    # The public URL resolve_media_url builds is what reaches the report, so read has to
+    # accept it without going near the network.
+    from backend.media_urls import resolve_media_url
+
+    assert media_storage.read(resolve_media_url("s3://org-7/creative.jpg")) == b"jpeg-bytes"
+    assert media_storage.read("s3://org-7/gone.jpg") is None
+
+
+def test_read_declines_anything_that_is_not_ours():
+    """So _fetch_image can tell "not mine, try HTTP" from "mine, and missing"."""
+    for foreign in ("https://cdn.example.com/logo.png", "https://example.com", "gopher://x", "", None):
+        assert media_storage.read(foreign) is None
+
+
+def test_the_report_reads_the_creative_without_any_http(s3, monkeypatch):
+    """The whole point: a report renders its images with the network unavailable."""
+    pytest.importorskip("reportlab", reason="the PDF reports need reportlab")
+    from backend.media_urls import resolve_media_url
+    from backend.reports import booking_report
+
+    s3.put_object(Bucket=BUCKET, Key="org-7/creative.jpg", Body=b"jpeg-bytes")
+
+    import urllib.request
+
+    def explode(*_args, **_kwargs):
+        raise AssertionError("the report went to the network for an image it already owns")
+
+    monkeypatch.setattr(urllib.request, "urlopen", explode)
+
+    assert booking_report._fetch_image(resolve_media_url("s3://org-7/creative.jpg")) == b"jpeg-bytes"
+    # A genuinely external image is still allowed to try HTTP -- and still fails soft.
+    assert booking_report._fetch_image("https://cdn.example.com/logo.png") is None

@@ -23,14 +23,17 @@ if (typeof window !== 'undefined') {
 
 export const WS_BASE = API_BASE.replace(/^http/, 'ws')
 
-import { presignR2Url } from './r2-signer'
-
 export function resolveMediaUrl(urlStr: string | null | undefined): string | undefined {
   if (!urlStr) return undefined
+  // Locations are stored without an origin so one row works from every deployment; point
+  // them at whichever API this build talks to. Nothing is signed here any more: the API
+  // hands out a stable /api/media/<key> that signs the real URL when it is followed, so
+  // the browser no longer needs -- and no longer ships -- the bucket credentials.
   if (urlStr.startsWith('s3://') || urlStr.startsWith('r2://')) {
-    return presignR2Url(urlStr)
+    const cleanKey = urlStr.replace(/^(s3|r2):\/\//, '').replace(/^\/+/, '')
+    return `${API_HOST}/api/media/${encodeURI(cleanKey)}`
   }
-  if (urlStr.startsWith('/uploads/')) {
+  if (urlStr.startsWith('/uploads/') || urlStr.startsWith('/api/')) {
     return `${API_HOST}${urlStr}`
   }
   if (urlStr.startsWith('uploads/')) {
@@ -38,7 +41,9 @@ export function resolveMediaUrl(urlStr: string | null | undefined): string | und
   }
   try {
     const url = new URL(urlStr)
-    if (url.pathname.startsWith('/uploads/')) {
+    // Re-home an absolute URL that names a different deployment of the same API, so a
+    // stale RENDER_EXTERNAL_URL in a response cannot strand a local or preview build.
+    if (url.pathname.startsWith('/uploads/') || url.pathname.startsWith('/api/media/')) {
       return `${API_HOST}${url.pathname}${url.search}`
     }
   } catch {}

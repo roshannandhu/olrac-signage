@@ -21,7 +21,6 @@
     "@types/qrcode.react": "^1.0.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "js-sha256": "^1.0.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.17.0",
     "next": "^16.2.11",

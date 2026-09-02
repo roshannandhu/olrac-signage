@@ -29,6 +29,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
+from .. import media_storage
 from ..maps import fetch_static_map
 
 logger = logging.getLogger(__name__)
@@ -114,11 +115,23 @@ def _safe(value) -> str:
 def _fetch_image(url: str | None) -> bytes | None:
     """The creative's bytes, or None. Never raises.
 
+    Anything this deployment stores is read straight out of storage. Only a genuinely
+    external URL falls through to HTTP -- fetching our own public URL from inside the
+    process that serves it was a round trip through the load balancer per image, and once
+    media URLs became a redirect it was two.
+
     Mirrors maps.fetch_static_map: an unreachable image degrades the page, it does not fail
     the report. Relevant in practice -- when object storage is unconfigured the uploads sit
-    on an ephemeral disk and every thumbnail URL 404s after a redeploy.
+    on an ephemeral disk and their bytes are gone after a redeploy.
     """
-    if not url or not url.startswith(("http://", "https://")):
+    if not url:
+        return None
+
+    stored = media_storage.read(url)
+    if stored is not None:
+        return stored
+
+    if not url.startswith(("http://", "https://")):
         return None
     try:
         import urllib.request

@@ -318,9 +318,11 @@ def test_media_pipeline_on_object_storage():
     os.environ["AWS_ACCESS_KEY_ID"] = "testing"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
     os.environ["AWS_REGION"] = "us-east-1"
-    os.environ["S3_ENDPOINT_URL"] = ""
+    # Named explicitly, because moto only intercepts an AWS-shaped endpoint. "" meant "no
+    # custom endpoint" and reached boto3 as an empty endpoint_url, which is now treated as
+    # unset and falls back to the configured R2 host -- a host moto does not answer for.
+    os.environ["S3_ENDPOINT_URL"] = "https://s3.us-east-1.amazonaws.com"
     os.environ["S3_BUCKET_NAME"] = bucket
-    media_storage.S3_BUCKET = bucket
 
     import backend.worker
     original_session_local = backend.worker.SessionLocal

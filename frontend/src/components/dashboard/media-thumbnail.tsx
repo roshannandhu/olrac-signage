@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
 import { ImageIcon, Video } from 'lucide-react'
 import type { ContentItem } from '@/lib/types'
 import { resolveMediaUrl } from '@/lib/api'
@@ -9,17 +8,28 @@ import { resolveMediaUrl } from '@/lib/api'
 export function MediaThumbnail({ item, className = '' }: { item: ContentItem; className?: string }) {
   const [hasError, setHasError] = useState(false)
   
-  const rawImageCandidate = item.thumbnail || (item.type === 'image' ? item.file_url : null)
-  const isVideoFile = rawImageCandidate?.toLowerCase().includes('.mp4') || 
-                       rawImageCandidate?.toLowerCase().includes('.mov') || 
-                       rawImageCandidate?.toLowerCase().includes('.webm')
+  // `type` is what the row actually says it is. This used to sniff the URL for ".mp4",
+  // which broke the moment the URL grew a query string or a proxy path -- a video whose
+  // signed URL happened not to contain the extension was handed to an <img>, and the
+  // failure was indistinguishable from a missing file.
+  //
+  // A video whose poster frame could not be generated (no ffmpeg on the box) has its
+  // thumbnail set to the video itself, so only a thumbnail that DIFFERS from the source is
+  // a real poster image.
+  const posterSource =
+    item.type === 'image'
+      ? item.thumbnail || item.file_url
+      : item.thumbnail && item.thumbnail !== item.file_url
+        ? item.thumbnail
+        : null
 
-  const resolvedImage = !hasError && !isVideoFile ? resolveMediaUrl(rawImageCandidate) : null
-  const isHttpImage = resolvedImage && (resolvedImage.startsWith('http://') || resolvedImage.startsWith('https://') || resolvedImage.startsWith('/'))
+  const resolvedImage = hasError ? undefined : resolveMediaUrl(posterSource)
+  const isHttpImage = Boolean(resolvedImage && /^(https?:\/\/|\/)/.test(resolvedImage))
 
   const resolvedVideo = resolveMediaUrl(item.file_url)
-  const isHttpVideo = resolvedVideo && (resolvedVideo.startsWith('http://') || resolvedVideo.startsWith('https://') || resolvedVideo.startsWith('/'))
-  const videoPosterSource = isHttpVideo ? `${resolvedVideo}${resolvedVideo.includes('#') ? '' : '#t=0.001'}` : undefined
+  const isHttpVideo = Boolean(resolvedVideo && /^(https?:\/\/|\/)/.test(resolvedVideo))
+  // The fragment makes the player paint its first frame instead of a black rectangle.
+  const videoPosterSource = isHttpVideo ? `${resolvedVideo}${resolvedVideo!.includes('#') ? '' : '#t=0.001'}` : undefined
 
   return (
     <div className={`bg-muted relative overflow-hidden ${className}`}>

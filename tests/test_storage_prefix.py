@@ -126,3 +126,78 @@ if __name__ == "__main__":
             function()
             print(f"  ok  {name}")
     print("storage prefix: all checks passed")
+
+
+# --- Media URLs -----------------------------------------------------------------------
+#
+# Blank thumbnails were a recurring bug for one reason: resolve_media_url handed out a
+# presigned R2 URL, so every consumer held a credential-signed link with an expiry baked
+# in, and the dashboard, the TV app and the JS and Kotlin signers each had to independently
+# agree on bucket, endpoint, region, prefix and clock. These pin the property that makes
+# that whole class of failure impossible -- the URL is stable, unsigned, and never expires.
+
+import os  # noqa: E402
+from urllib.parse import unquote, urlparse  # noqa: E402
+
+import pytest  # noqa: E402
+
+from backend.media_urls import media_base_url, resolve_media_url  # noqa: E402
+
+
+def test_object_storage_key_resolves_to_our_own_api():
+    url = resolve_media_url("s3://org-4/9f1c-2d.jpg")
+    assert url == f"{media_base_url()}/api/media/org-4/9f1c-2d.jpg"
+
+
+def test_the_url_carries_no_signature_and_no_expiry():
+    """The whole point. A signed URL is a time bomb in every cache that holds it."""
+    url = resolve_media_url("s3://org-4/9f1c-2d.jpg")
+    for leak in ("X-Amz-Signature", "X-Amz-Expires", "X-Amz-Credential", "AWSAccessKeyId"):
+        assert leak not in url, f"{leak} is back in a media URL; it will expire and 403"
+
+
+def test_the_same_key_always_resolves_to_the_same_url():
+    """Stability is what lets a browser, a report and a TV's local database cache it."""
+    assert resolve_media_url("s3://org-4/a.jpg") == resolve_media_url("s3://org-4/a.jpg")
+
+
+def test_resolution_needs_no_credentials():
+    """It is pure string work now, so it cannot fail its way into a blank thumbnail.
+
+    It used to call boto3 and swallow any exception by returning the raw "s3://..." value,
+    which reached the browser as an unusable src and rendered as the same grey placeholder
+    as a genuinely missing file.
+    """
+    saved = {k: os.environ.get(k) for k in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY")}
+    os.environ["AWS_ACCESS_KEY_ID"] = "mock"
+    os.environ["AWS_SECRET_ACCESS_KEY"] = ""
+    try:
+        assert resolve_media_url("s3://org-4/a.jpg").startswith("http")
+    finally:
+        for key, value in saved.items():
+            os.environ.pop(key, None) if value is None else os.environ.__setitem__(key, value)
+
+
+def test_the_key_survives_the_round_trip():
+    """What the route reads back out of the path must be the key that went in."""
+    key = "org-4/a b+c&d.jpg"
+    path = urlparse(resolve_media_url(f"s3://{key}")).path
+    assert unquote(path.removeprefix("/api/media/")) == key
+
+
+def test_local_uploads_are_untouched():
+    assert resolve_media_url("/uploads/org-4/a.jpg") == f"{media_base_url()}/uploads/org-4/a.jpg"
+    assert resolve_media_url("https://cdn.example.com/a.jpg") == "https://cdn.example.com/a.jpg"
+    assert resolve_media_url(None) is None
+
+
+def test_the_media_route_refuses_to_climb_out_of_the_bucket():
+    """The path segment reaches S3 as a key, so it is a trust boundary."""
+    from fastapi import HTTPException
+
+    from backend.main import serve_media
+
+    for hostile in ("../secrets/dump.sql", "org-4/../../etc/passwd", "/absolute", ""):
+        with pytest.raises(HTTPException) as raised:
+            serve_media(hostile)
+        assert raised.value.status_code == 404, f"{hostile!r} was not rejected"

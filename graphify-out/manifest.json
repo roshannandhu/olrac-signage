@@ -30,14 +30,14 @@
     "semantic_hash": "95cba215c985980492126d8c3b73c70a"
   },
   "android-tv/app/src/main/java/com/olrac/signage/data/PlaylistItemEntity.kt": {
-    "mtime": 1786971089.6809926,
-    "ast_hash": "9685caa3bbacb10e22bbeefd419af698",
+    "mtime": 1788285605.9967186,
+    "ast_hash": "5ca3e343d27dc9d487990b32b744fc87",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/data/ScheduleEvaluator.kt": {
-    "mtime": 1786039015.455316,
-    "ast_hash": "4b30bdd38ad0ebcf28132467a5900fe3",
-    "semantic_hash": "4b30bdd38ad0ebcf28132467a5900fe3"
+    "mtime": 1788285614.465619,
+    "ast_hash": "bfb98dcb130e72c6a7a3a3b319076f8e",
+    "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/data/TransitionSpec.kt": {
     "mtime": 1786045296.6050456,
@@ -45,8 +45,8 @@
     "semantic_hash": "c4fa7b81473768c706f29aae69472db4"
   },
   "android-tv/app/src/main/java/com/olrac/signage/network/ApiClient.kt": {
-    "mtime": 1788192301.3565104,
-    "ast_hash": "a1c90c51fabd016e1dd8ac45804264fe",
+    "mtime": 1788285597.2642455,
+    "ast_hash": "bdbde112fa4f64d7d8e234c02e373512",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/network/ApiService.kt": {
@@ -95,8 +95,8 @@
     "semantic_hash": "102be328260c5deb369b740ba62e5b32"
   },
   "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt": {
-    "mtime": 1788198635.2625823,
-    "ast_hash": "d44e8c69848dbe803f0a284d0a255187",
+    "mtime": 1788285667.194366,
+    "ast_hash": "247533762f5c4976f3519122d36e4b51",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerViewModel.kt": {
@@ -555,8 +555,8 @@
     "semantic_hash": "a46cbb378e9a324f25cdf50e0bc98eaa"
   },
   "android-tv/app/src/main/java/com/olrac/signage/sync/StorageManager.kt": {
-    "mtime": 1788192314.3903546,
-    "ast_hash": "006b59c45a53328d67f47b2df3501592",
+    "mtime": 1788285676.8549297,
+    "ast_hash": "415956b147f1403ae11b943d26a98de8",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/sync/UpdateManager.kt": {
@@ -1712,6 +1712,11 @@
   "frontend/src/components/dashboard/edit-client-ad-modal.tsx": {
     "mtime": 1788278495.939659,
     "ast_hash": "9bd4e5fc7324ef618eff618e7a4cdf05",
+    "semantic_hash": ""
+  },
+  "android-tv/app/src/main/java/com/olrac/signage/network/R2Presigner.kt": {
+    "mtime": 1788285588.5500774,
+    "ast_hash": "d46bdf63a6342441cbe700c542e95d8b",
     "semantic_hash": ""
   }
 }

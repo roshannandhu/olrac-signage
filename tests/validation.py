@@ -91,8 +91,14 @@ def run() -> None:
         ).status_code == 201
         assert client.post(f"/api/screens/{screen_id}/assign/{playlist_id}", headers=headers).status_code == 200
         sync = client.get("/api/screens/r2-test-tv/sync")
-        signed_url = sync.json()["playlist"]["items"][0]["content"]["file_url"]
-        assert signed_url.startswith("http") and ("Signature=" in signed_url or "X-Amz-Signature=" in signed_url)
+        media_url = sync.json()["playlist"]["items"][0]["content"]["file_url"]
+        # Absolute and fetchable, and deliberately NOT signed. A TV caches this URL in its
+        # local database; when it was a presigned R2 link the cached copy expired and
+        # playback failed with an opaque 403, so the contract is now a stable /api/media
+        # path that signs the real URL at the moment it is followed.
+        assert media_url.startswith("http")
+        assert "/api/media/" in media_url
+        assert "X-Amz-Signature" not in media_url and "X-Amz-Expires" not in media_url
 
         expired = client.post("/api/screens/register", json={"device_id": "expired-test-tv"})
         db = database.SessionLocal()

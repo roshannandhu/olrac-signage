@@ -54,6 +54,14 @@ const toolLinks = [
 ]
 
 const accountLinks = [
+  // The page exists, renders and has a search box; it just had no link, so it was
+  // reachable only by typing the URL. 7a60dd2 moved client creation inline into the upload
+  // flow and removed this entry, but left the route and the Contact import behind -- an
+  // orphaned page rather than a deleted one. Clients are still worth managing somewhere:
+  // the campaign report is addressed from this record, and emailing one needs the address
+  // kept up to date after the ad was booked. Delete app/dashboard/clients if that is not
+  // wanted, rather than leaving it unreachable.
+  { href: '/dashboard/clients', label: 'Clients', icon: Contact, ownerOnly: false },
   { href: '/dashboard/plans', label: 'Plans', icon: Tags, ownerOnly: false },
   { href: '/dashboard/branding', label: 'Branding', icon: Palette, ownerOnly: false },
   { href: '/dashboard/team', label: 'Team', icon: Users, ownerOnly: true },

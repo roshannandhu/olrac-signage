@@ -107,7 +107,9 @@ export default function AdminTenantsPage() {
           <p className="p-10 text-center text-sm text-white/40">Loading…</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            {/* min-w keeps the eight columns readable and lets the wrapper scroll, rather
+                than squeezing them into 375px until every cell wraps to three lines. */}
+            <table className="w-full min-w-[880px] text-sm">
               <thead className="border-b border-white/5 bg-white/[0.02] text-xs uppercase tracking-wider text-white/30">
                 <tr>
                   <th className="p-4 pl-5 text-left">Workspace</th>

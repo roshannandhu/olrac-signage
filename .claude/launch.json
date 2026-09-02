@@ -3,19 +3,37 @@
   "configurations": [
     {
       "name": "backend",
-      "runtimeExecutable": "env",
+      "runtimeExecutable": "python",
       "runtimeArgs": [
-        "PYTHONPATH=/tmp/claude-1000/-media-roshan-New-Volume1-IMP-projects-OLRAC-SIGNAGE/bba11560-d86b-46f0-adaf-7a9969c659f5/scratchpad/deps",
-        "python3", "-m", "uvicorn", "backend.main:app",
-        "--host", "0.0.0.0", "--port", "8010"
+        "-m",
+        "uvicorn",
+        "backend.main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8010"
       ],
-      "port": 8010
+      "port": 8010,
+      "env": {
+        "DATABASE_URL": "postgresql://olrac:olrac_password@localhost:5432/olrac_signage",
+        "SECRET_KEY": "local-dev-secret",
+        "AWS_ACCESS_KEY_ID": "mock",
+        "AWS_SECRET_ACCESS_KEY": "mock",
+        "REDIS_URL": "redis://localhost:6379",
+        "CORS_ORIGINS": "http://localhost:3000"
+      }
     },
     {
       "name": "frontend",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "./frontend", "run", "dev"],
-      "port": 3000
+      "runtimeArgs": [
+        "--prefix",
+        "./frontend",
+        "run",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true
     }
   ]
 }

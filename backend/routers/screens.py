@@ -511,7 +511,7 @@ def ensure_screen_quota(db: Session, organization_id: int, action: str) -> None:
     # practice, so the package limit was reached only by falling through, and a tenant with
     # no package at all was silently unlimited.
     limit = organization.effective_max_screens
-    if limit <= 0:
+    if limit is None:
         return  # no package and no override → deliberately unbounded
 
     if screen_count >= limit:

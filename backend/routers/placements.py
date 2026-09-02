@@ -296,7 +296,7 @@ def ensure_ad_slot_quota(scope: TenantScope) -> None:
     # ensure_screen_quota had a subtly different one that returned early on a 0 override --
     # two copies of one rule that disagreed.
     limit = org.effective_max_ad_slots
-    if limit <= 0:
+    if limit is None:
         return
 
     active_ads = scope.db.query(models.AdPlacement).filter(
@@ -726,9 +726,16 @@ def build_booking_report(scope: TenantScope, placement: models.AdPlacement) -> d
     screen_ids = _booking_screen_ids(scope, placement)
     generated_at = models.utcnow()
 
-    # Resolved, not raw: the column holds "s3://<key>" or "/uploads/<path>" and neither is
-    # fetchable as stored. Printing the raw value put a broken image in every report.
-    content_thumbnail = resolve_media_url(content.thumbnail) if content and content.thumbnail else None
+    # Resolved, not raw: the column holds "s3://<key>" or "/uploads/<path>".
+    # Fall back to file_url if thumbnail is unset so images always render.
+    raw_thumb = (content.thumbnail or content.file_url) if content else None
+    content_thumbnail = resolve_media_url(raw_thumb) if raw_thumb else None
+
+    import hashlib
+    verify_payload = f"{placement.id}:{placement.organization_id}:{placement.advertiser}:{placement.starts_at.isoformat()}"
+    token_hash = hashlib.sha256(verify_payload.encode()).hexdigest()[:8].upper()
+    certificate_id = f"POP-{placement.id:04d}-{token_hash}"
+    verification_url = f"https://olrac-signage.abhinavsanthosh221.workers.dev/verify/pop?cert={certificate_id}&id={placement.id}"
 
     empty = {"total_plays": 0, "completed_plays": 0, "error_plays": 0, "success_percent": 0.0}
     if not screen_ids:
@@ -737,7 +744,11 @@ def build_booking_report(scope: TenantScope, placement: models.AdPlacement) -> d
             "advertiser": placement.advertiser,
             "content_name": content.name if content else "Unknown",
             "content_id": placement.content_id,
+            "content_type": content.type if content else "image",
+            "content_file_url": content.file_url if content else None,
             "content_thumbnail": content_thumbnail,
+            "certificate_id": certificate_id,
+            "verification_url": verification_url,
             **_commercials(placement, generated_at),
             "starts_at": placement.starts_at,
             "ends_at": placement.ends_at,
@@ -872,7 +883,11 @@ def build_booking_report(scope: TenantScope, placement: models.AdPlacement) -> d
         "advertiser": placement.advertiser,
         "content_name": content.name if content else "Unknown",
         "content_id": placement.content_id,
+        "content_type": content.type if content else "image",
+        "content_file_url": content.file_url if content else None,
         "content_thumbnail": content_thumbnail,
+        "certificate_id": certificate_id,
+        "verification_url": verification_url,
         **commercials,
         "starts_at": placement.starts_at,
         "ends_at": placement.ends_at,

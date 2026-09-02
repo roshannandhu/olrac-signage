@@ -94,8 +94,15 @@ class Organization(Base):
     users = relationship("User", back_populates="organization")
 
     @property
-    def effective_max_screens(self) -> int:
-        """Screens this tenant may actually have. 0 means unlimited.
+    def effective_max_screens(self) -> int | None:
+        """Screens this tenant may actually have. None means no limit.
+
+        None rather than 0 for "unlimited", because 0 already means something else on each
+        of the two columns and they disagree: `Organization.max_screens = 0` is "no
+        override set", while `Plan.max_screens = 0` is a real limit of zero screens -- a
+        package that grants none. Collapsing both to 0 turned a zero-screen package into an
+        unlimited one, which test_tenant_isolation catches by enrolling against exactly
+        that plan.
 
         The one number that answers the question, because the two columns behind it
         disagreed constantly. `max_screens` is an override that only `_apply_plan` ever
@@ -116,14 +123,19 @@ class Organization(Base):
         """
         if self.max_screens and self.max_screens > 0:
             return self.max_screens
-        return self.plan.max_screens if self.plan else 0
+        if self.plan is not None:
+            # Including 0: a package may legitimately grant no screens at all.
+            return self.plan.max_screens
+        return None
 
     @property
-    def effective_max_ad_slots(self) -> int:
-        """Ad slots this tenant may actually sell. 0 means unlimited. See above."""
+    def effective_max_ad_slots(self) -> int | None:
+        """Ad slots this tenant may actually sell. None means no limit. See above."""
         if self.max_ad_slots and self.max_ad_slots > 0:
             return self.max_ad_slots
-        return self.plan.max_ad_slots if self.plan else 0
+        if self.plan is not None:
+            return self.plan.max_ad_slots
+        return None
 
     @property
     def owner_email(self) -> str | None:

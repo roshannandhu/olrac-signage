@@ -277,14 +277,22 @@ try:
     # rendered as a black tofu box -- on the amount-paid tile, so the single number a
     # client checks first was a box. Nothing money-shaped may carry a character those
     # fonts cannot draw.
-    from backend.reports.booking_report import _money
+    from backend.reports.booking_report import _money, _HAS_RUPEE_FONT
 
     for amount in (0, 5, 100, 2500000, 3750099):
         rendered = _money(amount)
-        rendered.encode("ascii")  # raises UnicodeEncodeError if a symbol creeps back in
-        assert "₹" not in rendered, rendered
-    assert _money(2500000) == "Rs. 25,000", _money(2500000)
-    assert _money(3750099) == "Rs. 37,500.99", _money(3750099)
+        if _HAS_RUPEE_FONT:
+            assert "₹" in rendered, rendered
+        else:
+            rendered.encode("ascii")
+            assert "₹" not in rendered, rendered
+
+    if _HAS_RUPEE_FONT:
+        assert _money(2500000) == "₹ 25,000", _money(2500000)
+        assert _money(3750099) == "₹ 37,500.99", _money(3750099)
+    else:
+        assert _money(2500000) == "Rs. 25,000", _money(2500000)
+        assert _money(3750099) == "Rs. 37,500.99", _money(3750099)
     print("  ok  money renders with glyphs the PDF fonts actually have")
 
     # ReportLab does not raise on a character the font lacks -- it draws a box. Typographic

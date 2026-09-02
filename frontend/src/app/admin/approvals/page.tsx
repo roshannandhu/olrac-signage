@@ -35,7 +35,7 @@ export default function AdminApprovalsPage() {
       adminApi.approveTenant(id, planId === '' ? {} : { plan_id: planId }),
     onSuccess: (tenant) => {
       setError('')
-      setMessage(`${tenant.name} approved — ${tenant.max_screens || '∞'} screens, ${tenant.max_ad_slots || '∞'} ad slots.`)
+      setMessage(`${tenant.name} approved — ${tenant.max_screens ?? '∞'} screens, ${tenant.max_ad_slots ?? '∞'} ad slots.`)
       refresh()
     },
     onError: (e: Error) => { setMessage(''); setError(e.message) },

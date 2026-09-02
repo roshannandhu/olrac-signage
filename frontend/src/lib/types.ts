@@ -474,8 +474,13 @@ export interface TenantSummary {
   plan_name?: string | null
   screens_count: number
   online_screens_count: number
-  max_screens: number
-  max_ad_slots: number
+  // null = no limit configured; 0 = a package that grants none. Rendered differently, so
+  // `max_screens || '∞'` is wrong here -- it would show a zero-screen package as unlimited.
+  max_screens: number | null
+  max_ad_slots: number | null
+  // The raw override the quota dialog edits; 0 = "no override, follow the package".
+  max_screens_override: number
+  max_ad_slots_override: number
   ad_slots_used: number
   storage_used_bytes: number
   storage_quota_bytes: number

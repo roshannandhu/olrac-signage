@@ -85,8 +85,17 @@ class TenantSummaryOut(BaseModel):
     plan_name: Optional[str] = None
     screens_count: int = 0
     online_screens_count: int = 0
-    max_screens: int = 0
-    max_ad_slots: int = 0
+    # The limit ACTUALLY ENFORCED: the override when one is set, else the package's.
+    # None = no limit configured. Distinct from 0, which is a package granting none --
+    # the console must not draw those two the same way.
+    max_screens: Optional[int] = None
+    max_ad_slots: Optional[int] = None
+    # The raw override column, for the quota dialog to edit. Reported separately because
+    # the dialog writes this field: seeded from the effective value instead, saving would
+    # silently pin the tenant to whatever their package happened to say that day, and they
+    # would then stop tracking the package.
+    max_screens_override: int = 0
+    max_ad_slots_override: int = 0
     ad_slots_used: int = 0
     storage_used_bytes: int = 0
     storage_quota_bytes: int = 0
@@ -207,6 +216,8 @@ def _summarise(db: Session, org: models.Organization) -> TenantSummaryOut:
         # tenant was allowed.
         max_screens=org.effective_max_screens,
         max_ad_slots=org.effective_max_ad_slots,
+        max_screens_override=org.max_screens or 0,
+        max_ad_slots_override=org.max_ad_slots or 0,
         ad_slots_used=ads_used,
         storage_used_bytes=int(storage_used),
         storage_quota_bytes=org.storage_quota_bytes,

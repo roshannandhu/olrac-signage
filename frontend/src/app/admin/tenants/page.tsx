@@ -202,8 +202,11 @@ function QuotaDialog({
   onSave: (body: { plan_id?: number; max_screens: number; max_ad_slots: number }) => void
 }) {
   const [planId, setPlanId] = useState<number | ''>(tenant.plan_id ?? '')
-  const [screens, setScreens] = useState(tenant.max_screens)
-  const [ads, setAds] = useState(tenant.max_ad_slots)
+  // The OVERRIDE, not the effective limit. Seeding these from the effective value would
+  // make merely opening and saving the dialog pin the tenant to their package's current
+  // number, after which they would no longer follow that package.
+  const [screens, setScreens] = useState(tenant.max_screens_override)
+  const [ads, setAds] = useState(tenant.max_ad_slots_override)
 
   // Picking a package pre-fills its limits, but they stay editable: the override is the
   // point, so one tenant can be raised without moving everyone on that package.

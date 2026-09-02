@@ -122,12 +122,23 @@ def test_effective_limit_prefers_the_override_then_the_package():
         db.flush()
         check(org.effective_max_screens == 99, "an explicit override must beat the package")
         org.max_screens = 0
-        org.plan_id = None
         db.flush()
-        # `plan` is a loaded relationship; without expiring it the property still sees the
-        # old object and the assertion would pass for the wrong reason.
-        db.expire(org, ["plan"])
-        check(org.effective_max_screens == 0, "no package and no override is deliberately unlimited")
+
+        # A separate organisation with no package at all, rather than clearing plan_id on
+        # the one above: `plan` is a loaded relationship, and expiring it to make the
+        # property re-read was order-dependent enough to pass alone and fail in the suite.
+        # Building the case outright has no such coupling.
+        unplanned = models.Organization(
+            name=f"Unplanned {unique}", slug=f"unplanned-{unique}", status="active",
+            plan_id=None, max_screens=0,
+        )
+        db.add(unplanned)
+        db.flush()
+        check(
+            unplanned.effective_max_screens is None,
+            "no package and no override must be unlimited (None), not a limit of "
+            f"{unplanned.effective_max_screens}",
+        )
     finally:
         db.rollback()
         db.close()

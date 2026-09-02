@@ -61,10 +61,13 @@ export function StatCard({
   )
 }
 
-export function QuotaBar({ used, max }: { used: number; max: number }) {
-  // 0 means unlimited everywhere in this product, so there is no bar to draw.
-  const unlimited = max === 0
-  const pct = unlimited ? 0 : Math.min(100, Math.round((used / max) * 100))
+export function QuotaBar({ used, max }: { used: number; max: number | null }) {
+  // null is "no limit configured", 0 is "a package that grants none". This used to treat
+  // 0 as unlimited, which was right for the raw override column and wrong for the limit
+  // now reported: every tenant's override is 0, so the console drew an infinity sign for
+  // the whole estate while the packages behind them were capped.
+  const unlimited = max === null || max === undefined
+  const pct = unlimited || max === 0 ? 100 : Math.min(100, Math.round((used / max) * 100))
   const barColor = pct >= 100 ? 'bg-rose-500' : pct >= 80 ? 'bg-amber-500' : 'bg-violet-500'
   const textColor = pct >= 100 ? 'text-rose-400 font-semibold' : pct >= 80 ? 'text-amber-400' : 'text-white/60'
   return (

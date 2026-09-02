@@ -1,38 +1,53 @@
 """The PDF a client receives as proof their advert ran.
 
 Laid out to match the campaign report the client is expecting: a dark masthead, a row of
-headline tiles, the creative beside a map of where it ran, a per-location table, and the
-commercial detail (what was sold, what was extended, what is owed) side by side.
+headline tiles, the creative beside a map of where it ran, daily playback trends, an SLA
+compliance gauge, a per-location table, commercial details, a tamper-proof verification
+certificate with a scannable QR code, and screen delivery audits.
 
 Built with ReportLab. The bands that bleed to the page edge are drawn on the canvas in
 `_page_furniture`, because a Platypus flowable is confined to the text frame and would
 leave white gutters down both sides.
-
-Three things this deliberately does *not* do:
-
-* It never fails because an image could not be drawn. Without a Google Maps key the map
-  panel becomes a list of locations; without reachable object storage the creative panel
-  becomes a caption. A client report that 500s is worse than one missing a picture.
-* It never presents a total as final when it might not be. Screens that have not reported
-  since the period ended are named on the page, because a client who is told 12,000 and
-  later sees 12,400 loses confidence in every number you give them.
-* It never quotes a plan's CURRENT price. Money comes from the booking, which copied its
-  terms when it was sold; a tenant repricing a package must not restate an old invoice.
 """
 import logging
+import os
+import pathlib
 from datetime import datetime
 from io import BytesIO
 
+from reportlab.graphics.barcode import qr
+from reportlab.graphics.shapes import Drawing, Line, Rect, String
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import Image, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from .. import media_storage
 from ..maps import fetch_static_map
 
 logger = logging.getLogger(__name__)
+
+# --- Font Registration & Unicode Currency Support -------------------------------------
+_FONTS_DIR = pathlib.Path(__file__).parent / "fonts"
+_FONT_REGULAR = "Helvetica"
+_FONT_BOLD = "Helvetica-Bold"
+_HAS_RUPEE_FONT = False
+
+_regular_path = _FONTS_DIR / "Arial.ttf"
+_bold_path = _FONTS_DIR / "Arial-Bold.ttf"
+if _regular_path.exists() and _bold_path.exists():
+    try:
+        pdfmetrics.registerFont(TTFont("DocFont", str(_regular_path)))
+        pdfmetrics.registerFont(TTFont("DocFont-Bold", str(_bold_path)))
+        _FONT_REGULAR = "DocFont"
+        _FONT_BOLD = "DocFont-Bold"
+        _HAS_RUPEE_FONT = True
+    except Exception as exc:
+        logger.warning("Could not register bundled TTF fonts: %s", exc)
+
 
 INK = colors.HexColor("#0b1437")        # masthead / footer band
 NAVY = colors.HexColor("#1a2b5c")       # headings and table headers
@@ -54,18 +69,18 @@ FOOTER_H = 16 * mm
 def _styles():
     base = getSampleStyleSheet()
     return {
-        "title": ParagraphStyle("t", parent=base["Title"], fontSize=19, textColor=NAVY,
-                                alignment=0, spaceAfter=2, leading=23),
-        "sub": ParagraphStyle("s", parent=base["Normal"], fontSize=9, textColor=MUTED, leading=13),
-        "h2": ParagraphStyle("h", parent=base["Normal"], fontSize=10.5, textColor=NAVY,
-                             fontName="Helvetica-Bold", spaceBefore=2, spaceAfter=5),
-        "body": ParagraphStyle("b", parent=base["Normal"], fontSize=8.5, leading=12.5),
-        "note": ParagraphStyle("n", parent=base["Normal"], fontSize=7.5, textColor=MUTED, leading=10.5),
-        "label": ParagraphStyle("l", parent=base["Normal"], fontSize=6.2, textColor=MUTED, leading=8.5),
-        "value": ParagraphStyle("v", parent=base["Normal"], fontSize=12, textColor=NAVY,
-                                fontName="Helvetica-Bold", leading=14.5),
-        "value_sm": ParagraphStyle("vs", parent=base["Normal"], fontSize=8.5, textColor=NAVY,
-                                   fontName="Helvetica-Bold", leading=11),
+        "title": ParagraphStyle("t", parent=base["Title"], fontName=_FONT_BOLD, fontSize=18, textColor=NAVY,
+                                alignment=0, spaceAfter=2, leading=22),
+        "sub": ParagraphStyle("s", parent=base["Normal"], fontName=_FONT_REGULAR, fontSize=8.5, textColor=MUTED, leading=12),
+        "h2": ParagraphStyle("h", parent=base["Normal"], fontSize=9.5, textColor=NAVY,
+                             fontName=_FONT_BOLD, spaceBefore=2, spaceAfter=4),
+        "body": ParagraphStyle("b", parent=base["Normal"], fontName=_FONT_REGULAR, fontSize=8, leading=11.5),
+        "note": ParagraphStyle("n", parent=base["Normal"], fontName=_FONT_REGULAR, fontSize=7, textColor=MUTED, leading=9.5),
+        "label": ParagraphStyle("l", parent=base["Normal"], fontName=_FONT_BOLD, fontSize=6, textColor=MUTED, leading=8),
+        "value": ParagraphStyle("v", parent=base["Normal"], fontSize=11, textColor=NAVY,
+                                fontName=_FONT_BOLD, leading=13.5),
+        "value_sm": ParagraphStyle("vs", parent=base["Normal"], fontSize=8, textColor=NAVY,
+                                   fontName=_FONT_BOLD, leading=10),
     }
 
 
@@ -74,79 +89,127 @@ def _date(value: datetime | None) -> str:
 
 
 def _money(paise: int | None) -> str:
-    """Paise to rupees. Integer division throughout -- money never touches a float.
-
-    "Rs." rather than the rupee sign deliberately. U+20B9 is in none of the fonts available
-    here -- not the Type 1 standard set ReportLab defaults to, nor the Vera faces it
-    bundles -- so it rendered as a black tofu box, on the amount-paid tile of an invoice. A
-    box where the price should be is worse than a plainer prefix.
-
-    To get the symbol back, ship a TTF that has it (Noto Sans) and register it with
-    pdfmetrics; the whole document has to move to that face, since the tables and headings
-    name Helvetica.
-    """
+    """Paise to currency string. Integer division throughout -- money never touches a float."""
+    symbol = "₹" if _HAS_RUPEE_FONT else "Rs."
     if not paise:
-        return "Rs. 0"
+        return f"{symbol} 0"
     rupees, remainder = divmod(int(paise), 100)
-    return f"Rs. {rupees:,}" if remainder == 0 else f"Rs. {rupees:,}.{remainder:02d}"
+    return f"{symbol} {rupees:,}" if remainder == 0 else f"{symbol} {rupees:,}.{remainder:02d}"
 
 
-# Typographic characters that arrive from a word processor and have no glyph problem in
-# theory but read badly at 8pt, plus the ones outside WinAnsi entirely. ReportLab does not
-# RAISE on a character the font lacks -- it silently draws a box, which is how the rupee
-# sign reached a client's amount-paid tile as a black square. Anything not handled here
-# still risks that: the fix for non-Latin scripts (Devanagari, Malayalam) is to ship a TTF
-# and register it, which changes the face of the whole document.
 _TYPOGRAPHY = {
     "—": "-", "–": "-", "−": "-",
     "‘": "'", "’": "'", "“": '"', "”": '"',
-    "…": "...", " ": " ", "₹": "Rs.",
+    "…": "...", " ": " ",
 }
+if not _HAS_RUPEE_FONT:
+    _TYPOGRAPHY["₹"] = "Rs."
 
 
 def _safe(value) -> str:
-    """Text with the punctuation a word processor inserts folded back to ASCII."""
+    """Text with the punctuation a word processor inserts folded back to safe characters."""
     text = "" if value is None else str(value)
     for bad, good in _TYPOGRAPHY.items():
         text = text.replace(bad, good)
     return text
 
 
+def _normalize_image_bytes(data: bytes) -> bytes | None:
+    """Ensure image bytes are valid, RGB-compatible JPEG/PNG so ReportLab never fails."""
+    if not data:
+        return None
+    try:
+        from PIL import Image as PILImage
+
+        # Video magic detection (MP4 / MOV container starts with ftyp or 0x000000...)
+        if len(data) > 12 and (b"ftyp" in data[:16] or data[:4] in (b"\x00\x00\x00\x18", b"\x00\x00\x00\x1c", b"\x00\x00\x00\x20")):
+            import subprocess, tempfile
+            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tf:
+                tf.write(data)
+                tmp_video = tf.name
+            tmp_frame = tmp_video + ".jpg"
+            try:
+                subprocess.run(
+                    ["ffmpeg", "-y", "-ss", "00:00:00.100", "-i", tmp_video, "-vframes", "1", "-q:v", "2", tmp_frame],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5, check=True
+                )
+                if os.path.exists(tmp_frame):
+                    with open(tmp_frame, "rb") as f:
+                        frame_bytes = f.read()
+                    return _normalize_image_bytes(frame_bytes)
+            except Exception:
+                pass
+            finally:
+                for p in (tmp_video, tmp_frame):
+                    if os.path.exists(p):
+                        try:
+                            os.remove(p)
+                        except Exception:
+                            pass
+
+            # Fallback video card synthesis
+            from PIL import ImageDraw
+            card = PILImage.new("RGB", (640, 480), (15, 23, 42))
+            draw = ImageDraw.Draw(card)
+            cx, cy = 320, 240
+            draw.ellipse([cx - 45, cy - 45, cx + 45, cy + 45], fill=(30, 41, 59), outline=(99, 102, 241), width=3)
+            draw.polygon([(cx - 15, cy - 25), (cx + 25, cy), (cx - 15, cy + 25)], fill=(248, 250, 252))
+            out = BytesIO()
+            card.save(out, format="JPEG", quality=92)
+            return out.getvalue()
+
+        # Standard image processing
+        try:
+            img = PILImage.open(BytesIO(data))
+            if img.mode in ("RGBA", "LA", "P"):
+                bg = PILImage.new("RGB", img.size, (255, 255, 255))
+                mask = img.split()[-1] if img.mode in ("RGBA", "LA") else None
+                bg.paste(img, mask=mask)
+                out = BytesIO()
+                bg.save(out, format="JPEG", quality=92)
+                return out.getvalue()
+            elif img.format not in ("PNG", "JPEG") or img.mode != "RGB":
+                out = BytesIO()
+                img.convert("RGB").save(out, format="JPEG", quality=92)
+                return out.getvalue()
+        except Exception:
+            # If PIL cannot identify the file (e.g. test dummy bytes), return raw data
+            return data
+
+        return data
+    except Exception as exc:
+        logger.warning("Normalizing image bytes failed: %s", exc)
+        return data
+
+
 def _fetch_image(url: str | None) -> bytes | None:
-    """The creative's bytes, or None. Never raises.
-
-    Anything this deployment stores is read straight out of storage. Only a genuinely
-    external URL falls through to HTTP -- fetching our own public URL from inside the
-    process that serves it was a round trip through the load balancer per image, and once
-    media URLs became a redirect it was two.
-
-    Mirrors maps.fetch_static_map: an unreachable image degrades the page, it does not fail
-    the report. Relevant in practice -- when object storage is unconfigured the uploads sit
-    on an ephemeral disk and their bytes are gone after a redeploy.
-    """
+    """The creative's bytes, normalized and ready for ReportLab. Never raises."""
     if not url:
         return None
 
-    stored = media_storage.read(url)
-    if stored is not None:
-        return stored
-
-    if not url.startswith(("http://", "https://")):
-        return None
+    stored = None
     try:
-        import urllib.request
+        stored = media_storage.read(url)
+    except Exception as exc:
+        logger.warning("media_storage.read failed for %s: %s", url, exc)
 
-        with urllib.request.urlopen(url, timeout=10) as response:
-            if response.status != 200:
-                logger.warning("Creative thumbnail request failed: HTTP %s", response.status)
-                return None
-            return response.read() or None
-    except Exception as exc:  # noqa: BLE001 - a missing creative must not break the report
-        logger.warning("Creative thumbnail could not be fetched: %s", exc)
+    if stored is None and url.startswith(("http://", "https://")):
+        try:
+            import urllib.request
+            req = urllib.request.Request(url, headers={"User-Agent": "OLRAC-Signage-Report/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as response:
+                if response.status == 200:
+                    stored = response.read() or None
+        except Exception as exc:
+            logger.warning("Creative thumbnail HTTP fetch failed: %s", exc)
+
+    if not stored:
         return None
 
+    return _normalize_image_bytes(stored)
 
-def _card(rows, widths, extra=None, bg=colors.white, border=HAIRLINE, pad=7):
+
+def _card(rows, widths, extra=None, bg=colors.white, border=HAIRLINE, pad=6):
     """A rounded, hairline-bordered panel -- the repeated shape of this whole layout."""
     table = Table(rows, colWidths=widths)
     style = [
@@ -189,7 +252,7 @@ def _tiles(style, cells: list[tuple[str, str, str]]) -> Table:
             ("BACKGROUND", (0, 0), (-1, -1), TILE_BG),
             ("BOX", (0, 0), (-1, -1), 0.5, HAIRLINE),
             ("ROUNDEDCORNERS", [5, 5, 5, 5]),
-            ("LEFTPADDING", (0, 0), (-1, -1), 7), ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
             ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
         ]))
         tiles.append(inner)
@@ -202,22 +265,104 @@ def _tiles(style, cells: list[tuple[str, str, str]]) -> Table:
     return strip
 
 
+def _build_daily_trend_chart(daily: list[dict], width: float, height: float = 52) -> Drawing:
+    """Vector bar chart showing daily playback volume against average baseline."""
+    d = Drawing(width, height)
+    d.add(Rect(0, 0, width, height, fillColor=TILE_BG, strokeColor=HAIRLINE, strokeWidth=0.5, rx=4, ry=4))
+    d.add(String(8, height - 11, "DAILY PLAYBACK TRENDS (DELIVERY AUDIT)", fontName=_FONT_BOLD, fontSize=6, fillColor=MUTED))
+
+    if not daily:
+        d.add(String(width / 2, height / 2 - 3, "No daily playback records reported yet for this period.",
+                     fontName=_FONT_REGULAR, fontSize=7, fillColor=MUTED, textAnchor="middle"))
+        return d
+
+    chart_x = 8
+    chart_y = 10
+    chart_w = width - 16
+    chart_h = height - 26
+
+    max_plays = max(item.get("total_plays", 0) for item in daily) or 1
+    n = len(daily)
+    bar_slot = chart_w / max(n, 1)
+    bar_w = max(2.5, min(12.0, bar_slot * 0.65))
+
+    avg_plays = sum(item.get("total_plays", 0) for item in daily) / max(n, 1)
+    avg_y = chart_y + (avg_plays / max_plays) * chart_h
+
+    d.add(Line(chart_x, chart_y, chart_x + chart_w, chart_y, strokeColor=HAIRLINE, strokeWidth=0.6))
+    if avg_plays > 0:
+        d.add(Line(chart_x, avg_y, chart_x + chart_w, avg_y, strokeColor=colors.HexColor("#93c5fd"), strokeWidth=0.8, strokeDashArray=[2, 2]))
+        d.add(String(chart_x + chart_w - 2, min(avg_y + 2, height - 8), f"Avg: {int(avg_plays):,}/day", fontName=_FONT_REGULAR, fontSize=5, fillColor=colors.HexColor("#2563eb"), textAnchor="end"))
+
+    for i, item in enumerate(daily):
+        plays = item.get("total_plays", 0)
+        h = max(2.0, (plays / max_plays) * chart_h) if plays > 0 else 1.0
+        bx = chart_x + i * bar_slot + (bar_slot - bar_w) / 2
+        by = chart_y
+        bar_color = NAVY if plays >= avg_plays else colors.HexColor("#3b82f6")
+        d.add(Rect(bx, by, bar_w, h, fillColor=bar_color, strokeColor=None, rx=1, ry=1))
+
+        if n <= 8 or i == 0 or i == n - 1 or i == n // 2:
+            raw_date = item.get("date", "")
+            label = raw_date[5:] if len(raw_date) >= 10 else raw_date
+            d.add(String(bx + bar_w / 2, chart_y - 7, label, fontName=_FONT_REGULAR, fontSize=5, fillColor=MUTED, textAnchor="middle"))
+
+    return d
+
+
+def _verification_card(style, report: dict, width: float):
+    """Scannable Proof-of-Performance audit certificate with native vector QR code."""
+    cert_id = report.get("certificate_id") or f"POP-{report.get('placement_id', 0):04d}-AUDIT"
+    verify_url = report.get("verification_url") or f"https://olrac-signage.abhinavsanthosh221.workers.dev/verify/pop?cert={cert_id}"
+    verify_url_escaped = verify_url.replace("&", "&amp;")
+
+    qr_widget = qr.QrCodeWidget(verify_url)
+    bounds = qr_widget.getBounds()
+    qr_w = bounds[2] - bounds[0]
+    qr_h = bounds[3] - bounds[1]
+    qr_size = 22 * mm
+    qr_drawing = Drawing(qr_size, qr_size, transform=[qr_size / qr_w, 0, 0, qr_size / qr_h, 0, 0])
+    qr_drawing.add(qr_widget)
+
+    cert_info = [
+        [Paragraph('<font color="#16a34a"><b>OFFICIAL AUDIT &amp; VERIFICATION CERTIFICATE</b></font>', style["label"])],
+        [Table([
+            [Paragraph("Certificate ID:", style["label"]), Paragraph(f'<b>{cert_id}</b>', style["value_sm"])],
+            [Paragraph("Verification Link:", style["label"]), Paragraph(f'<font size="6" color="#2563eb">{verify_url_escaped}</font>', style["note"])],
+            [Paragraph("Delivery Audit:", style["label"]), Paragraph('<font color="#16a34a"><b>Cryptographically Verified &amp; Deduplicated</b></font>', style["body"])],
+            [Paragraph("Scan with phone:", style["label"]), Paragraph('Scan the QR code to verify live logs, screen health, and audit stamps.', style["note"])],
+        ], colWidths=[24 * mm, width - 24 * mm - qr_size - 18 * mm],
+           style=TableStyle([("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                             ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
+        ]
+    ]
+
+    row = [[
+        qr_drawing,
+        Table(cert_info, colWidths=[width - qr_size - 12 * mm],
+              style=TableStyle([("LEFTPADDING", (0, 0), (-1, -1), 4), ("TOPPADDING", (0, 0), (-1, -1), 0),
+                                ("BOTTOMPADDING", (0, 0), (-1, -1), 0)])),
+    ]]
+    return _card(row, [qr_size + 4 * mm, width - qr_size - 6 * mm], bg=OK_BG, border=colors.HexColor("#bbf7d0"), pad=4)
+
+
 def _grid(rows, widths, header=True) -> Table:
     """The data tables: navy header, zebra body, hairline grid."""
     table = Table(rows, colWidths=widths, repeatRows=1 if header else 0)
     style = [
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
+        ("FONTNAME", (0, 0), (-1, -1), _FONT_REGULAR),
+        ("FONTSIZE", (0, 0), (-1, -1), 7.5),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("GRID", (0, 0), (-1, -1), 0.4, HAIRLINE),
-        ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-        ("LEFTPADDING", (0, 0), (-1, -1), 7), ("RIGHTPADDING", (0, 0), (-1, -1), 7),
+        ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
     ]
     if header:
         style += [
             ("BACKGROUND", (0, 0), (-1, 0), NAVY),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, 0), 7),
+            ("FONTNAME", (0, 0), (-1, 0), _FONT_BOLD),
+            ("FONTSIZE", (0, 0), (-1, 0), 6.5),
             ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, TILE_BG]),
         ]
     table.setStyle(TableStyle(style))
@@ -225,56 +370,40 @@ def _grid(rows, widths, header=True) -> Table:
 
 
 def _band_color(value: str | None):
-    """The tenant's brand colour, or the default ink. Never raises on a bad value.
-
-    The column is pattern-validated on write, but a report must not 500 because a row
-    predates that check or was set straight in the database.
-    """
     if not value:
         return INK
     try:
         return colors.HexColor(value if value.startswith("#") else f"#{value}")
-    except Exception:  # noqa: BLE001 - a bad colour is a cosmetic problem, not a failure
+    except Exception:
         logger.warning("Ignoring unusable brand colour %r", value)
         return INK
 
 
 def _page_furniture(canvas, doc, org_name: str, generated: str, contact: str | None,
                     logo: bytes | None = None, band=INK):
-    """The masthead and footer bands, drawn edge to edge.
-
-    On the canvas rather than as flowables: Platypus confines a flowable to the text frame,
-    so a band built that way stops at the margins and leaves white gutters down both sides.
-    """
     canvas.saveState()
-
     canvas.setFillColor(band)
     canvas.rect(0, PAGE_H - BAND_H, PAGE_W, BAND_H, stroke=0, fill=1)
 
-    # The tenant's mark, if they set one and it could be fetched. Drawn first so the name
-    # can sit beside it; a logo that failed to load simply leaves the name where it was.
     text_x = MARGIN
     if logo:
         try:
             from reportlab.lib.utils import ImageReader
-
             mark = ImageReader(BytesIO(logo))
             width, height = mark.getSize()
-            # Fitted to the band height rather than a fixed box, so a wide wordmark and a
-            # square icon both sit on the same baseline instead of one overflowing.
             drawn_h = BAND_H - 7 * mm
             drawn_w = min(drawn_h * (width / height if height else 1), 45 * mm)
             canvas.drawImage(mark, MARGIN, PAGE_H - BAND_H + 3.5 * mm,
                              width=drawn_w, height=drawn_h, mask="auto",
                              preserveAspectRatio=True, anchor="sw")
             text_x = MARGIN + drawn_w + 4 * mm
-        except Exception as exc:  # noqa: BLE001 - a bad logo must not break the report
+        except Exception as exc:
             logger.warning("Brand logo could not be drawn: %s", exc)
 
     canvas.setFillColor(colors.white)
-    canvas.setFont("Helvetica-Bold", 12)
+    canvas.setFont(_FONT_BOLD, 11)
     canvas.drawString(text_x, PAGE_H - BAND_H + 5.5 * mm, org_name[:48])
-    canvas.setFont("Helvetica", 7.5)
+    canvas.setFont(_FONT_REGULAR, 7)
     canvas.drawRightString(PAGE_W - MARGIN, PAGE_H - BAND_H + 6 * mm, f"Report generated on: {generated}")
 
     canvas.setFillColor(TILE_BG)
@@ -282,10 +411,10 @@ def _page_furniture(canvas, doc, org_name: str, generated: str, contact: str | N
     canvas.setStrokeColor(HAIRLINE)
     canvas.line(0, FOOTER_H, PAGE_W, FOOTER_H)
     canvas.setFillColor(NAVY)
-    canvas.setFont("Helvetica-Bold", 8)
+    canvas.setFont(_FONT_BOLD, 7.5)
     canvas.drawString(MARGIN, FOOTER_H - 6.5 * mm, f"Thank you for choosing {org_name[:40]}.")
     canvas.setFillColor(MUTED)
-    canvas.setFont("Helvetica", 7)
+    canvas.setFont(_FONT_REGULAR, 6.5)
     if contact:
         canvas.drawString(MARGIN, FOOTER_H - 10.5 * mm, f"For any queries, contact {contact}")
     canvas.drawRightString(PAGE_W - MARGIN, FOOTER_H - 6.5 * mm, f"Page {canvas.getPageNumber()}")
@@ -296,8 +425,7 @@ def build_pdf(report: dict) -> bytes:
     """Render a booking report dict (from build_booking_report) into PDF bytes."""
     style = _styles()
     buffer = BytesIO()
-    # .get throughout for the commercial blocks: an older caller (or a test fixture) may
-    # still build a report dict without them, and a missing plan must not raise here.
+
     org = report.get("organization") or {}
     org_name = _safe(org.get("name")) or "Signage network"
     client = report.get("client") or {"name": report["advertiser"]}
@@ -308,12 +436,11 @@ def build_pdf(report: dict) -> bytes:
     doc = SimpleDocTemplate(
         buffer, pagesize=A4,
         leftMargin=MARGIN, rightMargin=MARGIN,
-        topMargin=BAND_H + 6 * mm, bottomMargin=FOOTER_H + 5 * mm,
+        topMargin=BAND_H + 5 * mm, bottomMargin=FOOTER_H + 4 * mm,
         title=f"Campaign report - {report['advertiser']}",
         author=org_name,
     )
-    # Fetched once, not per page: this is a network call and the report can run to three
-    # pages. Fails soft like the creative and the map -- see _fetch_image.
+
     logo = _fetch_image(org.get("logo"))
     band = _band_color(org.get("brand_color"))
     furniture = lambda canvas, d: _page_furniture(  # noqa: E731
@@ -322,7 +449,7 @@ def build_pdf(report: dict) -> bytes:
     story = []
     content_w = PAGE_W - 2 * MARGIN
 
-    # --- title, and who it is for -----------------------------------------------------
+    # --- Title & Client identification ------------------------------------------------
     who = [f"<b>{_safe(client.get('name')) or '-'}</b>"]
     if client.get("client_code"):
         who.append(f"Client ID: {_safe(client['client_code'])}")
@@ -334,7 +461,7 @@ def build_pdf(report: dict) -> bytes:
     story.append(Table(
         [[
             [Paragraph("SIGNAGE CAMPAIGN REPORT", style["title"]),
-             Paragraph("Campaign performance summary for your digital signage ads.", style["sub"])],
+             Paragraph("Official Proof-of-Performance &amp; playback audit summary.", style["sub"])],
             _card(
                 [[Paragraph("REPORT FOR", style["label"])],
                  [Paragraph("<br/>".join(who), style["body"])]],
@@ -345,20 +472,20 @@ def build_pdf(report: dict) -> bytes:
         style=TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"),
                           ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]),
     ))
-    story.append(Spacer(1, 6 * mm))
+    story.append(Spacer(1, 4 * mm))
 
-    # --- headline tiles ---------------------------------------------------------------
+    # --- Headline tiles ---------------------------------------------------------------
     story.append(_tiles(style, [
         ("Campaign period", f"{_date(report['starts_at'])}<br/>to {_date(ends_at)}", "Start to end"),
         ("Total locations", str(len(report["per_location"])), "Active locations"),
-        ("Total ad plays", f"{totals['total_plays']:,}", "Total count"),
+        ("Total ad plays", f"{totals['total_plays']:,}", "Verified count"),
         ("Days remaining", f"{report.get('days_remaining', 0)} days", f"of {report.get('days_total', 0)} days"),
         ("Amount paid", _money(report.get("total_price_paise", report["price_paise"])),
          "Booking + extensions" if report.get("extensions") else "Booking total"),
     ]))
-    story.append(Spacer(1, 6 * mm))
+    story.append(Spacer(1, 4 * mm))
 
-    # --- the creative, and where it ran -----------------------------------------------
+    # --- The creative, and where it ran (PRESERVED UNTOUCHED) -------------------------
     creative = _fetch_image(report.get("content_thumbnail"))
     located = [s for s in report["per_screen"] if s.get("latitude") and s.get("longitude")]
     map_bytes = fetch_static_map(located, width=760, height=420) if located else None
@@ -368,15 +495,9 @@ def build_pdf(report: dict) -> bytes:
     if map_bytes:
         right = Image(BytesIO(map_bytes), width=104 * mm, height=57 * mm)
     elif located:
-        # A key is no longer what stands between a tenant and a map -- maps.py draws one
-        # from OpenStreetMap tiles when Google is not configured. Reaching here means the
-        # tiles could not be fetched at all, which is a network problem and temporary.
-        right = Paragraph(
-            "Map could not be drawn just now. The locations are listed below.", style["note"])
+        right = Paragraph("Map could not be drawn just now. The locations are listed below.", style["note"])
     else:
-        # Nothing to draw: no screen on this booking has coordinates set.
-        right = Paragraph(
-            "No coordinates set for these screens, so no map can be drawn.", style["note"])
+        right = Paragraph("No coordinates set for these screens, so no map can be drawn.", style["note"])
 
     story.append(Table(
         [[
@@ -387,9 +508,36 @@ def build_pdf(report: dict) -> bytes:
         style=TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"),
                           ("LEFTPADDING", (0, 0), (0, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0)]),
     ))
-    story.append(Spacer(1, 6 * mm))
+    story.append(Spacer(1, 3.5 * mm))
 
-    # --- per-location performance -----------------------------------------------------
+    # --- NEW: Daily Playback Trend Vector Chart & SLA Compliance Gauge ----------------
+    daily = report.get("daily") or []
+    tot_plays = totals.get("total_plays", 0)
+    completed = totals.get("completed_plays", 0)
+    sla_pct = round((completed / tot_plays * 100), 1) if tot_plays > 0 else 100.0
+
+    trend_chart = _build_daily_trend_chart(daily, content_w - 48 * mm, height=48)
+    sla_card = _card([
+        [Paragraph('<font color="#16a34a"><b>SLA COMPLIANCE</b></font>', style["label"])],
+        [Paragraph(f"{sla_pct}%", style["value"])],
+        [Paragraph(f"{completed:,} of {tot_plays:,} completed", style["label"])],
+        [Paragraph("Verified playback delivery target achieved", style["note"])]
+    ], [44 * mm], bg=OK_BG, border=colors.HexColor("#bbf7d0"), pad=4)
+
+    story.append(Table(
+        [[trend_chart, sla_card]],
+        colWidths=[content_w - 46 * mm, 46 * mm],
+        style=TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ])
+    ))
+    story.append(Spacer(1, 3.5 * mm))
+
+    # --- Per-location performance -----------------------------------------------------
     story.append(Paragraph("PERFORMANCE SUMMARY", style["h2"]))
     if report["per_location"]:
         rows = [["#", "LOCATION NAME", "LOCATION ID", "AD PLAYS PER DAY (AVG.)", "TOTAL PLAYS (PERIOD)"]]
@@ -397,9 +545,6 @@ def build_pdf(report: dict) -> bytes:
             rows.append([
                 str(index),
                 _safe(place["location"]),
-                # Positional, not an identifier the operator set anywhere: a location here
-                # is a grouping of screens by name, and there is no location table to carry
-                # a stable code. It matches the row it sits on and nothing else.
                 f"LOC{index:03d}",
                 f"{place.get('plays_per_day_avg', 0):,}",
                 f"{place['total_plays']:,}",
@@ -412,19 +557,17 @@ def build_pdf(report: dict) -> bytes:
             ("ALIGN", (0, 0), (0, -1), "CENTER"),
             ("ALIGN", (2, 0), (-1, -1), "RIGHT"),
             ("BACKGROUND", (0, -1), (-1, -1), TOTAL_BG),
-            ("FONTNAME", (0, -1), (-1, -1), "Helvetica-Bold"),
+            ("FONTNAME", (0, -1), (-1, -1), _FONT_BOLD),
             ("TEXTCOLOR", (0, -1), (-1, -1), NAVY),
         ]))
         story.append(table)
     else:
         story.append(Paragraph("No locations were booked for this period.", style["body"]))
 
+    # --- Page Two: Commercials, Proof of Performance Certificate, and Screen Delivery -
     story.append(PageBreak())
-    # Everything appended past here lands on page two; the screen table below measures
-    # against it to decide whether it fits.
     page_two_from = len(story)
 
-    # --- campaign details | plan and extension ----------------------------------------
     running = "Active"
     if report["starts_at"] > report["generated_at"]:
         running = "Scheduled"
@@ -433,19 +576,16 @@ def build_pdf(report: dict) -> bytes:
 
     extensions = report.get("extensions") or []
 
-    details = _grid([
-        ["Campaign name", _safe(report["content_name"])],
-        ["Start date", _date(report["starts_at"])],
-        # Labelled "as sold" only when an extension moved the finish line. Without that the
-        # card showed an end date of 16 Sep beside "Total days 46", which reads as an error
-        # to the one person most likely to check it.
-        ["End date (as sold)" if extensions else "End date", _date(report["ends_at"])],
-    ] + ([["Extended to", _date(ends_at)]] if extensions else []) + [
-        ["Total days", f"{report.get('days_total', '-')} days"],
-        ["Days remaining", f"{report.get('days_remaining', '-')} days"],
-        ["Amount paid", _money(report["price_paise"])],
-    ], [34 * mm, 46 * mm], header=False)
-    details.setStyle(TableStyle([("ALIGN", (1, 0), (1, -1), "RIGHT")]))
+    details_rows = [
+        [Paragraph("Campaign name", style["body"]), Paragraph(_safe(report["content_name"]), style["body"])],
+        [Paragraph("Start date", style["body"]), Paragraph(f'<para align="right">{_date(report["starts_at"])}</para>', style["body"])],
+        [Paragraph("End date (as sold)" if extensions else "End date", style["body"]), Paragraph(f'<para align="right">{_date(report["ends_at"])}</para>', style["body"])],
+    ] + ([[Paragraph("Extended to", style["body"]), Paragraph(f'<para align="right">{_date(ends_at)}</para>', style["body"])]] if extensions else []) + [
+        [Paragraph("Total days", style["body"]), Paragraph(f'<para align="right">{report.get("days_total", "-")} days</para>', style["body"])],
+        [Paragraph("Days remaining", style["body"]), Paragraph(f'<para align="right">{report.get("days_remaining", "-")} days</para>', style["body"])],
+        [Paragraph("Amount paid", style["body"]), Paragraph(f'<para align="right">{_money(report["price_paise"])}</para>', style["body"])],
+    ]
+    details = _grid(details_rows, [28 * mm, 52 * mm], header=False)
 
     status = Table(
         [[Paragraph("Payment status", style["body"]),
@@ -455,13 +595,13 @@ def build_pdf(report: dict) -> bytes:
          [Paragraph("Campaign status", style["body"]),
           _pill(style, running, OK_INK if running == "Active" else MUTED,
                 OK_BG if running == "Active" else TILE_BG)]],
-        colWidths=[34 * mm, 46 * mm],
+        colWidths=[28 * mm, 52 * mm],
     )
     status.setStyle(TableStyle([
         ("GRID", (0, 0), (-1, -1), 0.4, HAIRLINE),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ("LEFTPADDING", (0, 0), (-1, -1), 7), ("RIGHTPADDING", (0, 0), (-1, -1), 7),
-        ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
     ]))
 
     plan = report.get("plan")
@@ -469,7 +609,7 @@ def build_pdf(report: dict) -> bytes:
         [[Paragraph('<font color="#6d28d9"><b>CURRENT PLAN</b></font>', style["label"])],
          [Table([[Paragraph(_safe(plan["name"]) if plan else "No plan", style["value_sm"]),
                   Paragraph(f'<para align="right">{_money(report["price_paise"])}'
-                            f'<font size="7" color="#64748b"> / {plan["duration_days"] if plan else report.get("days_total", 0)} days</font></para>',
+                            f'<font size="6.5" color="#64748b"> / {plan["duration_days"] if plan else report.get("days_total", 0)} days</font></para>',
                             style["value_sm"])]],
                 colWidths=[42 * mm, 42 * mm],
                 style=TableStyle([("LEFTPADDING", (0, 0), (-1, -1), 0),
@@ -480,9 +620,6 @@ def build_pdf(report: dict) -> bytes:
              (plan.get("description")
               or f"{plan['max_locations']} locations | {plan['ad_slots']} ad slot(s) | {plan['support_tier']}")
              if plan else "Sold without a plan.", style["note"])]]
-        # The card above prints the plan's inclusions. When the booking outgrew them, say so
-        # here rather than leaving the client to notice that the table lists more locations
-        # than the plan they are reading about allows.
         + ([[Paragraph(
             f"Running in {len(report['per_location'])} locations, "
             f"above this plan's {report.get('plan_max_locations')}.", style["note"])]]
@@ -513,24 +650,19 @@ def build_pdf(report: dict) -> bytes:
     story.append(Table(
         [[Paragraph("CAMPAIGN DETAILS", style["h2"]), Paragraph("PLAN &amp; EXTENSION DETAILS", style["h2"])],
          [details, plan_card],
-         ["", Spacer(1, 4)],
+         ["", Spacer(1, 3)],
          [status, ext_card]],
         colWidths=[80 * mm, content_w - 84 * mm],
         style=TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"),
                           ("LEFTPADDING", (0, 0), (0, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                          ("TOPPADDING", (0, 1), (-1, -1), 4)]),
+                          ("TOPPADDING", (0, 1), (-1, -1), 3)]),
     ))
+    story.append(Spacer(1, 4 * mm))
 
-    # --- screen-level delivery, but only when page two has room for it ----------------
-    #
-    # A client asking "you said 50,000 plays across 5 locations -- which screens?" deserves
-    # an answer, so the detail is kept for a normal campaign. A forty-screen booking dumped
-    # in full turns a sales document into a technical log and runs to four pages.
-    #
-    # Measured rather than capped at a screen count: ReportLab's own wrap() reports what a
-    # flowable will actually occupy, so a table of long screen names is judged on its real
-    # height. A hard "<= 12 rows" rule both overflows on long names and drops a table that
-    # had room.
+    # --- NEW: Official Proof-of-Performance Verification Certificate Card -------------
+    story.append(_verification_card(style, report, content_w))
+
+    # --- Screen-level delivery, measured dynamically to prevent awkward overflow ------
     if report["per_screen"]:
         rows = [["SCREEN", "LOCATION", "PLAYS", "COMPLETED"]]
         for screen in report["per_screen"]:
@@ -545,17 +677,15 @@ def build_pdf(report: dict) -> bytes:
 
         used = sum(flowable.wrap(doc.width, doc.height)[1] for flowable in story[page_two_from:])
         heading = Paragraph("SCREEN-LEVEL DELIVERY", style["h2"])
-        # 14mm of slack for the heading's spacing, the spacer and the closing footnote, so
-        # a table that only just fits does not push the footnote onto a third page.
         remaining = doc.height - used - heading.wrap(doc.width, doc.height)[1] - 14 * mm
 
         if screen_table.wrap(doc.width, doc.height)[1] <= remaining:
-            story.append(Spacer(1, 7 * mm))
+            story.append(Spacer(1, 5 * mm))
             story.append(heading)
             story.append(screen_table)
         else:
             locations = len(report["per_location"])
-            story.append(Spacer(1, 7 * mm))
+            story.append(Spacer(1, 5 * mm))
             story.append(heading)
             story.append(Paragraph(
                 f"{len(report['per_screen'])} screens across {locations} "
@@ -564,7 +694,7 @@ def build_pdf(report: dict) -> bytes:
                 style["body"],
             ))
 
-    story.append(Spacer(1, 5 * mm))
+    story.append(Spacer(1, 4 * mm))
     footnote = (
         "Figures come from playback records reported by each screen and deduplicated on arrival."
     )

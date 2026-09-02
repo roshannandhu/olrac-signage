@@ -53,6 +53,14 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
   const [planId, setPlanId] = useState<number | null>(null)
   const [selectedScreenIds, setSelectedScreenIds] = useState<number[]>([])
   const [notes, setNotes] = useState('')
+  // Per-location run lengths, keyed by screen id.
+  //
+  // Off by default: most sales are one length everywhere, and the plan already says what
+  // that is. Turned on, a client can buy 30 days in a mall, 10 in a shop and 50 at an
+  // airport as ONE booking -- previously only expressible as three, which meant three
+  // invoice lines and three extensions for one deal.
+  const [customDurations, setCustomDurations] = useState(false)
+  const [screenDays, setScreenDays] = useState<Record<number, number>>({})
   const [showClientSuggestions, setShowClientSuggestions] = useState(false)
 
   // Load available clients for auto-complete
@@ -87,6 +95,11 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
       // Existing targets win; the default only fills an empty selection.
       const existing = contentItem.screen_ids || []
       setSelectedScreenIds(existing.length ? existing : (defaultScreenIds || []))
+      const soldDays = contentItem.screen_days || {}
+      setScreenDays(soldDays)
+      // Opened already on, so an operator editing a bespoke booking sees the lengths it
+      // was actually sold rather than a collapsed panel implying one uniform run.
+      setCustomDurations(Object.keys(soldDays).length > 0)
       setNotes(contentItem.placement_notes || '')
     }
   }, [contentItem, open, defaultScreenIds])
@@ -115,6 +128,12 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
         client_phone: clientPhone.trim() || undefined,
         plan_id: planId,
         screen_ids: selectedScreenIds,
+    // Only the selected screens, and only when the operator asked for per-location
+    // lengths. Sending {} rather than undefined is what clears a previously bespoke
+    // booking back to one uniform window.
+    screen_days: customDurations
+      ? Object.fromEntries(selectedScreenIds.filter((id) => screenDays[id]).map((id) => [id, screenDays[id]]))
+      : {},
         notes: notes.trim() || undefined,
       })
     },
@@ -343,12 +362,26 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
               <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Assigned Screens
               </Label>
-              <Badge
-                variant={selectedScreenIds.length > maxAllowedScreens ? 'danger' : 'outline'}
-                className="text-[11px] font-semibold"
-              >
-                {selectedScreenIds.length} of {maxAllowedScreens} screens assigned
-              </Badge>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCustomDurations((on) => !on)}
+                  aria-pressed={customDurations}
+                  className={`rounded-lg border px-2 py-1 text-[11px] font-semibold transition-colors ${
+                    customDurations
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border/60 text-muted-foreground hover:bg-muted/40'
+                  }`}
+                >
+                  Custom days per location
+                </button>
+                <Badge
+                  variant={selectedScreenIds.length > maxAllowedScreens ? 'danger' : 'outline'}
+                  className="text-[11px] font-semibold"
+                >
+                  {selectedScreenIds.length} of {maxAllowedScreens} screens assigned
+                </Badge>
+              </div>
             </div>
 
             {screens.length === 0 ? (
@@ -381,6 +414,36 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
                         <p className="text-xs font-medium truncate text-foreground">{screen.name || `Screen #${screen.id}`}</p>
                         <p className="text-[10px] text-muted-foreground truncate">{screen.location || 'Default Location'}</p>
                       </div>
+                      {/* Rendered inside the row but OUTSIDE the click target's effect:
+                          stopPropagation, or typing a duration would untick the screen. */}
+                      {customDurations && isChecked && (
+                        <span
+                          className="flex shrink-0 items-center gap-1"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <input
+                            type="number"
+                            min={1}
+                            max={3650}
+                            aria-label={`Days for ${screen.name || `Screen #${screen.id}`}`}
+                            value={screenDays[screen.id] ?? ''}
+                            placeholder={String(selectedPlan?.duration_days ?? '')}
+                            onChange={(event) => {
+                              const value = Number(event.target.value)
+                              setScreenDays((current) => {
+                                const next = { ...current }
+                                // Cleared means "follow the booking", so the key is removed
+                                // rather than stored as 0 -- which would be a zero-day run.
+                                if (!value || value < 1) delete next[screen.id]
+                                else next[screen.id] = value
+                                return next
+                              })
+                            }}
+                            className="w-14 rounded-lg border border-border/60 bg-background px-1.5 py-1 text-center text-[11px] text-foreground outline-none focus:border-primary"
+                          />
+                          <span className="text-[10px] text-muted-foreground">days</span>
+                        </span>
+                      )}
                     </button>
                   )
                 })}

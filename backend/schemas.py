@@ -375,6 +375,10 @@ class ContentResponse(ContentBase):
     placement_notes: Optional[str] = None
     screen_ids: List[int] = []
     screen_names: List[str] = []
+    # Per-location run lengths, keyed by screen id. Empty when every location follows the
+    # booking. Returned so re-opening the booking shows the lengths actually sold rather
+    # than defaulting back to one uniform run.
+    screen_days: dict[int, int] = {}
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -402,6 +406,14 @@ class ContentClientAdUpdate(BaseModel):
     client_phone: Optional[str] = None
     plan_id: Optional[int] = None
     screen_ids: Optional[List[int]] = None
+    # Per-location run lengths, keyed by screen id: {"12": 30, "13": 10, "14": 50}.
+    # A screen absent from this map runs for the booking's own window, so the ordinary
+    # sale sends nothing and behaves exactly as before.
+    #
+    # Keyed by id rather than positional against screen_ids because the two lists would
+    # drift the first time either was reordered, and silently mis-assigning a client's
+    # paid duration to the wrong location is not a failure anyone would notice.
+    screen_days: Optional[dict[int, int]] = None
     notes: Optional[str] = None
 
 
@@ -932,6 +944,14 @@ class PlacementTargetRef(BaseModel):
 
     screen_id: Optional[int] = None
     group_id: Optional[int] = None
+    # How long the advert runs HERE, when this location was sold its own length. None
+    # means "as long as the booking", which is the ordinary case and stores nothing.
+    #
+    # Days rather than an end date because that is how the deal is struck -- "30 in the
+    # mall, 10 in the shop" -- and it is resolved against this location's own start, so a
+    # screen added mid-campaign still gets the full run it was sold rather than being cut
+    # short by a date fixed at the campaign's beginning.
+    days: Optional[int] = Field(default=None, ge=1, le=3650)
 
     @model_validator(mode="after")
     def exactly_one(self):
@@ -995,6 +1015,12 @@ class PlacementTargetResponse(BaseModel):
     # False when the playlist item was deleted by hand on the screen page: the deal is
     # still recorded, it just is not on air there any more.
     is_placed: bool
+    # This location's own window, when it was sold one. Null means it follows the booking.
+    # Reported so the dashboard can show "Airport TV — 50 days" beside a 30-day campaign
+    # rather than making the operator infer it from dates.
+    starts_at: Optional[datetime] = None
+    ends_at: Optional[datetime] = None
+    days: Optional[int] = None
 
 
 class PlacementResponse(BaseModel):
@@ -1018,6 +1044,13 @@ class PlacementResponse(BaseModel):
     notes: Optional[str] = None
     created_at: datetime
     targets: List[PlacementTargetResponse] = []
+    # How much of the plan this booking is actually delivering, groups expanded. Over is a
+    # 409 and never reaches here; UNDER is reported, because a client paying for five
+    # screens and running on three is owed two and nothing was telling anyone.
+    # `plan_max_locations` is 0 when the plan does not cap locations, or there is no plan.
+    screens_used: int = 0
+    plan_max_locations: int = 0
+    screens_unused: int = 0
 
 
 class ResolveLinkRequest(BaseModel):

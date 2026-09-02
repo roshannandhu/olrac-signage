@@ -83,6 +83,8 @@ ISOLATED_SCRIPTS = {
     "test_screen_removal.py",
     # The screen cap: package limits, admin overrides, and the /enroll bypass.
     "test_screen_quota.py",
+    # One booking, different run lengths per location.
+    "test_per_location_ad_window.py",
 }
 
 # Pure-logic tests: no database, no import-time engine, safe to run in-process.

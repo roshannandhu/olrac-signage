@@ -725,6 +725,13 @@ class AdPlacement(Base):
         for extension in self.extensions:
             if extension.extended_to > latest:
                 latest = extension.extended_to
+        # A location may be sold a longer run than the booking's own window -- 50 days at
+        # an airport on a 30-day campaign. The campaign is not over until its last location
+        # is, or the "ending soon" alert fires while a screen is still contractually
+        # playing and the report closes the campaign early.
+        for target in self.targets:
+            if target.ends_at is not None and target.ends_at > latest:
+                latest = target.ends_at
         return latest
 
     content = relationship("Content", back_populates="ad_placements")
@@ -761,7 +768,39 @@ class AdPlacementTarget(Base):
     # from the 10th, and its report figures have to be divided by the days it really ran --
     # otherwise it reads as an underperforming location rather than a late addition.
     assigned_at = Column(UtcDateTime, nullable=False, default=utcnow)
+    # This location's own run window. NULL on both means "inherit the booking", which is
+    # every row that existed before per-location durations, so nothing changes for them.
+    #
+    # One client routinely buys different lengths in different places -- 30 days in a mall,
+    # 10 in a shop, 50 at an airport -- because the sites are worth different amounts to
+    # them. Modelled here rather than as three separate bookings so it stays ONE commercial
+    # record: one invoice, one extension, one report.
+    #
+    # Note the booking's own starts_at/ends_at are unchanged and still the default. They
+    # are also what an invoice shows as sold, and price stays on the booking: these two
+    # columns are the delivery schedule, not the commercial terms.
+    starts_at = Column(UtcDateTime, nullable=True)
+    ends_at = Column(UtcDateTime, nullable=True)
     created_at = Column(UtcDateTime, nullable=False, default=utcnow)
+
+    @property
+    def effective_starts_at(self):
+        """When this location actually begins carrying the advert.
+
+        max() against assigned_at for the reason _place already documents: a screen added
+        on day 10 of a campaign must not be told it started on day 1.
+        """
+        base = self.starts_at or (self.placement.starts_at if self.placement else None)
+        if base is None:
+            return self.assigned_at
+        return max(base, self.assigned_at) if self.assigned_at else base
+
+    @property
+    def effective_ends_at(self):
+        """When this location stops, its own window winning over the booking's."""
+        if self.ends_at is not None:
+            return self.ends_at
+        return self.placement.effective_ends_at if self.placement else None
 
     __table_args__ = (
         CheckConstraint(

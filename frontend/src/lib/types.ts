@@ -51,6 +51,9 @@ export interface ContentItem {
   placement_ends_at?: string | null
   placement_notes?: string | null
   screen_ids?: number[]
+  // Per-location run lengths, keyed by screen id. Absent means every location runs the
+  // booking's own window, which is the ordinary sale.
+  screen_days?: Record<number, number>
   screen_names?: string[]
 }
 

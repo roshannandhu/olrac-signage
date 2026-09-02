@@ -264,6 +264,9 @@ export const api = {
       client_phone?: string
       plan_id?: number | null
       screen_ids?: number[]
+      // Keyed by screen id. {} clears a bespoke booking back to one uniform window;
+      // omitting it leaves the existing lengths alone.
+      screen_days?: Record<number, number>
       notes?: string
     }
   ) =>

@@ -97,6 +97,15 @@ def _place(
         .scalar()
     ) + 1
 
+    # This location's own run length, when one was sold. `days` is what the operator types
+    # -- "30 in the mall, 10 in the shop, 50 at the airport" -- and it is resolved to a
+    # date here so everything downstream compares dates and never has to know which of the
+    # two the sale was expressed in.
+    target_starts_at = max(placement.starts_at, assigned_at or models.utcnow())
+    target_ends_at = None
+    if getattr(ref, "days", None):
+        target_ends_at = target_starts_at + timedelta(days=ref.days)
+
     item = models.PlaylistItem(
         playlist_id=playlist.id,
         content_id=placement.content_id,
@@ -105,8 +114,8 @@ def _place(
         # The paid window is enforced by the same start/end the player already honours.
         # max(): a screen added mid-campaign must not be told to have started on a date in
         # the past, and a backdated booking must not start a screen before it was sold.
-        start_at=max(placement.starts_at, assigned_at or models.utcnow()),
-        end_at=effective_ends_at(placement),
+        start_at=target_starts_at,
+        end_at=target_ends_at or effective_ends_at(placement),
     )
     scope.db.add(item)
     scope.db.flush()
@@ -117,6 +126,10 @@ def _place(
         group_id=ref.group_id,
         playlist_item_id=item.id,
         assigned_at=assigned_at or models.utcnow(),
+        # Left NULL when the location runs for the booking's own window, so the common
+        # case stores nothing and keeps inheriting.
+        starts_at=target_starts_at if target_ends_at else None,
+        ends_at=target_ends_at,
     )
     scope.db.add(target)
     scope.db.flush()
@@ -188,17 +201,28 @@ def resolve_tenant_plan(scope: TenantScope, plan_id: int | None) -> models.Tenan
 
 
 def sync_placement_window(scope: TenantScope, placement: models.AdPlacement) -> None:
-    """Push the booking's effective end onto the playlist items it placed.
+    """Push each location's run window onto the playlist item it placed.
 
-    The player enforces the paid window through PlaylistItem.end_at, so an extension that
-    only wrote a row here would be invisible on every screen: the advert would stop on the
-    original date the client no longer holds.
+    The player enforces the paid window through PlaylistItem.start_at/end_at, so an
+    extension that only wrote a row here would be invisible on every screen: the advert
+    would stop on the original date the client no longer holds.
+
+    Per TARGET, not per booking. Two reasons:
+
+      - A location may be sold its own length -- 30 days in a mall, 10 in a shop, 50 at an
+        airport, one client, one booking. AdPlacementTarget.effective_ends_at falls back to
+        the booking's, so a target with no window of its own is unaffected.
+
+      - This used to assign `placement.starts_at` to every item, which silently undid the
+        per-target start _place computes with max(placement.starts_at, assigned_at). A
+        screen added on day 10 of a campaign had its start reset to day 1 the next time
+        anything re-synced the window -- an extension, a date edit -- and then billed from
+        a date it was not yet running.
 
     Bumps each affected playlist for the same reason _place does -- sync_tv answers 204
     until playlist.updated_at moves, so without it the screens keep the old window until
     something unrelated happens to touch the playlist.
     """
-    ends = effective_ends_at(placement)
     playlists = set()
     for target in placement.targets:
         if not target.playlist_item_id:
@@ -208,8 +232,8 @@ def sync_placement_window(scope: TenantScope, placement: models.AdPlacement) -> 
         ).first()
         if not item:
             continue
-        item.start_at = placement.starts_at
-        item.end_at = ends
+        item.start_at = target.effective_starts_at
+        item.end_at = target.effective_ends_at
         if item.playlist:
             playlists.add(item.playlist)
     for playlist in playlists:
@@ -225,6 +249,9 @@ def _serialize(scope: TenantScope, placement: models.AdPlacement) -> schemas.Pla
     content = placement.content or scope.get(models.Content, placement.content_id)
     creative_name = content.name if content else None
     creative_thumb = resolve_media_url(content.thumbnail or content.file_url) if content else None
+    # Groups expanded, the same way the cap counts them, so "3 of 5" means three TVs and
+    # not three rows.
+    usage = plan_screen_usage(placement.plan, set(_booking_screen_ids(scope, placement)))
 
     return schemas.PlacementResponse(
         id=placement.id,
@@ -253,9 +280,21 @@ def _serialize(scope: TenantScope, placement: models.AdPlacement) -> schemas.Pla
                 else (group_names.get(t.group_id) or f"Group {t.group_id}"),
                 kind="screen" if t.screen_id else "group",
                 is_placed=t.playlist_item_id is not None,
+                starts_at=t.starts_at,
+                ends_at=t.ends_at,
+                # Reported as days too, because that is the unit the deal was struck in
+                # and the dashboard should not have to subtract two dates to show it back.
+                days=(
+                    max(1, round((t.ends_at - t.starts_at).total_seconds() / 86400))
+                    if t.ends_at and t.starts_at
+                    else None
+                ),
             )
             for t in placement.targets
         ],
+        screens_used=usage["used"],
+        plan_max_locations=usage["allowed"],
+        screens_unused=usage["unused"],
     )
 
 
@@ -392,6 +431,11 @@ def update_placement(
             placement.advertiser = client.name
     if "plan_id" in fields:
         plan = resolve_tenant_plan(scope, payload.plan_id)
+        # Against the screens the booking ALREADY reaches. Moving a six-screen booking onto
+        # a five-screen plan is the same breach as adding a sixth screen to that plan, and
+        # this path let it through -- the plan was enforced when screens changed but not
+        # when the plan did.
+        ensure_plan_locations(scope, plan, set(_booking_screen_ids(scope, placement)), set())
         placement.plan_id = plan.id if plan else None
 
     if placement.ends_at <= placement.starts_at:
@@ -485,6 +529,12 @@ def split_group_target(
     keep = [s for s in members if s.id not in set(payload.exclude_screen_ids)]
     if not keep:
         raise HTTPException(status_code=422, detail="That would leave the booking with nowhere to play")
+
+    # No ensure_plan_locations here, deliberately. A group target already counts as every
+    # member, and `keep` is a subset of those, so a split can only hold the screen count
+    # level or lower it. Checking would be dead code at best -- and at worst it would refuse
+    # a split on a booking that is already over its plan, which is the very edit that fixes
+    # the breach.
 
     # Read before _unplace deletes the row it lives on. Splitting changes only how the
     # booking is recorded, not what the client bought, so each surviving screen keeps the
@@ -690,6 +740,29 @@ def _screens_for_refs(scope: TenantScope, refs) -> set[int]:
     return screen_ids
 
 
+def plan_screen_usage(plan, screen_ids: set[int]) -> dict:
+    """How much of a plan's screen allowance a set of screens uses. Measures; never raises.
+
+    Separate from the check below because the two halves are not symmetrical. Going OVER a
+    plan is a refusal -- the tenant is about to deliver something they did not sell. Going
+    UNDER is not: a plan bought for five screens and running on three is a booking the
+    client has paid for and is not receiving, which is worth saying loudly and is never
+    worth blocking a sale over. Raising on it would make "sell now, pick the screens on
+    Monday" impossible.
+
+    `allowed` of 0 means the plan does not cap locations (or there is no plan), so nothing
+    is over or unused.
+    """
+    allowed = plan.max_locations if plan and plan.max_locations > 0 else 0
+    used = len(screen_ids)
+    return {
+        "used": used,
+        "allowed": allowed,
+        "over": max(0, used - allowed) if allowed else 0,
+        "unused": max(0, allowed - used) if allowed else 0,
+    }
+
+
 def ensure_plan_locations(scope: TenantScope, plan, existing: set[int], adding: set[int]) -> None:
     """A plan sells a number of TVs, so it has to actually cap them.
 
@@ -700,11 +773,15 @@ def ensure_plan_locations(scope: TenantScope, plan, existing: set[int], adding: 
     Distinct from ensure_ad_slot_quota above, which is the limit OLRAC places on the
     TENANT. This is the limit the tenant placed on their own client, so the message has to
     make clear which of the two was hit.
+
+    Every path that can change which screens a booking reaches has to come through here.
+    Three of them did not: a plan swap on PUT, a group split, and the client-ad editor in
+    routers/content.py, each of which could leave a booking delivering more screens than
+    the plan it is billed on.
     """
-    if not plan or plan.max_locations <= 0:
-        return
     total = existing | adding
-    if len(total) > plan.max_locations:
+    usage = plan_screen_usage(plan, total)
+    if usage["over"]:
         raise HTTPException(
             status_code=409,
             detail=(

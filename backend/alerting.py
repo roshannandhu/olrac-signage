@@ -31,6 +31,7 @@ LOW_STORAGE = "low_storage"
 UPDATE_FAILED = "update_failed"
 CONTENT_FAILED = "content_failed"
 CAMPAIGN_ENDING = "campaign_ending"
+PLAN_UNDERUSED = "plan_underused"
 
 # How much notice an operator gets that a booking is about to finish. A week is enough to
 # reach the advertiser and sell the extension; a day is a scramble, and a month is noise
@@ -251,46 +252,78 @@ def evaluate_content(content) -> list[AlertCondition]:
     )]
 
 
-def evaluate_placement(placement, now: datetime) -> list[AlertCondition]:
-    """Warn while there is still time to sell the extension.
+def evaluate_placement(placement, now: datetime, screens_used: Optional[int] = None) -> list[AlertCondition]:
+    """Warn while there is still time to sell the extension, or to fill the plan.
 
     Nothing told an operator a campaign was about to finish, so the first sign was an
     advertiser noticing their advert had stopped -- which is the worst possible moment to
     open a renewal conversation.
 
+    `screens_used` is passed in rather than counted here because counting it properly means
+    expanding groups to their members, which is a query, and this module is deliberately
+    pure logic that the tests can drive with plain objects. Omitted means "not measured",
+    and the plan check is skipped rather than guessed at.
+
     Resolution is automatic: the reconciler closes any alert whose condition stops being
-    true, so extending the booking clears this on the next pass without anyone dismissing
-    anything.
+    true, so extending the booking or filling the last screen clears these on the next pass
+    without anyone dismissing anything.
     """
+    conditions: list[AlertCondition] = []
     ends = getattr(placement, "effective_ends_at", None) or placement.ends_at
     if ends is None:
-        return []
+        return conditions
+    advertiser = getattr(placement, "advertiser", None) or "A client"
+    started = getattr(placement, "starts_at", None)
+    running = ends > now and (started is None or started <= now)
+
     # Already finished is not "ending soon" -- that alert would never resolve, and an
     # operator cannot act on it either.
-    if ends <= now or ends - now > CAMPAIGN_ENDING_WITHIN:
-        return []
+    if now < ends <= now + CAMPAIGN_ENDING_WITHIN:
+        days = max(0, round((ends - now).total_seconds() / 86400))
+        conditions.append(AlertCondition(
+            kind=CAMPAIGN_ENDING,
+            severity=WARNING,
+            title=f"{advertiser}'s campaign ends in {days} day{'' if days == 1 else 's'}",
+            detail=(
+                f"The booking finishes on {ends:%d %b %Y}. Extend it to keep the advert running, "
+                "or it will stop playing on every screen it was placed on."
+            ),
+            content_id=getattr(placement, "content_id", None),
+            ref=placement.id,
+        ))
 
-    days = max(0, round((ends - now).total_seconds() / 86400))
-    advertiser = getattr(placement, "advertiser", None) or "A client"
-    return [AlertCondition(
-        kind=CAMPAIGN_ENDING,
-        severity=WARNING,
-        title=f"{advertiser}'s campaign ends in {days} day{'' if days == 1 else 's'}",
-        detail=(
-            f"The booking finishes on {ends:%d %b %Y}. Extend it to keep the advert running, "
-            "or it will stop playing on every screen it was placed on."
-        ),
-        content_id=getattr(placement, "content_id", None),
-        ref=placement.id,
-    )]
+    # The client is paying for screens they are not getting. Only while the campaign is
+    # actually running: before it starts the screens are still being chosen, and once it
+    # has ended nobody can act on it.
+    plan = getattr(placement, "plan", None)
+    allowed = getattr(plan, "max_locations", 0) or 0
+    if running and screens_used is not None and allowed > 0 and screens_used < allowed:
+        short = allowed - screens_used
+        conditions.append(AlertCondition(
+            kind=PLAN_UNDERUSED,
+            severity=WARNING,
+            title=f"{advertiser} is paying for {short} screen{'' if short == 1 else 's'} they are not on",
+            detail=(
+                f"The {plan.name} plan covers {allowed} screen{'' if allowed == 1 else 's'} and this "
+                f"booking runs on {screens_used}. Add the remaining place"
+                f"{'' if short == 1 else 's'}, or move the client to a smaller plan."
+            ),
+            content_id=getattr(placement, "content_id", None),
+            ref=placement.id,
+        ))
+
+    return conditions
 
 
 def evaluate_all(screens: Iterable, contents: Iterable, now: datetime,
-                 placements: Iterable = ()) -> dict[str, AlertCondition]:
+                 placements: Iterable = (),
+                 screens_used: Optional[dict[int, int]] = None) -> dict[str, AlertCondition]:
     """Every current condition for one organisation, keyed for reconciliation.
 
     `placements` defaults to empty so the existing callers and tests keep working; the
-    worker passes the real list.
+    worker passes the real list. `screens_used` maps placement id to the number of screens
+    that booking actually reaches, groups expanded -- the worker counts it, because doing so
+    needs a query and this module stays free of one.
     """
     found: dict[str, AlertCondition] = {}
     for screen in screens:
@@ -300,6 +333,7 @@ def evaluate_all(screens: Iterable, contents: Iterable, now: datetime,
         for condition in evaluate_content(content):
             found[condition.dedupe_key] = condition
     for placement in placements:
-        for condition in evaluate_placement(placement, now):
+        used = (screens_used or {}).get(placement.id)
+        for condition in evaluate_placement(placement, now, screens_used=used):
             found[condition.dedupe_key] = condition
     return found

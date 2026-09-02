@@ -375,7 +375,34 @@ async def reconcile_alerts(ctx):
                 models.AdPlacement.ends_at >= now - alerting.CAMPAIGN_ENDING_WITHIN,
             ).all()
 
-            current = alerting.evaluate_all(screens, contents, now, placements)
+            # How many screens each booking actually reaches, groups expanded, in two
+            # queries for the whole organisation rather than one per booking. The plan
+            # cap counts expanded members, so the alert has to as well or a five-screen
+            # plan sold as one group target would read as four screens short.
+            reach: dict[int, set[int]] = {p.id: set() for p in placements}
+            if reach:
+                rows = db.query(
+                    models.AdPlacementTarget.placement_id,
+                    models.AdPlacementTarget.screen_id,
+                    models.AdPlacementTarget.group_id,
+                ).filter(models.AdPlacementTarget.placement_id.in_(list(reach))).all()
+                members: dict[int, list[int]] = {}
+                group_ids = {group_id for _, _, group_id in rows if group_id}
+                if group_ids:
+                    for screen_id, group_id in db.query(
+                        models.Screen.id, models.Screen.group_id
+                    ).filter(models.Screen.group_id.in_(group_ids)).all():
+                        members.setdefault(group_id, []).append(screen_id)
+                for placement_id, screen_id, group_id in rows:
+                    if screen_id:
+                        reach[placement_id].add(screen_id)
+                    elif group_id:
+                        reach[placement_id].update(members.get(group_id, ()))
+
+            current = alerting.evaluate_all(
+                screens, contents, now, placements,
+                screens_used={pid: len(seen) for pid, seen in reach.items()},
+            )
             open_alerts = {
                 a.dedupe_key: a
                 for a in db.query(models.Alert).filter(

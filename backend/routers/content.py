@@ -133,9 +133,17 @@ def serialize_content(content: models.Content) -> schemas.ContentResponse:
 
         target_screens = []
         target_screen_names = []
+        target_days: dict[int, int] = {}
         for t in getattr(latest, "targets", []):
             if t.screen_id:
                 target_screens.append(t.screen_id)
+                # Only locations sold their own length report one; the rest follow the
+                # booking and are absent, which is what the modal reads to decide whether
+                # to open its per-location panel at all.
+                if t.starts_at and t.ends_at:
+                    target_days[t.screen_id] = max(
+                        1, round((t.ends_at - t.starts_at).total_seconds() / 86400)
+                    )
                 screen = getattr(t, "screen", None)
                 if screen and screen.name:
                     target_screen_names.append(screen.name)
@@ -143,6 +151,7 @@ def serialize_content(content: models.Content) -> schemas.ContentResponse:
                     target_screen_names.append(f"Screen #{t.screen_id}")
         payload.screen_ids = target_screens
         payload.screen_names = target_screen_names
+        payload.screen_days = target_days
 
     return payload
 
@@ -395,7 +404,7 @@ def update_content_client_ad(
             client.notes = payload.notes.strip() if payload.notes else None
 
     # Find existing placement or create new
-    from .placements import _place, _unplace
+    from .placements import _place, _unplace, ensure_plan_locations
     from datetime import timedelta
     placement = scope.db.query(models.AdPlacement).filter(
         models.AdPlacement.organization_id == scope.organization_id,
@@ -426,13 +435,22 @@ def update_content_client_ad(
         placement.advertiser = client.name
         if plan:
             placement.plan_id = plan.id
-            placement.price_paise = plan.price_paise
+            # Price is NOT copied again here. It is copied once, when the booking is
+            # created, and then it is the agreed figure -- routers/placements.py says so
+            # where it first copies it, and test_tenant_plans pins that repricing a plan
+            # never rebills a campaign already sold on it. Reassigning it on every edit
+            # broke that through this door: renaming a client, or correcting a phone
+            # number, silently rebilled the booking at today's list price.
         if payload.notes is not None:
             placement.notes = payload.notes.strip() if payload.notes else None
 
     # Update assigned screens if provided
     if payload.screen_ids is not None:
         target_screen_ids = set(payload.screen_ids)
+        # The plan's screen count binds on this path too. This editor reaches _place and
+        # _unplace directly, so it was the one way to put a booking on more screens than
+        # the plan it is billed on -- enforced everywhere else and not here.
+        ensure_plan_locations(scope, plan or placement.plan, set(), target_screen_ids)
         current_targets = list(placement.targets)
         
         # Remove targets not in target_screen_ids
@@ -441,11 +459,31 @@ def update_content_client_ad(
                 _unplace(scope, target)
                 scope.db.delete(target)
         
+        # Re-price the run length of places that are already on the booking. Handling only
+        # new targets would mean an operator could add a location with 30 days but never
+        # afterwards correct it to 10, and the modal would show a number the campaign was
+        # not actually running to.
+        for target in placement.targets:
+            if not target.screen_id:
+                continue
+            days = (payload.screen_days or {}).get(target.screen_id)
+            if days:
+                base = target.starts_at or target.assigned_at or placement.starts_at
+                target.starts_at = base
+                target.ends_at = base + timedelta(days=days)
+            elif payload.screen_days is not None:
+                # Explicitly cleared: this location goes back to following the booking.
+                target.starts_at = None
+                target.ends_at = None
+
         # Add new targets
         existing_screen_ids = {t.screen_id for t in placement.targets if t.screen_id}
         for s_id in target_screen_ids:
             if s_id not in existing_screen_ids:
-                ref = schemas.PlacementTargetRef(screen_id=s_id)
+                ref = schemas.PlacementTargetRef(
+                    screen_id=s_id,
+                    days=(payload.screen_days or {}).get(s_id),
+                )
                 _place(scope, placement, ref)
 
     scope.db.commit()

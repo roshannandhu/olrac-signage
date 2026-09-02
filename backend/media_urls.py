@@ -32,15 +32,6 @@ def storage_prefix(organization) -> str:
     return f"org-{organization.id}"
 
 
-_S3_DEFAULTS = {
-    "S3_ENDPOINT_URL": "https://3fe4487a2b8fd1e2e541bf0e0f4c7c42.r2.cloudflarestorage.com",
-    "AWS_ACCESS_KEY_ID": "734d432aeb20a3f4bbd484ca83a8a82b",
-    "AWS_SECRET_ACCESS_KEY": "ef6c0c74667843ec08f396b12ab0e8929d409c8c8062713da09cd17c6c628acf",
-    "S3_BUCKET_NAME": "olrac",
-    "AWS_REGION": "auto",
-}
-
-
 def _setting(name: str) -> str:
     """One environment value, with a variable that is present but BLANK treated as unset.
 
@@ -48,8 +39,11 @@ def _setting(name: str) -> str:
     environment -- a stray blank, not a deliberate choice -- and boto3 rejects an empty
     endpoint with ValueError. Callers swallowed that, so one blank turned every thumbnail
     on the site grey and left nothing in the logs to say why.
+
+    There is no baked-in account. Credentials in source (or in a client JS bundle) are
+    world-readable and cannot be rotated without a rebuild.
     """
-    return (os.getenv(name) or "").strip() or _S3_DEFAULTS[name]
+    return (os.getenv(name) or "").strip()
 
 
 def get_s3_config() -> dict[str, str]:
@@ -63,8 +57,8 @@ def get_s3_config() -> dict[str, str]:
         "endpoint_url": _setting("S3_ENDPOINT_URL"),
         "aws_access_key_id": _setting("AWS_ACCESS_KEY_ID"),
         "aws_secret_access_key": _setting("AWS_SECRET_ACCESS_KEY"),
-        "bucket": _setting("S3_BUCKET_NAME"),
-        "region_name": _setting("AWS_REGION"),
+        "bucket": _setting("S3_BUCKET_NAME") or "olrac-media",
+        "region_name": _setting("AWS_REGION") or "auto",
     }
 
 

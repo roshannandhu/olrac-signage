@@ -1,0 +1,129 @@
+{
+  "nodes": [
+    {
+      "id": "render_yaml_api",
+      "label": "Render API Blueprint",
+      "file_type": "concept",
+      "source_file": "E:\\IMP projects\\OLRAC SIGNAGE\\render.yaml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "dockerfilePath backend/Dockerfile and dockerContext repo root"
+    },
+    {
+      "id": "render_redis_mandatory",
+      "label": "Redis Mandatory On Render",
+      "file_type": "concept",
+      "source_file": "E:\\IMP projects\\OLRAC SIGNAGE\\render.yaml",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "tests_isolated_subprocesses",
+      "label": "Isolated Test Subprocesses",
+      "file_type": "concept",
+      "source_file": "E:\\IMP projects\\OLRAC SIGNAGE\\tests\\README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "database.py binds engine at import; one process per script"
+    },
+    {
+      "id": "tests_registry_guard",
+      "label": "Test Registry Guard",
+      "file_type": "concept",
+      "source_file": "E:\\IMP projects\\OLRAC SIGNAGE\\tests\\README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "Files in neither PURE_MODULES nor ISOLATED_SCRIPTS never run"
+    },
+    {
+      "id": "tests_tenant_isolation_probe",
+      "label": "Tenant Isolation Probe",
+      "file_type": "concept",
+      "source_file": "E:\\IMP projects\\OLRAC SIGNAGE\\tests\\README.md",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "sample_client_report",
+      "label": "Sample Client Report PDF",
+      "file_type": "paper",
+      "source_file": "E:\\IMP projects\\OLRAC SIGNAGE\\logs\\sample-client-report.pdf",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    },
+    {
+      "id": "sample_campaign_report",
+      "label": "Sample Campaign Report PDF",
+      "file_type": "paper",
+      "source_file": "E:\\IMP projects\\OLRAC SIGNAGE\\sample-campaign-report.pdf",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null
+    }
+  ],
+  "edges": [
+    {
+      "source": "render_yaml_api",
+      "target": "render_redis_mandatory",
+      "relation": "references",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "E:\\IMP projects\\OLRAC SIGNAGE\\render.yaml",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "tests_isolated_subprocesses",
+      "target": "tests_registry_guard",
+      "relation": "conceptually_related_to",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "E:\\IMP projects\\OLRAC SIGNAGE\\tests\\README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "tests_tenant_isolation_probe",
+      "target": "tests_isolated_subprocesses",
+      "relation": "conceptually_related_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.75,
+      "source_file": "E:\\IMP projects\\OLRAC SIGNAGE\\tests\\README.md",
+      "source_location": null,
+      "weight": 1.0
+    },
+    {
+      "source": "sample_client_report",
+      "target": "sample_campaign_report",
+      "relation": "semantically_similar_to",
+      "confidence": "INFERRED",
+      "confidence_score": 0.85,
+      "source_file": "E:\\IMP projects\\OLRAC SIGNAGE\\logs\\sample-client-report.pdf",
+      "source_location": null,
+      "weight": 1.0
+    }
+  ],
+  "hyperedges": [],
+  "input_tokens": 4000,
+  "output_tokens": 600
+}

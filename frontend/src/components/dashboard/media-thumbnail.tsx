@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { ImageIcon, Video } from 'lucide-react'
 import type { ContentItem } from '@/lib/types'
 import { resolveMediaUrl } from '@/lib/api'
 
 export function MediaThumbnail({ item, className = '' }: { item: ContentItem; className?: string }) {
   const [hasError, setHasError] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
   
   // `type` is what the row actually says it is. This used to sniff the URL for ".mp4",
   // which broke the moment the URL grew a query string or a proxy path -- a video whose
@@ -31,8 +32,27 @@ export function MediaThumbnail({ item, className = '' }: { item: ContentItem; cl
   // The fragment makes the player paint its first frame instead of a black rectangle.
   const videoPosterSource = isHttpVideo ? `${resolvedVideo}${resolvedVideo!.includes('#') ? '' : '#t=0.001'}` : undefined
 
+  const handleMouseEnter = () => {
+    if (videoRef.current) {
+      videoRef.current.play().catch(() => {})
+    }
+  }
+
+  const handleMouseLeave = () => {
+    if (videoRef.current) {
+      videoRef.current.pause()
+      try {
+        videoRef.current.currentTime = 0.001
+      } catch {}
+    }
+  }
+
   return (
-    <div className={`bg-muted relative overflow-hidden ${className}`}>
+    <div
+      className={`bg-muted relative overflow-hidden group/card ${className}`}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       {isHttpImage ? (
         <img
           src={resolvedImage}
@@ -44,10 +64,12 @@ export function MediaThumbnail({ item, className = '' }: { item: ContentItem; cl
       ) : item.type === 'video' ? (
         videoPosterSource ? (
           <video
+            ref={videoRef}
             src={videoPosterSource}
             muted
             playsInline
             preload="metadata"
+            crossOrigin="anonymous"
             className="size-full object-cover"
             aria-label={`${item.name} preview`}
           />

@@ -1,0 +1,20 @@
+{
+  "nodes": [
+    {
+      "id": "frontend_public_demo_media_5b6f1378",
+      "label": "Demo PNG Asset",
+      "file_type": "image",
+      "source_file": "E:\\IMP projects\\OLRAC SIGNAGE\\frontend\\public\\demo-media\\5b6f1378-1a4f-4888-b3ac-00eaf19e89f7.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "Sample image used as demo media in the portal"
+    }
+  ],
+  "edges": [],
+  "hyperedges": [],
+  "input_tokens": 200,
+  "output_tokens": 80
+}

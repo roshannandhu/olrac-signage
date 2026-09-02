@@ -72,7 +72,9 @@ class Organization(Base):
     approved_by_user_id = Column(Integer, nullable=True)
     rejection_reason = Column(String, nullable=True)
     storage_quota_bytes = Column(BigInteger, nullable=False, default=10 * 1024 * 1024 * 1024)
-    # Per-tenant quotas set by Super Admin. 0 = unlimited (default).
+    # Per-tenant OVERRIDES set by Super Admin. 0 = "no override, use the package".
+    # Read these through effective_max_screens / effective_max_ad_slots rather than
+    # directly; on their own they say nothing about what the tenant is actually allowed.
     max_screens = Column(Integer, nullable=False, default=0)
     max_ad_slots = Column(Integer, nullable=False, default=0)
 
@@ -90,6 +92,38 @@ class Organization(Base):
     created_at = Column(UtcDateTime, nullable=False, default=utcnow)
 
     users = relationship("User", back_populates="organization")
+
+    @property
+    def effective_max_screens(self) -> int:
+        """Screens this tenant may actually have. 0 means unlimited.
+
+        The one number that answers the question, because the two columns behind it
+        disagreed constantly. `max_screens` is an override that only `_apply_plan` ever
+        writes, while THREE other paths set `plan_id` without it -- the free-plan backfill
+        in billing.ensure_billing_catalog, a self-serve plan change at checkout, and
+        approving a tenant with no package chosen. In production every organisation ended
+        up with a plan and `max_screens = 0`.
+
+        That split had the enforced limit and the displayed limit reading different
+        fields: the admin tenants list showed `max_screens` (0, rendered as an infinity
+        sign) while ensure_screen_quota silently fell through to the package's number. An
+        operator who set a 5-screen package saw no limit in the console and got whatever
+        the package said -- or, for a tenant approved with no package at all, no limit at
+        all.
+
+        Derived rather than copied so it cannot drift again: editing a package now moves
+        every tenant on it, and an override still wins where one is set.
+        """
+        if self.max_screens and self.max_screens > 0:
+            return self.max_screens
+        return self.plan.max_screens if self.plan else 0
+
+    @property
+    def effective_max_ad_slots(self) -> int:
+        """Ad slots this tenant may actually sell. 0 means unlimited. See above."""
+        if self.max_ad_slots and self.max_ad_slots > 0:
+            return self.max_ad_slots
+        return self.plan.max_ad_slots if self.plan else 0
 
     @property
     def owner_email(self) -> str | None:

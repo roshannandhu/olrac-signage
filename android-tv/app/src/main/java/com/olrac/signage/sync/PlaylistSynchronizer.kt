@@ -171,6 +171,15 @@ class PlaylistSynchronizer(context: Context) {
                     DeviceState(appContext).setMaintenancePin(it)
                 }
 
+                // Persisted for the same reason as the pin, and ahead of the same early
+                // return: the screen must keep observing its opening hours through an
+                // outage, so the player reads them from disk rather than from the last
+                // successful response.
+                DeviceState(appContext).setOperatingHours(
+                    syncData.operating_mode,
+                    syncData.operating_hours,
+                )
+
                 val playlist = syncData.playlist
                 if (playlist == null) {
                     dao.replaceAll(emptyList())

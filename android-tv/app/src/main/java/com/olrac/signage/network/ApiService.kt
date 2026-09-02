@@ -144,7 +144,16 @@ data class SyncResponse(
     val maintenance_pin: String? = null,
     val pending_command: String? = null,
     val screen_id: Int? = null,
-    val organization_id: Int? = null
+    val organization_id: Int? = null,
+    // Screen operating hours. The backend has always sent these -- schemas.py even
+    // documents that "the player evaluates them locally" -- but SyncResponse had no field
+    // for them, so Gson dropped both on every sync. The Hours dialog in the dashboard
+    // claims "The player stays on a black screen until this is changed", and it did not:
+    // a screen set to "never" kept playing. These two lines are what make that true.
+    //
+    // "always" | "hours" | "never"; hours maps "mon".."sun" -> ["HH:MM", "HH:MM"].
+    val operating_mode: String? = null,
+    val operating_hours: Map<String, List<String>>? = null
 )
 
 data class AppVersionDto(

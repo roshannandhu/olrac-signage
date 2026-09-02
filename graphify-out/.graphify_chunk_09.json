@@ -1,0 +1,20 @@
+{
+  "nodes": [
+    {
+      "id": "frontend_public_vercel",
+      "label": "Vercel Wordmark",
+      "file_type": "image",
+      "source_file": "E:\\IMP projects\\OLRAC SIGNAGE\\frontend\\public\\vercel.svg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "Host branding asset from create-next-app"
+    }
+  ],
+  "edges": [],
+  "hyperedges": [],
+  "input_tokens": 200,
+  "output_tokens": 80
+}

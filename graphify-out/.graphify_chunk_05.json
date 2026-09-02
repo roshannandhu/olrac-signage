@@ -1,0 +1,20 @@
+{
+  "nodes": [
+    {
+      "id": "frontend_public_demo_media_6158c939",
+      "label": "Demo PNG Asset Alternate",
+      "file_type": "image",
+      "source_file": "E:\\IMP projects\\OLRAC SIGNAGE\\frontend\\public\\demo-media\\6158c939-e8e3-4e31-9dfb-4a9b34447df7.png",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "Second sample image for demo media library"
+    }
+  ],
+  "edges": [],
+  "hyperedges": [],
+  "input_tokens": 200,
+  "output_tokens": 80
+}

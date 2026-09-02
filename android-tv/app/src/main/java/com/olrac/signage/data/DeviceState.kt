@@ -149,6 +149,42 @@ class DeviceState(context: Context) {
     }
 
     /**
+     * Store the screen's opening hours, so playback can observe them offline.
+     *
+     * Serialised as JSON rather than modelled, because SharedPreferences has no map type
+     * and this is read once per playback tick by exactly one caller.
+     */
+    fun setOperatingHours(mode: String?, windows: Map<String, List<String>>?) {
+        val editor = preferences.edit()
+        editor.putString(KEY_OPERATING_MODE, mode ?: "always")
+        if (windows.isNullOrEmpty()) {
+            editor.remove(KEY_OPERATING_HOURS)
+        } else {
+            editor.putString(KEY_OPERATING_HOURS, org.json.JSONObject(windows as Map<*, *>).toString())
+        }
+        editor.commit()
+    }
+
+    val operatingMode: String
+        get() = preferences.getString(KEY_OPERATING_MODE, "always") ?: "always"
+
+    val operatingHours: Map<String, List<String>>?
+        get() {
+            val raw = preferences.getString(KEY_OPERATING_HOURS, null) ?: return null
+            return try {
+                val json = org.json.JSONObject(raw)
+                json.keys().asSequence().associateWith { day ->
+                    val window = json.getJSONArray(day)
+                    (0 until window.length()).map(window::getString)
+                }
+            } catch (_: Exception) {
+                // A malformed blob must not stop playback; "always on" is the safe default,
+                // matching the server, which treats unparseable windows as not-off.
+                null
+            }
+        }
+
+    /**
      * This screen's own credential, issued once by the route that bound it.
      *
      * Null on a screen paired by an older build of the app; the server still accepts those
@@ -224,6 +260,8 @@ class DeviceState(context: Context) {
         const val KEY_API_BASE_URL = "api_base_url"
         const val KEY_MAINTENANCE_PIN = "maintenance_pin"
         const val KEY_DEVICE_SECRET = "device_secret"
+        const val KEY_OPERATING_MODE = "operating_mode"
+        const val KEY_OPERATING_HOURS = "operating_hours"
         const val DEFAULT_SCREEN_NAME = "OLRAC Screen"
         // Applies only before the first successful sync; the server's per-screen pin
         // replaces it and every paired screen gets a distinct one.

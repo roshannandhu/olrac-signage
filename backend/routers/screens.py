@@ -505,26 +505,24 @@ def ensure_screen_quota(db: Session, organization_id: int, action: str) -> None:
         models.Screen.status != "waiting_pairing",
     ).count()
 
-    # 1. Admin-set per-org quota takes priority (0 = unlimited)
-    if organization.max_screens and organization.max_screens > 0:
-        if screen_count >= organization.max_screens:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    f"TV screen quota reached ({screen_count}/{organization.max_screens}). "
-                    f"Contact your platform administrator to increase your screen limit."
-                ),
-            )
-        return  # quota is set and not exceeded — no need to check plan
+    # One number, from Organization.effective_max_screens: the admin override when one is
+    # set, otherwise the package's limit. This used to be two branches reading two columns,
+    # and the first branch `return`ed on a 0 override -- which is every organisation in
+    # practice, so the package limit was reached only by falling through, and a tenant with
+    # no package at all was silently unlimited.
+    limit = organization.effective_max_screens
+    if limit <= 0:
+        return  # no package and no override → deliberately unbounded
 
-    # 2. Fall back to plan-level limit
-    plan = db.query(models.Plan).filter(models.Plan.id == organization.plan_id).first()
-    if not plan:
-        return  # no plan, no quota → unlimited
-    if screen_count >= plan.max_screens:
+    if screen_count >= limit:
+        plan_name = organization.plan.name if organization.plan else None
+        where = f" on {plan_name}" if plan_name and not organization.max_screens else ""
         raise HTTPException(
             status_code=409,
-            detail=f"Screen limit reached ({plan.max_screens} on {plan.name}). Upgrade your plan to {action}.",
+            detail=(
+                f"Screen limit reached ({screen_count}/{limit}{where}). "
+                f"Upgrade the package or raise this workspace's limit to {action}."
+            ),
         )
 
 
@@ -1227,9 +1225,19 @@ def enroll_device(req: schemas.EnrollRequest, db: Session = Depends(database.get
                 db.flush()
             screen.device_id = req.device_id
 
-    if not screen:
+    # "or waiting_pairing" is the half this was missing, and it made the quota optional.
+    #
+    # The player calls POST /register on boot, which mints a row with status
+    # "waiting_pairing" and no organisation. /enroll then FOUND that row, so `not screen`
+    # was false and the check was skipped -- while the lines below bind it to the org and
+    # flip it to "offline". Since ensure_screen_quota counts everything except
+    # waiting_pairing, the screen was uncounted before and counted after: one screen over
+    # the cap, every time, repeatable. bind_screen_to_org has always had both halves;
+    # this is the same condition.
+    if not screen or screen.status == "waiting_pairing":
         # New device counts against the plan, exactly as pairing does.
         ensure_screen_quota(db, token.organization_id, "enrol another device")
+    if not screen:
         screen = models.Screen(device_id=req.device_id)
         db.add(screen)
 

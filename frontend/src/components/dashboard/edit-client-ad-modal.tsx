@@ -27,11 +27,23 @@ interface EditClientAdModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   contentItem: ContentItem | null
+  /**
+   * Screens to tick by default for an advert that has none yet.
+   *
+   * Passed by the playlist builder, where the "+" sits beside a loop the operator is
+   * already looking at. Without it the modal opened with nothing selected, the operator
+   * booked the advert, and it went to no screen at all -- the loop was unchanged and
+   * nothing reached the TV, which read as "adding content does nothing".
+   *
+   * Only a default. An advert that already has screens keeps them, so re-opening the
+   * modal from a different playlist cannot quietly re-target a live booking.
+   */
+  defaultScreenIds?: number[]
 }
 
 const formatRupees = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN')}`
 
-export function EditClientAdModal({ open, onOpenChange, contentItem }: EditClientAdModalProps) {
+export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScreenIds }: EditClientAdModalProps) {
   const queryClient = useQueryClient()
 
   const [name, setName] = useState('')
@@ -72,10 +84,12 @@ export function EditClientAdModal({ open, onOpenChange, contentItem }: EditClien
       setClientEmail(contentItem.client_email || '')
       setClientPhone(contentItem.client_phone || '')
       setPlanId(contentItem.plan_id || null)
-      setSelectedScreenIds(contentItem.screen_ids || [])
+      // Existing targets win; the default only fills an empty selection.
+      const existing = contentItem.screen_ids || []
+      setSelectedScreenIds(existing.length ? existing : (defaultScreenIds || []))
       setNotes(contentItem.placement_notes || '')
     }
-  }, [contentItem, open])
+  }, [contentItem, open, defaultScreenIds])
 
   // Selected plan metadata
   const selectedPlan = useMemo(() => {

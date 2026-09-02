@@ -81,6 +81,8 @@ ISOLATED_SCRIPTS = {
     "test_all_five_areas_e2e.py",
     # Removing a TV: play history survives, the panel is signed out, quota is freed.
     "test_screen_removal.py",
+    # The screen cap: package limits, admin overrides, and the /enroll bypass.
+    "test_screen_quota.py",
 }
 
 # Pure-logic tests: no database, no import-time engine, safe to run in-process.

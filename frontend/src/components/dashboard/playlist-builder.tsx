@@ -290,28 +290,14 @@ function ItemRow({ item, defaultTransition, defaultDurationMs, canEdit, saving, 
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-3 sm:gap-4">
-                  <div className="mr-2">
-                    <span className="text-muted-foreground mb-2 block text-xs font-medium">Days <span className="text-muted-foreground/70 font-normal">(none = every day)</span></span>
-                    <div className="flex gap-1.5">
-                      {dayLabels.map((label, day) => (
-                        <button key={day} type="button" aria-label={dayNames[day]} aria-pressed={form.days.includes(day)} disabled={!canEdit || saving}
-                          onClick={() => set('days', form.days.includes(day) ? form.days.filter((value) => value !== day) : [...form.days, day].sort())}
-                          className={cn('focus-visible:ring-ring grid size-9 place-items-center rounded-lg border text-xs font-bold transition-colors focus-visible:ring-2 focus-visible:outline-none', form.days.includes(day) ? 'border-primary bg-primary text-primary-foreground' : 'border-hairline bg-card text-muted-foreground hover:border-border')}>
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <Label htmlFor={`from-${item.id}`} className="text-muted-foreground mb-2 text-xs">From</Label>
-                    <Input id={`from-${item.id}`} type="time" value={form.windowStart} onChange={(event) => set('windowStart', event.target.value)} className="w-[120px]" />
-                  </div>
-                  <div>
-                    <Label htmlFor={`until-${item.id}`} className="text-muted-foreground mb-2 text-xs">Until</Label>
-                    <Input id={`until-${item.id}`} type="time" value={form.windowEnd} onChange={(event) => set('windowEnd', event.target.value)} className="w-[120px]" />
-                  </div>
-                </div>
+                {/* Per-item Days / From / Until removed: an advert's timing now comes from
+                    its client booking, which is the only place a sale is recorded. The
+                    placement writes start_at and end_at onto the item (see
+                    placements.sync_placement_window), so two editable controls for the same
+                    thing meant the manual one was silently overwritten on the next booking
+                    change. The backend Schedule model and the player's ScheduleEvaluator are
+                    untouched, so a window already saved keeps applying and is preserved
+                    through an unrelated edit. */}
               </div>
             </fieldset>
 
@@ -350,12 +336,25 @@ export function PlaylistBuilder({ playlistId, showHeader = true }: { playlistId:
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))
   const invalidate = () => { queryClient.invalidateQueries({ queryKey: ['playlist', playlistId] }); queryClient.invalidateQueries({ queryKey: ['playlists'] }) }
   const reorderMutation = useMutation({ mutationFn: (orders: number[]) => api.reorderPlaylistItems(playlistId, orders), onSuccess: () => { setLocalOrder(null); invalidate(); toast.success('Order saved') }, onError: (error: Error) => { setLocalOrder(null); toast.error(error.message); playlistQuery.refetch() } })
-  // The "+" used to call api.addPlaylistItem and put the asset straight into the loop.
-  // That was the way past every commercial rule: no client, no plan, no dates, no screen
-  // limit, and nothing on any report -- an advert could be running on a wall with no record
-  // that it had been sold. It now opens the same booking modal the content page uses, so
-  // there is one way to put an advert on a screen and it is the one that records the sale.
+  // The "+" opens the booking modal rather than adding to the loop directly, and that is
+  // deliberate: an advert may not reach a screen without a client, because the placement
+  // is what records the sale, the paid window and the proof-of-play an invoice is built
+  // from. api.addPlaylistItem still exists for the backend and tests; no UI calls it.
+  //
+  // What WAS broken is where the booking landed. The modal is scoped to the content item,
+  // not to the playlist open behind it, so it wrote to whichever screens happened to be
+  // ticked -- by default none. The operator booked an advert, saw the loop unchanged, and
+  // nothing appeared on the TV. It now opens with the screens that actually use this
+  // playlist pre-selected, so the obvious action does the expected thing.
   const [bookingFor, setBookingFor] = useState<ContentItem | null>(null)
+  // Screens the operator would expect an advert booked from THIS loop to appear on.
+  // effective_playlist_id, not playlist_id, so a screen that inherits this playlist from
+  // its group counts -- that is still a screen showing this loop.
+  const screensQuery = useQuery({ queryKey: ['screens'], queryFn: api.getScreens })
+  const screensOnThisPlaylist = useMemo(
+    () => (screensQuery.data || []).filter((screen) => screen.effective_playlist_id === playlistId).map((screen) => screen.id),
+    [screensQuery.data, playlistId],
+  )
   const removeMutation = useMutation({ mutationFn: (itemId: number) => api.removePlaylistItem(playlistId, itemId), onSuccess: () => { invalidate(); toast.success('Item removed') }, onError: (error: Error) => toast.error(error.message) })
   const updateMutation = useMutation({
     mutationFn: ({ itemId, data }: { itemId: number; data: Parameters<typeof api.updatePlaylistItem>[2] }) => api.updatePlaylistItem(playlistId, itemId, data),
@@ -408,7 +407,7 @@ export function PlaylistBuilder({ playlistId, showHeader = true }: { playlistId:
           <div className="flex items-center justify-between"><div><h2 id="library-title" className="font-semibold text-foreground">Content library</h2><p className="mt-1 text-xs text-muted-foreground/70">{availableContent.length} assets available</p></div><Badge variant="secondary">Book to screens</Badge></div>
           <div className="relative mt-4"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/70" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search assets…" className="pl-9" aria-label="Search library" /></div>
           <div className="mt-4 max-h-[660px] space-y-2 overflow-y-auto pr-1">
-            {contentQuery.isLoading ? Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-20" />) : availableContent.map((content) => <div key={content.id} className="flex items-center gap-3 rounded-xl border border-hairline p-2.5 hover:bg-muted"><div className="relative size-12 shrink-0"><MediaThumbnail item={content} className="size-12 rounded-lg" />{clipDuration(content.duration_ms) && <span className="absolute right-0 bottom-0 rounded bg-black/75 px-1 text-[9px] font-semibold text-white">{clipDuration(content.duration_ms)}</span>}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-foreground">{content.name}</p><p className="mt-0.5 text-xs text-muted-foreground/70"><span className="capitalize">{content.type}</span>{assetOrientation(content.renditions) && ` • ${assetOrientation(content.renditions)}`}{clipDuration(content.duration_ms) && ` • ${clipDuration(content.duration_ms)}`}</p></div><Button size="icon-sm" variant="outline" disabled={!canEdit} onClick={() => setBookingFor(content)} aria-label={`Book ${content.name}`}><Plus /></Button></div>)}
+            {contentQuery.isLoading ? Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-20" />) : availableContent.map((content) => <div key={content.id} className="flex items-center gap-3 rounded-xl border border-hairline p-2.5 hover:bg-muted"><div className="relative size-12 shrink-0"><MediaThumbnail item={content} className="size-12 rounded-lg" />{clipDuration(content.duration_ms) && <span className="absolute right-0 bottom-0 rounded bg-black/75 px-1 text-[9px] font-semibold text-white">{clipDuration(content.duration_ms)}</span>}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-foreground">{content.name}</p><p className="mt-0.5 text-xs text-muted-foreground/70"><span className="capitalize">{content.type}</span>{assetOrientation(content.renditions) && ` • ${assetOrientation(content.renditions)}`}{clipDuration(content.duration_ms) && ` • ${clipDuration(content.duration_ms)}`}</p></div><Button size="icon-sm" variant="outline" disabled={!canEdit} onClick={() => setBookingFor(content)} aria-label={`Book ${content.name} to screens`}><Plus /></Button></div>)}
             {!availableContent.length && <div className="py-10 text-center"><Search className="mx-auto size-5 text-muted-foreground/40" /><p className="mt-2 text-sm text-muted-foreground/70">No matching assets</p></div>}
           </div>
         </aside>
@@ -420,6 +419,7 @@ export function PlaylistBuilder({ playlistId, showHeader = true }: { playlistId:
         open={Boolean(bookingFor)}
         onOpenChange={(next) => { if (!next) setBookingFor(null) }}
         contentItem={bookingFor}
+        defaultScreenIds={screensOnThisPlaylist}
       />
     </div>
   )

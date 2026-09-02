@@ -1,0 +1,20 @@
+{
+  "nodes": [
+    {
+      "id": "frontend_public_demo_media_1ba1af43_thumbnail",
+      "label": "Demo Video Thumbnail",
+      "file_type": "image",
+      "source_file": "E:\\IMP projects\\OLRAC SIGNAGE\\frontend\\public\\demo-media\\1ba1af43-3f56-42e6-bc97-928b5f88fbef-thumbnail.jpg",
+      "source_location": null,
+      "source_url": null,
+      "captured_at": null,
+      "author": null,
+      "contributor": null,
+      "rationale": "Preview still for a demo playlist video asset"
+    }
+  ],
+  "edges": [],
+  "hyperedges": [],
+  "input_tokens": 200,
+  "output_tokens": 80
+}

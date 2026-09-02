@@ -200,8 +200,13 @@ def _summarise(db: Session, org: models.Organization) -> TenantSummaryOut:
         plan_name=org.plan.name if org.plan else None,
         screens_count=screens_count,
         online_screens_count=online_count,
-        max_screens=org.max_screens,
-        max_ad_slots=org.max_ad_slots,
+        # The limit actually enforced, not the raw override column. Reporting the column
+        # meant the console showed 0 -- rendered as an infinity sign by the quota bar --
+        # for every tenant whose limit came from their package, which is all of them. An
+        # operator setting a 5-screen package saw "unlimited" and could not tell what a
+        # tenant was allowed.
+        max_screens=org.effective_max_screens,
+        max_ad_slots=org.effective_max_ad_slots,
         ad_slots_used=ads_used,
         storage_used_bytes=int(storage_used),
         storage_quota_bytes=org.storage_quota_bytes,

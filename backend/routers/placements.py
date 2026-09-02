@@ -291,10 +291,11 @@ def ensure_ad_slot_quota(scope: TenantScope) -> None:
     if not org:
         return
 
-    limit = org.max_ad_slots or 0
-    if limit <= 0 and org.plan_id:
-        plan = scope.db.query(models.Plan).filter(models.Plan.id == org.plan_id).first()
-        limit = (plan.max_ad_slots or 0) if plan else 0
+    # Same derivation as screens, via the shared property: override when set, otherwise
+    # the package. This was the correct fallback written out inline here while
+    # ensure_screen_quota had a subtly different one that returned early on a 0 override --
+    # two copies of one rule that disagreed.
+    limit = org.effective_max_ad_slots
     if limit <= 0:
         return
 

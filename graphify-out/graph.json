@@ -1980,7 +1980,7 @@
       "label": ".rewriteLoopbackMediaUrl()",
       "file_type": "code",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/network/ApiClient.kt",
-      "source_location": "L158",
+      "source_location": "L162",
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_network_apiclient_apiclient_rewriteloopbackmediaurl",
@@ -4256,8 +4256,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_telemetry_screenshotmanager",
-      "community": 193,
-      "community_name": "ScreenshotManager",
+      "community": 79,
+      "community_name": "DeviceState",
       "norm_label": "screenshotmanager.kt"
     },
     {
@@ -4269,8 +4269,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_telemetry_screenshotmanager_screenshotmanager",
-      "community": 193,
-      "community_name": "ScreenshotManager",
+      "community": 79,
+      "community_name": "DeviceState",
       "norm_label": "screenshotmanager"
     },
     {
@@ -4280,8 +4280,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "weakreference",
-      "community": 193,
-      "community_name": "ScreenshotManager",
+      "community": 79,
+      "community_name": "DeviceState",
       "norm_label": "weakreference"
     },
     {
@@ -4291,8 +4291,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_telemetry_screenshotmanager_kt_activity",
-      "community": 193,
-      "community_name": "ScreenshotManager",
+      "community": 79,
+      "community_name": "DeviceState",
       "norm_label": "activity"
     },
     {
@@ -4303,8 +4303,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_telemetry_screenshotmanager_screenshotmanager_registeractivity",
-      "community": 193,
-      "community_name": "ScreenshotManager",
+      "community": 79,
+      "community_name": "DeviceState",
       "norm_label": ".registeractivity()"
     },
     {
@@ -4315,8 +4315,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_telemetry_screenshotmanager_screenshotmanager_requestscreenshot",
-      "community": 193,
-      "community_name": "ScreenshotManager",
+      "community": 79,
+      "community_name": "DeviceState",
       "norm_label": ".requestscreenshot()"
     },
     {
@@ -4327,8 +4327,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "android_tv_app_src_main_java_com_olrac_signage_telemetry_screenshotmanager_screenshotmanager_uploadscreenshot",
-      "community": 193,
-      "community_name": "ScreenshotManager",
+      "community": 79,
+      "community_name": "DeviceState",
       "norm_label": ".uploadscreenshot()"
     },
     {
@@ -4338,8 +4338,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "bitmap",
-      "community": 193,
-      "community_name": "ScreenshotManager",
+      "community": 79,
+      "community_name": "DeviceState",
       "norm_label": "bitmap"
     },
     {
@@ -8689,7 +8689,7 @@
       "_origin": "ast",
       "id": "backend_main_serve_media",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "serve_media()"
     },
     {
@@ -8757,7 +8757,7 @@
       "_origin": "ast",
       "id": "backend_main_rationale_416",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "stable url for a stored object; signs the real one fresh on every request. this..."
     },
     {
@@ -9249,7 +9249,7 @@
       "_origin": "ast",
       "id": "backend_media_storage",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "media_storage.py"
     },
     {
@@ -9261,7 +9261,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_client",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "_client()"
     },
     {
@@ -9272,7 +9272,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_storage_storage_key_for",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "storage_key_for()"
     },
@@ -9285,7 +9285,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_is_remote",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "is_remote()"
     },
     {
@@ -9297,7 +9297,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_fetch_to",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "fetch_to()"
     },
     {
@@ -9308,7 +9308,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_py_path",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "path"
     },
     {
@@ -9320,7 +9320,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_read",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "read()"
     },
     {
@@ -9332,7 +9332,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_store",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "store()"
     },
     {
@@ -9355,7 +9355,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_rationale_1",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "reading and writing media wherever it happens to live. the transcoder needs a..."
     },
     {
@@ -9365,7 +9365,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "backend_media_storage_rationale_44",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "the backend-relative key inside a stored location. both schemes carry the same..."
     },
@@ -9377,7 +9377,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_rationale_60",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "put the bytes of `stored_url` at `destination` and return it. a local file is..."
     },
     {
@@ -9388,7 +9388,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_rationale_82",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "bytes of a stored object, read straight from wherever it lives. never raises...."
     },
     {
@@ -9399,7 +9399,7 @@
       "_origin": "ast",
       "id": "backend_media_storage_rationale_133",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "persist `local_path` under `key` and return the location to save on the row...."
     },
     {
@@ -9420,7 +9420,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_media_urls",
-      "community": 141,
+      "community": 18,
       "community_name": "media_urls.py",
       "norm_label": "media_urls.py"
     },
@@ -9444,7 +9444,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_setting",
-      "community": 141,
+      "community": 18,
       "community_name": "media_urls.py",
       "norm_label": "_setting()"
     },
@@ -9457,7 +9457,7 @@
       "_origin": "ast",
       "id": "backend_media_urls_get_s3_config",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "get_s3_config()"
     },
     {
@@ -9469,7 +9469,7 @@
       "_origin": "ast",
       "id": "backend_media_urls_is_s3_enabled",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "is_s3_enabled()"
     },
     {
@@ -9480,7 +9480,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_s3_client_for",
-      "community": 141,
+      "community": 18,
       "community_name": "media_urls.py",
       "norm_label": "_s3_client_for()"
     },
@@ -9492,7 +9492,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_s3_client",
-      "community": 141,
+      "community": 18,
       "community_name": "media_urls.py",
       "norm_label": "s3_client()"
     },
@@ -9504,7 +9504,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_detect_lan_host",
-      "community": 141,
+      "community": 18,
       "community_name": "media_urls.py",
       "norm_label": "_detect_lan_host()"
     },
@@ -9540,7 +9540,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_delete_stored_file",
-      "community": 141,
+      "community": 18,
       "community_name": "media_urls.py",
       "norm_label": "delete_stored_file()"
     },
@@ -9551,7 +9551,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_media_urls_rationale_1",
-      "community": 141,
+      "community": 18,
       "community_name": "media_urls.py",
       "norm_label": "turning a stored media location into something a browser or a tv can fetch...."
     },
@@ -9573,7 +9573,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "backend_media_urls_rationale_45",
-      "community": 141,
+      "community": 18,
       "community_name": "media_urls.py",
       "norm_label": "one environment value, with a variable that is present but blank treated as..."
     },
@@ -9585,7 +9585,7 @@
       "_origin": "ast",
       "id": "backend_media_urls_rationale_56",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "where object storage is and how to authenticate to it. the single source of..."
     },
     {
@@ -9595,7 +9595,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "backend_media_urls_rationale_90",
-      "community": 141,
+      "community": 18,
       "community_name": "media_urls.py",
       "norm_label": "a boto3 client built from `get_s3_config` and nothing else. cached, because..."
     },
@@ -9606,7 +9606,7 @@
       "source_location": "L105",
       "_origin": "ast",
       "id": "backend_media_urls_rationale_105",
-      "community": 141,
+      "community": 18,
       "community_name": "media_urls.py",
       "norm_label": "best-effort lan address of this machine, so devices on the network can reach..."
     },
@@ -9639,7 +9639,7 @@
       "source_location": "L162",
       "_origin": "ast",
       "id": "backend_media_urls_rationale_162",
-      "community": 141,
+      "community": 18,
       "community_name": "media_urls.py",
       "norm_label": "remove the local file a stored location points at. returns true if it went...."
     },
@@ -9870,8 +9870,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_screenshotlog",
-      "community": 201,
-      "community_name": "upload_device_screenshot",
+      "community": 18,
+      "community_name": "media_urls.py",
       "norm_label": "screenshotlog"
     },
     {
@@ -12634,7 +12634,7 @@
       "_origin": "ast",
       "id": "backend_routers_content_get_s3_client",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "get_s3_client()"
     },
     {
@@ -12981,7 +12981,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_enrollment_tokens_revoke_token",
-      "community": 98,
+      "community": 156,
       "community_name": "HTTPException",
       "norm_label": "revoke_token()"
     },
@@ -12993,7 +12993,7 @@
       "_origin": "ast",
       "id": "backend_routers_groups",
       "community": 156,
-      "community_name": "groups.py",
+      "community_name": "HTTPException",
       "norm_label": "groups.py"
     },
     {
@@ -13005,7 +13005,7 @@
       "_origin": "ast",
       "id": "backend_routers_groups_serialize_group",
       "community": 156,
-      "community_name": "groups.py",
+      "community_name": "HTTPException",
       "norm_label": "serialize_group()"
     },
     {
@@ -13016,7 +13016,7 @@
       "_origin": "ast",
       "id": "screengroup",
       "community": 156,
-      "community_name": "groups.py",
+      "community_name": "HTTPException",
       "norm_label": "screengroup"
     },
     {
@@ -13028,7 +13028,7 @@
       "_origin": "ast",
       "id": "backend_routers_groups_validate_parent",
       "community": 156,
-      "community_name": "groups.py",
+      "community_name": "HTTPException",
       "norm_label": "validate_parent()"
     },
     {
@@ -13039,7 +13039,7 @@
       "_origin": "ast",
       "id": "backend_routers_groups_py_get",
       "community": 156,
-      "community_name": "groups.py",
+      "community_name": "HTTPException",
       "norm_label": "get"
     },
     {
@@ -13051,7 +13051,7 @@
       "_origin": "ast",
       "id": "backend_routers_groups_list_groups",
       "community": 156,
-      "community_name": "groups.py",
+      "community_name": "HTTPException",
       "norm_label": "list_groups()"
     },
     {
@@ -13063,7 +13063,7 @@
       "_origin": "ast",
       "id": "backend_routers_groups_create_group",
       "community": 156,
-      "community_name": "groups.py",
+      "community_name": "HTTPException",
       "norm_label": "create_group()"
     },
     {
@@ -13074,7 +13074,7 @@
       "_origin": "ast",
       "id": "backend_routers_groups_py_put",
       "community": 156,
-      "community_name": "groups.py",
+      "community_name": "HTTPException",
       "norm_label": "put"
     },
     {
@@ -13086,7 +13086,7 @@
       "_origin": "ast",
       "id": "backend_routers_groups_update_group",
       "community": 156,
-      "community_name": "groups.py",
+      "community_name": "HTTPException",
       "norm_label": "update_group()"
     },
     {
@@ -13098,7 +13098,7 @@
       "_origin": "ast",
       "id": "backend_routers_groups_set_group_screens",
       "community": 156,
-      "community_name": "groups.py",
+      "community_name": "HTTPException",
       "norm_label": "set_group_screens()"
     },
     {
@@ -13110,7 +13110,7 @@
       "_origin": "ast",
       "id": "backend_routers_groups_assign_group_playlist",
       "community": 156,
-      "community_name": "groups.py",
+      "community_name": "HTTPException",
       "norm_label": "assign_group_playlist()"
     },
     {
@@ -13122,7 +13122,7 @@
       "_origin": "ast",
       "id": "backend_routers_groups_delete_group",
       "community": 156,
-      "community_name": "groups.py",
+      "community_name": "HTTPException",
       "norm_label": "delete_group()"
     },
     {
@@ -13133,7 +13133,7 @@
       "_origin": "ast",
       "id": "backend_routers_groups_rationale_30",
       "community": 156,
-      "community_name": "groups.py",
+      "community_name": "HTTPException",
       "norm_label": "reject a parent that is not ours, is the group itself, or would close a loop...."
     },
     {
@@ -13778,7 +13778,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "playlists.py"
     },
     {
@@ -13790,7 +13790,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists_bump_playlist",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "bump_playlist()"
     },
     {
@@ -13801,7 +13801,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists_py_playlist",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "playlist"
     },
     {
@@ -13813,7 +13813,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists_set_schedule",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "set_schedule()"
     },
     {
@@ -13824,7 +13824,7 @@
       "_origin": "ast",
       "id": "playlistitem",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "playlistitem"
     },
     {
@@ -13836,7 +13836,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists_create_playlist",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "create_playlist()"
     },
     {
@@ -13847,7 +13847,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists_py_get",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "get"
     },
     {
@@ -13859,7 +13859,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists_get_playlists",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "get_playlists()"
     },
     {
@@ -13871,7 +13871,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists_get_playlist",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "get_playlist()"
     },
     {
@@ -13882,7 +13882,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists_py_put",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "put"
     },
     {
@@ -13894,7 +13894,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists_update_playlist",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "update_playlist()"
     },
     {
@@ -13906,7 +13906,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists_add_item_to_playlist",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "add_item_to_playlist()"
     },
     {
@@ -13918,7 +13918,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists_reorder_playlist_items",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "reorder_playlist_items()"
     },
     {
@@ -13930,7 +13930,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists_update_playlist_item",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "update_playlist_item()"
     },
     {
@@ -13942,7 +13942,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists_update_playlist_transitions",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "update_playlist_transitions()"
     },
     {
@@ -13954,7 +13954,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists_remove_item_from_playlist",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "remove_item_from_playlist()"
     },
     {
@@ -13966,7 +13966,7 @@
       "_origin": "ast",
       "id": "backend_routers_playlists_delete_playlist",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "delete_playlist()"
     },
     {
@@ -14488,7 +14488,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "httpexception",
-      "community": 98,
+      "community": 156,
       "community_name": "HTTPException",
       "norm_label": "httpexception"
     },
@@ -15154,8 +15154,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_screenshots_upload_device_screenshot",
-      "community": 201,
-      "community_name": "upload_device_screenshot",
+      "community": 18,
+      "community_name": "media_urls.py",
       "norm_label": "upload_device_screenshot()"
     },
     {
@@ -15165,8 +15165,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_screenshots_py_uploadfile",
-      "community": 201,
-      "community_name": "upload_device_screenshot",
+      "community": 18,
+      "community_name": "media_urls.py",
       "norm_label": "uploadfile"
     },
     {
@@ -15176,8 +15176,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_screenshots_py_session",
-      "community": 201,
-      "community_name": "upload_device_screenshot",
+      "community": 18,
+      "community_name": "media_urls.py",
       "norm_label": "session"
     },
     {
@@ -15187,8 +15187,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_screenshots_py_httpauthorizationcredentials",
-      "community": 201,
-      "community_name": "upload_device_screenshot",
+      "community": 18,
+      "community_name": "media_urls.py",
       "norm_label": "httpauthorizationcredentials"
     },
     {
@@ -15232,7 +15232,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_py_get",
-      "community": 98,
+      "community": 156,
       "community_name": "HTTPException",
       "norm_label": "get"
     },
@@ -15244,7 +15244,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_list_tenant_plans",
-      "community": 98,
+      "community": 156,
       "community_name": "HTTPException",
       "norm_label": "list_tenant_plans()"
     },
@@ -15268,7 +15268,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_get_tenant_plan",
-      "community": 98,
+      "community": 156,
       "community_name": "HTTPException",
       "norm_label": "get_tenant_plan()"
     },
@@ -15279,7 +15279,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_py_put",
-      "community": 98,
+      "community": 156,
       "community_name": "HTTPException",
       "norm_label": "put"
     },
@@ -15291,7 +15291,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_update_tenant_plan",
-      "community": 98,
+      "community": 156,
       "community_name": "HTTPException",
       "norm_label": "update_tenant_plan()"
     },
@@ -15303,7 +15303,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_delete_tenant_plan",
-      "community": 98,
+      "community": 156,
       "community_name": "HTTPException",
       "norm_label": "delete_tenant_plan()"
     },
@@ -15325,7 +15325,7 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_rationale_74",
-      "community": 98,
+      "community": 156,
       "community_name": "HTTPException",
       "norm_label": "retire a plan, or delete it outright if nothing was ever sold on it. a plan..."
     },
@@ -15348,8 +15348,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_users_deny_platform_account",
-      "community": 176,
-      "community_name": "update_user",
+      "community": 156,
+      "community_name": "HTTPException",
       "norm_label": "deny_platform_account()"
     },
     {
@@ -15359,8 +15359,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_users_py_user",
-      "community": 176,
-      "community_name": "update_user",
+      "community": 156,
+      "community_name": "HTTPException",
       "norm_label": "user"
     },
     {
@@ -15371,8 +15371,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_users_active_owner_count",
-      "community": 176,
-      "community_name": "update_user",
+      "community": 156,
+      "community_name": "HTTPException",
       "norm_label": "active_owner_count()"
     },
     {
@@ -15382,8 +15382,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_users_py_get",
-      "community": 176,
-      "community_name": "update_user",
+      "community": 156,
+      "community_name": "HTTPException",
       "norm_label": "get"
     },
     {
@@ -15394,8 +15394,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_users_list_users",
-      "community": 176,
-      "community_name": "update_user",
+      "community": 156,
+      "community_name": "HTTPException",
       "norm_label": "list_users()"
     },
     {
@@ -15406,8 +15406,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_users_create_user",
-      "community": 176,
-      "community_name": "update_user",
+      "community": 156,
+      "community_name": "HTTPException",
       "norm_label": "create_user()"
     },
     {
@@ -15417,8 +15417,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_users_py_put",
-      "community": 176,
-      "community_name": "update_user",
+      "community": 156,
+      "community_name": "HTTPException",
       "norm_label": "put"
     },
     {
@@ -15429,8 +15429,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_users_update_user",
-      "community": 176,
-      "community_name": "update_user",
+      "community": 156,
+      "community_name": "HTTPException",
       "norm_label": "update_user()"
     },
     {
@@ -15441,8 +15441,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_users_delete_user",
-      "community": 176,
-      "community_name": "update_user",
+      "community": 156,
+      "community_name": "HTTPException",
       "norm_label": "delete_user()"
     },
     {
@@ -15452,8 +15452,8 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "backend_routers_users_rationale_25",
-      "community": 176,
-      "community_name": "update_user",
+      "community": 156,
+      "community_name": "HTTPException",
       "norm_label": "how many active owners the given organisation has. counted against an explicit..."
     },
     {
@@ -15580,7 +15580,7 @@
       "_origin": "ast",
       "id": "backend_routers_websockets_trigger_screen_sync",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "trigger_screen_sync()"
     },
     {
@@ -15637,7 +15637,7 @@
       "_origin": "ast",
       "id": "backend_routers_websockets_rationale_112",
       "community": 98,
-      "community_name": "HTTPException",
+      "community_name": "playlists.py",
       "norm_label": "synchronous / async friendly helper to push real-time sync signals to screens."
     },
     {
@@ -17332,7 +17332,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_tenancy_require_super_admin",
-      "community": 98,
+      "community": 156,
       "community_name": "HTTPException",
       "norm_label": "require_super_admin()"
     },
@@ -17377,7 +17377,7 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "backend_tenancy_rationale_129",
-      "community": 98,
+      "community": 156,
       "community_name": "HTTPException",
       "norm_label": "platform-operator routes only. every caller of this used to accept `role in..."
     },
@@ -26385,7 +26385,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_media_storage",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "test_media_storage.py"
     },
@@ -26397,7 +26397,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_py_fixture",
       "community": 50,
-      "community_name": "_restore_process_globals",
+      "community_name": "test_media_storage.py",
       "norm_label": "fixture"
     },
     {
@@ -26409,7 +26409,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_restore_process_globals",
       "community": 50,
-      "community_name": "_restore_process_globals",
+      "community_name": "test_media_storage.py",
       "norm_label": "_restore_process_globals()"
     },
     {
@@ -26420,7 +26420,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_media_storage_local_mode",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "local_mode()"
     },
@@ -26432,7 +26432,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_media_storage_test_storage_key_for_understands_both_schemes",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "test_storage_key_for_understands_both_schemes()"
     },
@@ -26444,7 +26444,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_media_storage_test_storage_key_for_rejects_nonsense",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "test_storage_key_for_rejects_nonsense()"
     },
@@ -26457,7 +26457,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_test_is_remote",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "test_is_remote()"
     },
     {
@@ -26468,7 +26468,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_media_storage_test_local_round_trip",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "test_local_round_trip()"
     },
@@ -26480,7 +26480,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_media_storage_test_local_fetch_reports_a_missing_file",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "test_local_fetch_reports_a_missing_file()"
     },
@@ -26492,7 +26492,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_media_storage_test_local_delete",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "test_local_delete()"
     },
@@ -26505,7 +26505,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_s3",
       "community": 50,
-      "community_name": "_restore_process_globals",
+      "community_name": "test_media_storage.py",
       "norm_label": "s3()"
     },
     {
@@ -26517,7 +26517,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_test_s3_round_trip",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "test_s3_round_trip()"
     },
     {
@@ -26528,7 +26528,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_media_storage_test_s3_delete",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "test_s3_delete()"
     },
@@ -26541,7 +26541,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_test_s3_fetch_creates_missing_parent_directories",
       "community": 18,
-      "community_name": "test_media_storage.py",
+      "community_name": "media_urls.py",
       "norm_label": "test_s3_fetch_creates_missing_parent_directories()"
     },
     {
@@ -26552,7 +26552,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_media_storage_test_read_local_file",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "test_read_local_file()"
     },
@@ -26564,7 +26564,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_media_storage_test_read_refuses_to_climb_out_of_the_uploads_root",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "test_read_refuses_to_climb_out_of_the_uploads_root()"
     },
@@ -26576,7 +26576,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_media_storage_test_read_object_storage_by_key_and_by_public_url",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "test_read_object_storage_by_key_and_by_public_url()"
     },
@@ -26588,7 +26588,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_media_storage_test_read_declines_anything_that_is_not_ours",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "test_read_declines_anything_that_is_not_ours()"
     },
@@ -26600,8 +26600,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_media_storage_test_the_report_reads_the_creative_without_any_http",
-      "community": 180,
-      "community_name": "resolve_media_url",
+      "community": 50,
+      "community_name": "test_media_storage.py",
       "norm_label": "test_the_report_reads_the_creative_without_any_http()"
     },
     {
@@ -26611,7 +26611,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_media_storage_rationale_1",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "media storage: fetch and store, on local disk and on object storage. the..."
     },
@@ -26623,7 +26623,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_rationale_36",
       "community": 50,
-      "community_name": "_restore_process_globals",
+      "community_name": "test_media_storage.py",
       "norm_label": "undo every module-level and environment mutation this file makes. `local_mode`..."
     },
     {
@@ -26633,7 +26633,7 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "tests_test_media_storage_rationale_63",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "local disk: aws_access_key_id unset or the literal 'mock'."
     },
@@ -26645,7 +26645,7 @@
       "_origin": "ast",
       "id": "tests_test_media_storage_rationale_131",
       "community": 50,
-      "community_name": "_restore_process_globals",
+      "community_name": "test_media_storage.py",
       "norm_label": "a fake s3, with the environment the code reads to decide it is enabled."
     },
     {
@@ -26655,7 +26655,7 @@
       "source_location": "L242",
       "_origin": "ast",
       "id": "tests_test_media_storage_rationale_242",
-      "community": 18,
+      "community": 50,
       "community_name": "test_media_storage.py",
       "norm_label": "so _fetch_image can tell \"not mine, try http\" from \"mine, and missing\"."
     },
@@ -26666,8 +26666,8 @@
       "source_location": "L248",
       "_origin": "ast",
       "id": "tests_test_media_storage_rationale_248",
-      "community": 180,
-      "community_name": "resolve_media_url",
+      "community": 50,
+      "community_name": "test_media_storage.py",
       "norm_label": "the whole point: a report renders its images with the network unavailable."
     },
     {
@@ -35193,7 +35193,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/network/ApiClient.kt",
-      "source_location": "L158",
+      "source_location": "L162",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_network_apiclient_apiclient",
@@ -35276,7 +35276,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/network/ApiClient.kt",
-      "source_location": "L155",
+      "source_location": "L159",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_network_apiclient_apiclient_resolvemediaurl",
@@ -35420,7 +35420,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/network/ApiClient.kt",
-      "source_location": "L168",
+      "source_location": "L176",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_network_apiclient_apiclient_rewriteloopbackmediaurl",
@@ -35432,7 +35432,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/network/ApiClient.kt",
-      "source_location": "L155",
+      "source_location": "L159",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_network_apiclient_apiclient_resolvemediaurl",
@@ -38208,7 +38208,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "android-tv/app/src/main/java/com/olrac/signage/sync/PlaylistSynchronizer.kt",
-      "source_location": "L244",
+      "source_location": "L238",
       "weight": 1.0,
       "_origin": "ast",
       "source": "android_tv_app_src_main_java_com_olrac_signage_sync_playlistsynchronizer_playlistsynchronizer_sync",
@@ -106692,5 +106692,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "54aa623b136c378551d106d1c15d0132bd8561b9"
+  "built_at_commit": "fea793e81b98f42bf1019a29b064db23f90d4e16"
 }

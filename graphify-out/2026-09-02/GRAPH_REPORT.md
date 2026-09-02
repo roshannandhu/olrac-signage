@@ -1,16 +1,16 @@
 # Graph Report - OLRAC SIGNAGE  (2026-09-02)
 
 ## Corpus Check
-- 325 files · ~365,101 words
+- 325 files · ~365,242 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 2728 nodes · 6426 edges · 212 communities (162 shown, 50 thin omitted)
+- 2728 nodes · 6426 edges · 208 communities (159 shown, 49 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 227 edges (avg confidence: 0.78)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `54aa623b`
+- Built from commit: `fea793e8`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -33,7 +33,7 @@
 - components.json
 - OLRAC Signage — Work Order for Antigravity (Gemini Pro)
 - PlaybackTelemetry
-- test_media_storage.py
+- media_urls.py
 - worker.py
 - main.py
 - get_password_hash
@@ -65,7 +65,7 @@
 - LaunchStateResolverTest
 - TransitionSpecResolverTest
 - health_check
-- _restore_process_globals
+- test_media_storage.py
 - _post
 - SyncBackoffPolicyTest
 - gradlew
@@ -94,7 +94,7 @@
 - database.py
 - ScheduleEvaluatorTest
 - DeviceOwnerManagerTest
-- HTTPException
+- playlists.py
 - Part B — Operations home page
 - cleanup_orphans.py
 - screen-map.tsx
@@ -125,7 +125,6 @@
 - ApiClient
 - booking_report.py
 - ResolveLinkRequest
-- media_urls.py
 - screens/[id]/page.tsx
 - test_rollout_policy.py
 - branding.py
@@ -139,7 +138,7 @@
 - UpdateGateTest
 - BrandingUpdate
 - theme-toggle.tsx
-- groups.py
+- HTTPException
 - UpdateGate
 - a1b4e7c92f38_play_log_campaign_attribution.py
 - .query
@@ -148,7 +147,6 @@
 - tw-animate-css
 - @types/leaflet
 - GoogleDeviceStartResponse
-- update_user
 - models.py
 - test_reinstall_reconnect.py
 - ClientBase
@@ -160,7 +158,6 @@
 - playlist-builder.tsx
 - @dnd-kit/core
 - websockets.py
-- ScreenshotManager
 - User
 - _serialize_client
 - e2e_test.py
@@ -168,7 +165,6 @@
 - PlacementSplit
 - @dnd-kit/sortable
 - @dnd-kit/utilities
-- upload_device_screenshot
 - next-themes
 - ExtensionCreate
 - recharts
@@ -205,7 +201,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (212 total, 50 thin omitted)
+## Communities (208 total, 49 thin omitted)
 
 ### Community 0 - "test_tv_deep_link.py"
 Cohesion: 0.16
@@ -275,9 +271,9 @@ Nodes (23): 0. Ground rules, 1. Device knowledge — the most important section,
 Cohesion: 0.15
 Nodes (9): HeartbeatReporter, Context, PlaybackSnapshot, PlaybackTelemetry, enqueue(), Context, CoroutineWorker, Result (+1 more)
 
-### Community 18 - "test_media_storage.py"
-Cohesion: 0.10
-Nodes (35): Stable URL for a stored object; signs the real one fresh on every request. This…, serve_media(), _client(), fetch_to(), is_remote(), Path, Reading and writing media wherever it happens to live. The transcoder needs a…, Persist `local_path` under `key` and return the location to save on the row.… (+27 more)
+### Community 18 - "media_urls.py"
+Cohesion: 0.09
+Nodes (34): Stable URL for a stored object; signs the real one fresh on every request. This…, serve_media(), _client(), fetch_to(), is_remote(), Path, Reading and writing media wherever it happens to live. The transcoder needs a…, Persist `local_path` under `key` and return the location to save on the row.… (+26 more)
 
 ### Community 19 - "worker.py"
 Cohesion: 0.12
@@ -387,9 +383,9 @@ Nodes (3): HeartbeatWorker, CoroutineWorker, Result
 Cohesion: 0.40
 Nodes (5): health_check(), get, Session, Liveness, plus WHICH database is actually behind it. This used to answer…, read_root()
 
-### Community 50 - "_restore_process_globals"
-Cohesion: 0.40
-Nodes (5): fixture, A fake S3, with the environment the code reads to decide it is enabled., Undo every module-level and environment mutation this file makes. `local_mode`…, _restore_process_globals(), s3()
+### Community 50 - "test_media_storage.py"
+Cohesion: 0.11
+Nodes (23): The backend-relative key inside a stored location. Both schemes carry the same…, storage_key_for(), local_mode(), fixture, Media storage: fetch and store, on local disk and on object storage. The…, A fake S3, with the environment the code reads to decide it is enabled., So _fetch_image can tell "not mine, try HTTP" from "mine, and missing"., The whole point: a report renders its images with the network unavailable. (+15 more)
 
 ### Community 51 - "_post"
 Cohesion: 0.12
@@ -414,6 +410,10 @@ Nodes (7): MediaRenditionResponse, PlacementCreate, PlaylistItemBase, PlaylistIt
 ### Community 76 - "PlayerSupervisor"
 Cohesion: 0.16
 Nodes (8): ExoPlayer, Job, PlaybackException, onPlayerError(), PlayerSupervisor, Context, ExoPlayer, PlayerSupervisorTest
+
+### Community 79 - "DeviceState"
+Cohesion: 0.15
+Nodes (5): DeviceState, Activity, ScreenshotManager, Bitmap, WeakReference
 
 ### Community 80 - "OLRAC Signage — 80-TV Rollout Deployment Guide"
 Cohesion: 0.10
@@ -463,9 +463,9 @@ Nodes (3): PlayerViewModel, AndroidViewModel, StateFlow
 Cohesion: 0.08
 Nodes (19): Run migrations in 'offline' mode. This configures the context with just a URL…, Run migrations in 'online' mode. In this scenario we need to create an Engine…, run_migrations_offline(), run_migrations_online(), get_db(), fresh_start(), run_test(), auth_header() (+11 more)
 
-### Community 98 - "HTTPException"
-Cohesion: 0.15
-Nodes (29): revoke_token(), add_item_to_playlist(), bump_playlist(), create_playlist(), delete_playlist(), get_playlist(), get_playlists(), get (+21 more)
+### Community 98 - "playlists.py"
+Cohesion: 0.27
+Nodes (18): add_item_to_playlist(), bump_playlist(), create_playlist(), delete_playlist(), get_playlist(), get_playlists(), get, Playlist (+10 more)
 
 ### Community 99 - "Part B — Operations home page"
 Cohesion: 0.12
@@ -551,10 +551,6 @@ Nodes (3): ApiClient, Context, okhttp3
 Cohesion: 0.07
 Nodes (43): api_key(), _choose_zoom(), fetch_static_map(), google_configured(), is_enabled(), _project(), Map imagery for reports, behind a single switch. Everything map-related…, The closest zoom that still fits every pin, with a margin so none sits on the… (+35 more)
 
-### Community 141 - "media_urls.py"
-Cohesion: 0.20
-Nodes (10): delete_stored_file(), _detect_lan_host(), Turning a stored media location into something a browser or a TV can fetch.…, Best-effort LAN address of this machine, so devices on the network can reach…, Remove the local file a stored location points at. Returns True if it went.…, One environment value, with a variable that is present but BLANK treated as…, A boto3 client built from `get_s3_config` and nothing else. Cached, because…, s3_client() (+2 more)
-
 ### Community 143 - "screens/[id]/page.tsx"
 Cohesion: 0.08
 Nodes (40): Alert, AlertsPage(), buildAlerts(), hoursSince(), Severity, asDate(), CampaignsPage(), getPlacementState() (+32 more)
@@ -587,17 +583,13 @@ Nodes (6): PlayCompletion, PlayEndReason, FAILED, INTERRUPTED, PLAYED_TO_END, SK
 Cohesion: 0.83
 Nodes (3): subscribe(), ThemeToggle(), useHydrated()
 
-### Community 156 - "groups.py"
-Cohesion: 0.33
-Nodes (12): assign_group_playlist(), create_group(), delete_group(), list_groups(), get, put, Reject a parent that is not ours, is the group itself, or would close a loop.…, serialize_group() (+4 more)
+### Community 156 - "HTTPException"
+Cohesion: 0.11
+Nodes (33): revoke_token(), assign_group_playlist(), create_group(), delete_group(), list_groups(), get, put, Reject a parent that is not ours, is the group itself, or would close a loop.… (+25 more)
 
 ### Community 167 - "send"
 Cohesion: 0.27
 Nodes (11): _describe_missing(), is_configured(), MailNotConfigured, RuntimeError, Sending mail, behind a single switch. There was no mail path in this codebase…, Raised instead of silently discarding a message nobody could have received., The From address, falling back to the login when only that is set., Deliver one message. Raises rather than returning False, so a caller cannot… (+3 more)
-
-### Community 176 - "update_user"
-Cohesion: 0.24
-Nodes (10): active_owner_count(), create_user(), delete_user(), deny_platform_account(), list_users(), get, put, User (+2 more)
 
 ### Community 177 - "models.py"
 Cohesion: 0.07
@@ -612,8 +604,8 @@ Cohesion: 0.67
 Nodes (3): ClientBase, ClientCreate, ClientResponse
 
 ### Community 180 - "resolve_media_url"
-Cohesion: 0.10
-Nodes (25): media_base_url(), Origin that players and browsers should fetch media from., Absolute, fetchable URL for a stored media location. An object-storage key…, resolve_media_url(), list_screenshots(), get, The whole point: a report renders its images with the network unavailable., test_the_report_reads_the_creative_without_any_http() (+17 more)
+Cohesion: 0.12
+Nodes (23): media_base_url(), Origin that players and browsers should fetch media from., Absolute, fetchable URL for a stored media location. An object-storage key…, resolve_media_url(), list_screenshots(), get, Tenant storage folders are named, unique and stable: python…, Local disk and R2 must file a capture under the same key, or the folder layout… (+15 more)
 
 ### Community 181 - "TenantPlanBase"
 Cohesion: 0.67
@@ -635,10 +627,6 @@ Nodes (31): targetLabels, AssignTarget, looksLikeLink(), Place, PlaceSearch(), d
 Cohesion: 0.29
 Nodes (11): dashboard_websocket(), Screen, Session, WebSocket, Live fleet events for one dashboard user., Identity check for a screen's push socket. Kept deliberately identical to…, Push channel for one screen. Held open for the life of the device., register_ws() (+3 more)
 
-### Community 193 - "ScreenshotManager"
-Cohesion: 0.39
-Nodes (4): Activity, ScreenshotManager, Bitmap, WeakReference
-
 ### Community 194 - "User"
 Cohesion: 0.09
 Nodes (31): Exposed so UserResponse can show the tenant by name instead of a bare id., User, create_access_token(), aggregate_play_logs_sync(), Atomic aggregation of unaggregated play_logs into play_log_hourly_rollups., main(), main(), main() (+23 more)
@@ -647,10 +635,6 @@ Nodes (31): Exposed so UserResponse can show the tenant by name instead of a bar
 Cohesion: 0.21
 Nodes (12): create_client(), delete_client(), get_client(), list_clients(), next_client_code(), Client, get, put (+4 more)
 
-### Community 201 - "upload_device_screenshot"
-Cohesion: 0.40
-Nodes (5): ScreenshotLog, HTTPAuthorizationCredentials, Session, UploadFile, upload_device_screenshot()
-
 ### Community 209 - "promote_release"
 Cohesion: 0.40
 Nodes (5): promote_release(), patch, Move a build along the rollout ring: draft -> canary -> released. Promoting to…, AppReleasePatch, Promote (or demote) a build. The only mutable field: version_code, apk_url and…
@@ -658,16 +642,16 @@ Nodes (5): promote_release(), patch, Move a build along the rollout ring: draft 
 ## Knowledge Gaps
 - **318 isolated node(s):** `CheckingLocalState`, `GoogleSignIn`, `PLAYED_TO_END`, `SKIPPED`, `FAILED` (+313 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **50 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **49 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `TenantScope` connect `TenantScope` to `HTTPException`, `_serialize_client`, `.query`, `update_user`, `branding.py`, `promote_release`, `analytics.py`, `main.py`, `_post`, `screens.py`, `upload_content`, `resolve_media_url`, `acknowledge_alert`, `models.py`, `admin.py`, `groups.py`?**
+- **Why does `TenantScope` connect `TenantScope` to `playlists.py`, `_serialize_client`, `.query`, `branding.py`, `promote_release`, `analytics.py`, `main.py`, `_post`, `screens.py`, `upload_content`, `resolve_media_url`, `acknowledge_alert`, `models.py`, `admin.py`, `HTTPException`?**
   _High betweenness centrality (0.034) - this node is a cross-community bridge._
-- **Why does `resolve_media_url()` connect `resolve_media_url` to `schemas.py`, `upload_device_screenshot`, `model_validator`, `media_urls.py`, `ContentResponse`, `branding.py`, `test_media_storage.py`, `main.py`, `screens.py`, `TenantScope`, `admin.py`?**
+- **Why does `resolve_media_url()` connect `resolve_media_url` to `schemas.py`, `model_validator`, `ContentResponse`, `branding.py`, `media_urls.py`, `test_media_storage.py`, `main.py`, `screens.py`, `TenantScope`, `admin.py`?**
   _High betweenness centrality (0.019) - this node is a cross-community bridge._
-- **Why does `utcnow()` connect `screens.py` to `User`, `_serialize_client`, `HTTPException`, `test_p6_websockets.py`, `models.py`, `_post`, `main.py`, `worker.py`, `get_password_hash`, `upload_content`, `TenantScope`, `acknowledge_alert`, `test_release_rollout.py`, `admin.py`, `groups.py`, `google_device.py`, `database.py`?**
+- **Why does `utcnow()` connect `screens.py` to `User`, `_serialize_client`, `playlists.py`, `test_p6_websockets.py`, `models.py`, `_post`, `main.py`, `worker.py`, `get_password_hash`, `upload_content`, `TenantScope`, `acknowledge_alert`, `test_release_rollout.py`, `admin.py`, `HTTPException`, `google_device.py`, `database.py`?**
   _High betweenness centrality (0.010) - this node is a cross-community bridge._
 - **Are the 86 inferred relationships involving `HTTPException` (e.g. with `health_check()` and `serve_media()`) actually correct?**
   _`HTTPException` has 86 INFERRED edges - model-reasoned connections that need verification._

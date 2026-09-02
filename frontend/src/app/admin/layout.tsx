@@ -98,8 +98,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Sidebar: a drawer under lg, a fixed column above it. */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 shrink-0 border-r border-white/5 flex flex-col bg-[#080d18] transition-transform lg:static lg:z-auto lg:translate-x-0 ${
-          navOpen ? 'translate-x-0' : '-translate-x-full'
+        // max-lg: on the closed state, and NO lg:translate-x-0 to fight it.
+        //
+        // The pair `-translate-x-full` + `lg:translate-x-0` looked right and did not work:
+        // both target the same property, so which one won came down to their order in
+        // Tailwind's generated sheet rather than to the viewport. Below lg the drawer
+        // resolved to translate:0% and sat on top of the page at x=0 -- a 256px panel
+        // covering the content on every tablet and small laptop, with elementFromPoint over
+        // the page returning a nav link.
+        //
+        // Scoping the offset to max-lg means it simply does not exist at lg and above,
+        // so there is nothing left to conflict with.
+        className={`fixed inset-y-0 left-0 z-50 w-64 shrink-0 border-r border-white/5 flex flex-col bg-[#080d18] transition-transform lg:static lg:z-auto ${
+          navOpen ? '' : 'max-lg:-translate-x-full'
         }`}
       >
         <button

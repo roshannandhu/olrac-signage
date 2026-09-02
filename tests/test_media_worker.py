@@ -314,7 +314,18 @@ def test_media_pipeline_on_object_storage():
     source = Path(TEMP_DIR.name) / "cloud_source.mp4"
     synthesize_video(source, width=400, height=800)
 
-    previous_key = os.environ.get("AWS_ACCESS_KEY_ID")
+    # ALL five are captured, not just the access key.
+    #
+    # Restoring one of five leaked the other four into every test that ran after this one
+    # in the same process. media_urls._setting() reads them, so a later test inherited an
+    # S3 endpoint and bucket belonging to a moto server that had already been torn down:
+    # the booking report then tried a real HTTP fetch for its creative and got a 404. Both
+    # test_booking_report and test_media_storage failed that way while passing alone,
+    # which reads as a product bug and is not one.
+    _S3_ENV = ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION",
+               "S3_ENDPOINT_URL", "S3_BUCKET_NAME")
+    previous_env = {name: os.environ.get(name) for name in _S3_ENV}
+    previous_key = previous_env["AWS_ACCESS_KEY_ID"]
     os.environ["AWS_ACCESS_KEY_ID"] = "testing"
     os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
     os.environ["AWS_REGION"] = "us-east-1"
@@ -370,6 +381,11 @@ def test_media_pipeline_on_object_storage():
             assert media_storage.storage_key_for(c.thumbnail) in stored
     finally:
         backend.worker.SessionLocal = original_session_local
+        for name, value in previous_env.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
         if previous_key is None:
             os.environ.pop("AWS_ACCESS_KEY_ID", None)
         else:

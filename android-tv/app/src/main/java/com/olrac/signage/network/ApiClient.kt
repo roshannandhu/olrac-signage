@@ -152,12 +152,20 @@ object ApiClient {
         if (value.startsWith("s3://") || value.startsWith("r2://")) {
             return R2Presigner.presign(value)
         }
+        if (value.contains("/api/media/")) {
+            val key = value.substringAfter("/api/media/").trimStart('/')
+            return R2Presigner.presign(key)
+        }
         return rewriteLoopbackMediaUrl(value, effectiveBaseUrl(context))
     }
 
     fun rewriteLoopbackMediaUrl(mediaUrl: String, baseUrl: String): String {
         if (mediaUrl.startsWith("s3://") || mediaUrl.startsWith("r2://")) {
             return R2Presigner.presign(mediaUrl)
+        }
+        if (mediaUrl.contains("/api/media/")) {
+            val key = mediaUrl.substringAfter("/api/media/").trimStart('/')
+            return R2Presigner.presign(key)
         }
         val media = try {
             URI(mediaUrl)

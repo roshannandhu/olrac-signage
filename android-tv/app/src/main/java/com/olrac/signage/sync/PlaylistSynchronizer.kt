@@ -221,8 +221,11 @@ class PlaylistSynchronizer(context: Context) {
                 }
 
                 val staged = mutableListOf<StagedDownload>()
+                val readyTargets = mutableListOf<ActivationTarget>()
                 for (target in targets) {
-                    if (!target.finalFile.isFile || target.finalFile.length() == 0L) {
+                    if (target.finalFile.isFile && target.finalFile.length() > 0L) {
+                        readyTargets.add(target)
+                    } else {
                         val tempFile = storageManager.downloadWithIntegrityCheck(
                             client = client,
                             url = ApiClient.resolveMediaUrl(appContext, target.entity.fileUrl),
@@ -231,32 +234,29 @@ class PlaylistSynchronizer(context: Context) {
                             expectedSizeBytes = target.entity.fileSizeBytes,
                             protectedNames = protectedNames
                         )
-                        if (tempFile == null) {
-                            staged.forEach { it.temporaryFile.delete() }
-                            return@withContext SyncOutcome(
-                                successful = false,
-                                retryable = true,
-                                changed = false,
-                                intervalSeconds = interval,
-                                error = "Media download failed"
-                            )
+                        if (tempFile != null) {
+                            staged += StagedDownload(tempFile, target.finalFile)
+                            readyTargets.add(target)
+                        } else {
+                            android.util.Log.w("PlaylistSynchronizer", "Item ${target.entity.id} (${target.entity.fileUrl}) failed download; continuing with available items")
                         }
-                        staged += StagedDownload(tempFile, target.finalFile)
                     }
                 }
 
                 staged.forEach(::promoteStagedFile)
-                val activatedItems = targets.map { target ->
+                val activatedItems = readyTargets.map { target ->
                     target.entity.copy(localPath = target.finalFile.absolutePath)
                 }
 
-                // This Room transaction is the activation boundary. The currently
-                // playing rows remain untouched until every new file is durable.
-                dao.replaceAll(activatedItems)
-                cleanupOldCache(targets.mapTo(mutableSetOf()) { it.finalFile.name })
-                preferences.edit()
-                    .putString(KEY_PLAYLIST_UPDATED_AT, syncData.playlist_updated_at)
-                    .apply()
+                // If we have ready items, or if the server genuinely sent an empty playlist,
+                // activate them so playback can begin.
+                if (activatedItems.isNotEmpty() || targets.isEmpty()) {
+                    dao.replaceAll(activatedItems)
+                    cleanupOldCache(readyTargets.mapTo(mutableSetOf()) { it.finalFile.name })
+                    preferences.edit()
+                        .putString(KEY_PLAYLIST_UPDATED_AT, syncData.playlist_updated_at)
+                        .apply()
+                }
                 SyncOutcome(true, false, true, interval)
             } catch (exception: Exception) {
                 SyncOutcome(

@@ -6655,7 +6655,7 @@
       "_origin": "ast",
       "id": "backend_init",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "backend/__init__.py"
     },
     {
@@ -6666,7 +6666,7 @@
       "_origin": "ast",
       "id": "backend_init_rationale_1",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "olrac signage backend package. explicit package marker. without it `backend` is..."
     },
     {
@@ -8446,8 +8446,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_google_device_post",
-      "community": 140,
-      "community_name": "_post",
+      "community": 148,
+      "community_name": "screens.py",
       "norm_label": "_post()"
     },
     {
@@ -8549,8 +8549,8 @@
       "source_location": "L99",
       "_origin": "ast",
       "id": "backend_google_device_rationale_99",
-      "community": 140,
-      "community_name": "_post",
+      "community": 148,
+      "community_name": "screens.py",
       "norm_label": "form-post to google and return (status, parsed body). a 4xx is returned rather..."
     },
     {
@@ -8777,8 +8777,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_main_ensure_schema",
-      "community": 20,
-      "community_name": "main.py",
+      "community": 114,
+      "community_name": "routers/billing.py",
       "norm_label": "_ensure_schema()"
     },
     {
@@ -8789,8 +8789,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_main_run_worker_in_process",
-      "community": 20,
-      "community_name": "main.py",
+      "community": 114,
+      "community_name": "routers/billing.py",
       "norm_label": "_run_worker_in_process()"
     },
     {
@@ -8801,8 +8801,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_main_lifespan",
-      "community": 20,
-      "community_name": "main.py",
+      "community": 114,
+      "community_name": "routers/billing.py",
       "norm_label": "lifespan()"
     },
     {
@@ -8813,7 +8813,7 @@
       "_origin": "ast",
       "id": "fastapi",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "fastapi"
     },
     {
@@ -8881,31 +8881,42 @@
       "_origin": "ast",
       "id": "backend_main_py_get",
       "community": 49,
-      "community_name": "health_check",
+      "community_name": "serve_media",
       "norm_label": "get"
+    },
+    {
+      "label": "head",
+      "file_type": "code",
+      "source_file": "",
+      "source_location": "",
+      "_origin": "ast",
+      "id": "head",
+      "community": 49,
+      "community_name": "serve_media",
+      "norm_label": "head"
     },
     {
       "label": "serve_media()",
       "file_type": "code",
       "source_file": "backend/main.py",
-      "source_location": "L415",
+      "source_location": "L416",
       "_callable": true,
       "_origin": "ast",
       "id": "backend_main_serve_media",
-      "community": 18,
-      "community_name": "media_urls.py",
+      "community": 49,
+      "community_name": "serve_media",
       "norm_label": "serve_media()"
     },
     {
       "label": "health_check()",
       "file_type": "code",
       "source_file": "backend/main.py",
-      "source_location": "L457",
+      "source_location": "L458",
       "_callable": true,
       "_origin": "ast",
       "id": "backend_main_health_check",
       "community": 49,
-      "community_name": "health_check",
+      "community_name": "serve_media",
       "norm_label": "health_check()"
     },
     {
@@ -8916,19 +8927,19 @@
       "_origin": "ast",
       "id": "backend_main_py_session",
       "community": 49,
-      "community_name": "health_check",
+      "community_name": "serve_media",
       "norm_label": "session"
     },
     {
       "label": "read_root()",
       "file_type": "code",
       "source_file": "backend/main.py",
-      "source_location": "L593",
+      "source_location": "L594",
       "_callable": true,
       "_origin": "ast",
       "id": "backend_main_read_root",
       "community": 49,
-      "community_name": "health_check",
+      "community_name": "serve_media",
       "norm_label": "read_root()"
     },
     {
@@ -8938,8 +8949,8 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "backend_main_rationale_32",
-      "community": 20,
-      "community_name": "main.py",
+      "community": 114,
+      "community_name": "routers/billing.py",
       "norm_label": "build the schema on a brand-new database, and stamp it so alembic can take..."
     },
     {
@@ -8949,30 +8960,30 @@
       "source_location": "L132",
       "_origin": "ast",
       "id": "backend_main_rationale_132",
-      "community": 20,
-      "community_name": "main.py",
+      "community": 114,
+      "community_name": "routers/billing.py",
       "norm_label": "whether this api process should also run the arq worker. off by default:..."
     },
     {
       "label": "Stable URL for a stored object; signs the real one fresh on every request. This\u2026",
       "file_type": "rationale",
       "source_file": "backend/main.py",
-      "source_location": "L416",
+      "source_location": "L417",
       "_origin": "ast",
-      "id": "backend_main_rationale_416",
-      "community": 18,
-      "community_name": "media_urls.py",
+      "id": "backend_main_rationale_417",
+      "community": 49,
+      "community_name": "serve_media",
       "norm_label": "stable url for a stored object; signs the real one fresh on every request. this..."
     },
     {
       "label": "Liveness, plus WHICH database is actually behind it. This used to answer\u2026",
       "file_type": "rationale",
       "source_file": "backend/main.py",
-      "source_location": "L458",
+      "source_location": "L459",
       "_origin": "ast",
-      "id": "backend_main_rationale_458",
+      "id": "backend_main_rationale_459",
       "community": 49,
-      "community_name": "health_check",
+      "community_name": "serve_media",
       "norm_label": "liveness, plus which database is actually behind it. this used to answer..."
     },
     {
@@ -9452,8 +9463,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_media_storage",
-      "community": 18,
-      "community_name": "media_urls.py",
+      "community": 50,
+      "community_name": "test_media_storage.py",
       "norm_label": "media_storage.py"
     },
     {
@@ -9464,8 +9475,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_storage_client",
-      "community": 18,
-      "community_name": "media_urls.py",
+      "community": 50,
+      "community_name": "test_media_storage.py",
       "norm_label": "_client()"
     },
     {
@@ -9535,8 +9546,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_storage_store",
-      "community": 18,
-      "community_name": "media_urls.py",
+      "community": 50,
+      "community_name": "test_media_storage.py",
       "norm_label": "store()"
     },
     {
@@ -9558,8 +9569,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_media_storage_rationale_1",
-      "community": 18,
-      "community_name": "media_urls.py",
+      "community": 50,
+      "community_name": "test_media_storage.py",
       "norm_label": "reading and writing media wherever it happens to live. the transcoder needs a..."
     },
     {
@@ -9602,8 +9613,8 @@
       "source_location": "L133",
       "_origin": "ast",
       "id": "backend_media_storage_rationale_133",
-      "community": 18,
-      "community_name": "media_urls.py",
+      "community": 50,
+      "community_name": "test_media_storage.py",
       "norm_label": "persist `local_path` under `key` and return the location to save on the row...."
     },
     {
@@ -9660,27 +9671,27 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_get_s3_config",
-      "community": 18,
-      "community_name": "media_urls.py",
+      "community": 119,
+      "community_name": "content.py",
       "norm_label": "get_s3_config()"
     },
     {
       "label": "is_s3_enabled()",
       "file_type": "code",
       "source_file": "backend/media_urls.py",
-      "source_location": "L80",
+      "source_location": "L83",
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_is_s3_enabled",
-      "community": 18,
-      "community_name": "media_urls.py",
+      "community": 119,
+      "community_name": "content.py",
       "norm_label": "is_s3_enabled()"
     },
     {
       "label": "_s3_client_for()",
       "file_type": "code",
       "source_file": "backend/media_urls.py",
-      "source_location": "L88",
+      "source_location": "L91",
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_s3_client_for",
@@ -9692,7 +9703,7 @@
       "label": "s3_client()",
       "file_type": "code",
       "source_file": "backend/media_urls.py",
-      "source_location": "L100",
+      "source_location": "L103",
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_s3_client",
@@ -9704,7 +9715,7 @@
       "label": "_detect_lan_host()",
       "file_type": "code",
       "source_file": "backend/media_urls.py",
-      "source_location": "L115",
+      "source_location": "L118",
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_detect_lan_host",
@@ -9716,7 +9727,7 @@
       "label": "media_base_url()",
       "file_type": "code",
       "source_file": "backend/media_urls.py",
-      "source_location": "L132",
+      "source_location": "L135",
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_media_base_url",
@@ -9728,7 +9739,7 @@
       "label": "resolve_media_url()",
       "file_type": "code",
       "source_file": "backend/media_urls.py",
-      "source_location": "L146",
+      "source_location": "L149",
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_resolve_media_url",
@@ -9740,7 +9751,7 @@
       "label": "delete_stored_file()",
       "file_type": "code",
       "source_file": "backend/media_urls.py",
-      "source_location": "L172",
+      "source_location": "L175",
       "_callable": true,
       "_origin": "ast",
       "id": "backend_media_urls_delete_stored_file",
@@ -9788,17 +9799,17 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "backend_media_urls_rationale_65",
-      "community": 18,
-      "community_name": "media_urls.py",
+      "community": 119,
+      "community_name": "content.py",
       "norm_label": "where object storage is and how to authenticate to it. the single source of..."
     },
     {
       "label": "A boto3 client built from `get_s3_config` and nothing else. Cached, because\u2026",
       "file_type": "rationale",
       "source_file": "backend/media_urls.py",
-      "source_location": "L101",
+      "source_location": "L104",
       "_origin": "ast",
-      "id": "backend_media_urls_rationale_101",
+      "id": "backend_media_urls_rationale_104",
       "community": 18,
       "community_name": "media_urls.py",
       "norm_label": "a boto3 client built from `get_s3_config` and nothing else. cached, because..."
@@ -9807,9 +9818,9 @@
       "label": "Best-effort LAN address of this machine, so devices on the network can reach\u2026",
       "file_type": "rationale",
       "source_file": "backend/media_urls.py",
-      "source_location": "L116",
+      "source_location": "L119",
       "_origin": "ast",
-      "id": "backend_media_urls_rationale_116",
+      "id": "backend_media_urls_rationale_119",
       "community": 18,
       "community_name": "media_urls.py",
       "norm_label": "best-effort lan address of this machine, so devices on the network can reach..."
@@ -9818,9 +9829,9 @@
       "label": "Origin that players and browsers should fetch media from.",
       "file_type": "rationale",
       "source_file": "backend/media_urls.py",
-      "source_location": "L133",
+      "source_location": "L136",
       "_origin": "ast",
-      "id": "backend_media_urls_rationale_133",
+      "id": "backend_media_urls_rationale_136",
       "community": 180,
       "community_name": "resolve_media_url",
       "norm_label": "origin that players and browsers should fetch media from."
@@ -9829,9 +9840,9 @@
       "label": "Absolute, fetchable URL for a stored media location. An object-storage key\u2026",
       "file_type": "rationale",
       "source_file": "backend/media_urls.py",
-      "source_location": "L147",
+      "source_location": "L150",
       "_origin": "ast",
-      "id": "backend_media_urls_rationale_147",
+      "id": "backend_media_urls_rationale_150",
       "community": 180,
       "community_name": "resolve_media_url",
       "norm_label": "absolute, fetchable url for a stored media location. an object-storage key..."
@@ -9840,9 +9851,9 @@
       "label": "Remove the local file a stored location points at. Returns True if it went.\u2026",
       "file_type": "rationale",
       "source_file": "backend/media_urls.py",
-      "source_location": "L173",
+      "source_location": "L176",
       "_origin": "ast",
-      "id": "backend_media_urls_rationale_173",
+      "id": "backend_media_urls_rationale_176",
       "community": 18,
       "community_name": "media_urls.py",
       "norm_label": "remove the local file a stored location points at. returns true if it went...."
@@ -10200,8 +10211,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_models_mediarendition",
-      "community": 19,
-      "community_name": "SessionLocal",
+      "community": 185,
+      "community_name": "models.py",
       "norm_label": "mediarendition"
     },
     {
@@ -10305,7 +10316,7 @@
       "_origin": "ast",
       "id": "backend_models_adplacement",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "adplacement"
     },
     {
@@ -10330,7 +10341,7 @@
       "_origin": "ast",
       "id": "backend_models_adplacementtarget",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "adplacementtarget"
     },
     {
@@ -10481,7 +10492,7 @@
       "_origin": "ast",
       "id": "backend_models_rationale_684",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "an advert sold to a client: what runs, for whom, when, and for how much...."
     },
     {
@@ -10503,7 +10514,7 @@
       "_origin": "ast",
       "id": "backend_models_rationale_744",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "one place a booked advert runs, and the playlist item it put there. exactly one..."
     },
     {
@@ -11047,8 +11058,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_rollout",
-      "community": 144,
-      "community_name": "test_rollout_policy.py",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "rollout.py"
     },
     {
@@ -11059,8 +11070,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_rollout_eligible_for_fallback",
-      "community": 144,
-      "community_name": "test_rollout_policy.py",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "eligible_for_fallback()"
     },
     {
@@ -11094,8 +11105,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_rollout_rationale_1",
-      "community": 144,
-      "community_name": "test_rollout_policy.py",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "staged player rollout: which build a screen is offered, and when to give up on..."
     },
     {
@@ -11105,8 +11116,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "backend_rollout_rationale_45",
-      "community": 144,
-      "community_name": "test_rollout_policy.py",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "restrict an apprelease query to builds that unpinned screens may be offered."
     },
     {
@@ -11207,7 +11218,7 @@
       "_origin": "ast",
       "id": "backend_routers_init",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "routers/__init__.py"
     },
     {
@@ -11882,7 +11893,7 @@
       "_origin": "ast",
       "id": "backend_routers_alerts",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "alerts.py"
     },
     {
@@ -11893,8 +11904,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_alerts_serialize",
-      "community": 179,
-      "community_name": "acknowledge_alert",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "serialize()"
     },
     {
@@ -11904,8 +11915,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "alert",
-      "community": 179,
-      "community_name": "acknowledge_alert",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "alert"
     },
     {
@@ -11915,8 +11926,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_alerts_py_get",
-      "community": 179,
-      "community_name": "acknowledge_alert",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "get"
     },
     {
@@ -11927,8 +11938,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_alerts_list_alerts",
-      "community": 179,
-      "community_name": "acknowledge_alert",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "list_alerts()"
     },
     {
@@ -11939,8 +11950,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_alerts_acknowledge_alert",
-      "community": 179,
-      "community_name": "acknowledge_alert",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "acknowledge_alert()"
     },
     {
@@ -11951,8 +11962,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_alerts_alert_summary",
-      "community": 179,
-      "community_name": "acknowledge_alert",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "alert_summary()"
     },
     {
@@ -11962,8 +11973,8 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "backend_routers_alerts_rationale_21",
-      "community": 179,
-      "community_name": "acknowledge_alert",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "open alerts, newest first. resolved ones only when asked for. the default is..."
     },
     {
@@ -11973,8 +11984,8 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "backend_routers_alerts_rationale_46",
-      "community": 179,
-      "community_name": "acknowledge_alert",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "mark an alert as picked up, without claiming the underlying fault is fixed...."
     },
     {
@@ -11984,8 +11995,8 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "backend_routers_alerts_rationale_66",
-      "community": 179,
-      "community_name": "acknowledge_alert",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "counts for the navigation badge, so the header does not fetch the whole list."
     },
     {
@@ -12561,8 +12572,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_billing_create_checkout",
-      "community": 140,
-      "community_name": "_post",
+      "community": 148,
+      "community_name": "screens.py",
       "norm_label": "create_checkout()"
     },
     {
@@ -12756,8 +12767,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_routers_clients",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 95,
+      "community_name": "clients.py",
       "norm_label": "clients.py"
     },
     {
@@ -12768,8 +12779,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_clients_next_client_code",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 95,
+      "community_name": "clients.py",
       "norm_label": "next_client_code()"
     },
     {
@@ -12780,8 +12791,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_clients_serialize_client",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 95,
+      "community_name": "clients.py",
       "norm_label": "_serialize_client()"
     },
     {
@@ -12791,8 +12802,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_clients_py_client",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 95,
+      "community_name": "clients.py",
       "norm_label": "client"
     },
     {
@@ -12802,8 +12813,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_clients_py_get",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 95,
+      "community_name": "clients.py",
       "norm_label": "get"
     },
     {
@@ -12814,8 +12825,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_clients_list_clients",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 95,
+      "community_name": "clients.py",
       "norm_label": "list_clients()"
     },
     {
@@ -12826,8 +12837,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_clients_create_client",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 95,
+      "community_name": "clients.py",
       "norm_label": "create_client()"
     },
     {
@@ -12838,8 +12849,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_clients_get_client",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 95,
+      "community_name": "clients.py",
       "norm_label": "get_client()"
     },
     {
@@ -12849,8 +12860,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_clients_py_put",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 95,
+      "community_name": "clients.py",
       "norm_label": "put"
     },
     {
@@ -12861,8 +12872,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_clients_update_client",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 95,
+      "community_name": "clients.py",
       "norm_label": "update_client()"
     },
     {
@@ -12873,8 +12884,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_clients_delete_client",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 95,
+      "community_name": "clients.py",
       "norm_label": "delete_client()"
     },
     {
@@ -12884,8 +12895,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_routers_clients_rationale_1",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 95,
+      "community_name": "clients.py",
       "norm_label": "the advertisers a tenant sells to. a booking used to record its buyer as a..."
     },
     {
@@ -12895,8 +12906,8 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "backend_routers_clients_rationale_24",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 95,
+      "community_name": "clients.py",
       "norm_label": "the next free clt##### for this tenant. derived from the codes already issued..."
     },
     {
@@ -12906,8 +12917,8 @@
       "source_location": "L157",
       "_origin": "ast",
       "id": "backend_routers_clients_rationale_157",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 95,
+      "community_name": "clients.py",
       "norm_label": "remove a client. their bookings survive, still named by `advertiser`. the..."
     },
     {
@@ -13070,8 +13081,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_content_update_content_client_ad",
-      "community": 119,
-      "community_name": "content.py",
+      "community": 24,
+      "community_name": "placements.py",
       "norm_label": "update_content_client_ad()"
     },
     {
@@ -13082,8 +13093,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_content_delete_content",
-      "community": 119,
-      "community_name": "content.py",
+      "community": 148,
+      "community_name": "screens.py",
       "norm_label": "delete_content()"
     },
     {
@@ -13127,7 +13138,7 @@
       "_origin": "ast",
       "id": "backend_routers_emergency",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "emergency.py"
     },
     {
@@ -13139,8 +13150,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_routers_emergency_broadcastrequest",
-      "community": 140,
-      "community_name": "_post",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "broadcastrequest"
     },
     {
@@ -13150,8 +13161,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_emergency_py_basemodel",
-      "community": 140,
-      "community_name": "_post",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "basemodel"
     },
     {
@@ -13161,8 +13172,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_emergency_py_get",
-      "community": 140,
-      "community_name": "_post",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "get"
     },
     {
@@ -13173,8 +13184,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_emergency_get_active_broadcasts",
-      "community": 140,
-      "community_name": "_post",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "get_active_broadcasts()"
     },
     {
@@ -13184,8 +13195,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_emergency_py_session",
-      "community": 140,
-      "community_name": "_post",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "session"
     },
     {
@@ -13196,8 +13207,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_emergency_trigger_emergency_broadcast",
-      "community": 140,
-      "community_name": "_post",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "trigger_emergency_broadcast()"
     },
     {
@@ -13208,8 +13219,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_emergency_cancel_emergency_broadcast",
-      "community": 140,
-      "community_name": "_post",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "cancel_emergency_broadcast()"
     },
     {
@@ -13220,7 +13231,7 @@
       "_origin": "ast",
       "id": "backend_routers_enrollment_tokens",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "enrollment_tokens.py"
     },
     {
@@ -13232,7 +13243,7 @@
       "_origin": "ast",
       "id": "backend_routers_enrollment_tokens_token_to_dict",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "_token_to_dict()"
     },
     {
@@ -13243,7 +13254,7 @@
       "_origin": "ast",
       "id": "enrollmenttoken",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "enrollmenttoken"
     },
     {
@@ -13254,7 +13265,7 @@
       "_origin": "ast",
       "id": "backend_routers_enrollment_tokens_py_get",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "get"
     },
     {
@@ -13266,7 +13277,7 @@
       "_origin": "ast",
       "id": "backend_routers_enrollment_tokens_list_tokens",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "list_tokens()"
     },
     {
@@ -13278,7 +13289,7 @@
       "_origin": "ast",
       "id": "backend_routers_enrollment_tokens_create_token",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "create_token()"
     },
     {
@@ -13290,7 +13301,7 @@
       "_origin": "ast",
       "id": "backend_routers_enrollment_tokens_revoke_token",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "revoke_token()"
     },
     {
@@ -13300,8 +13311,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_routers_groups",
-      "community": 130,
-      "community_name": "groups.py",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "groups.py"
     },
     {
@@ -13312,8 +13323,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_groups_serialize_group",
-      "community": 130,
-      "community_name": "groups.py",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "serialize_group()"
     },
     {
@@ -13323,8 +13334,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "screengroup",
-      "community": 130,
-      "community_name": "groups.py",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "screengroup"
     },
     {
@@ -13335,8 +13346,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_groups_validate_parent",
-      "community": 130,
-      "community_name": "groups.py",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "validate_parent()"
     },
     {
@@ -13346,8 +13357,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_groups_py_get",
-      "community": 130,
-      "community_name": "groups.py",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "get"
     },
     {
@@ -13358,8 +13369,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_groups_list_groups",
-      "community": 130,
-      "community_name": "groups.py",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "list_groups()"
     },
     {
@@ -13370,8 +13381,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_groups_create_group",
-      "community": 130,
-      "community_name": "groups.py",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "create_group()"
     },
     {
@@ -13381,8 +13392,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_groups_py_put",
-      "community": 130,
-      "community_name": "groups.py",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "put"
     },
     {
@@ -13393,8 +13404,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_groups_update_group",
-      "community": 130,
-      "community_name": "groups.py",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "update_group()"
     },
     {
@@ -13405,8 +13416,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_groups_set_group_screens",
-      "community": 130,
-      "community_name": "groups.py",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "set_group_screens()"
     },
     {
@@ -13417,8 +13428,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_groups_assign_group_playlist",
-      "community": 130,
-      "community_name": "groups.py",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "assign_group_playlist()"
     },
     {
@@ -13429,8 +13440,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_groups_delete_group",
-      "community": 130,
-      "community_name": "groups.py",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "delete_group()"
     },
     {
@@ -13440,8 +13451,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "backend_routers_groups_rationale_30",
-      "community": 130,
-      "community_name": "groups.py",
+      "community": 98,
+      "community_name": "HTTPException",
       "norm_label": "reject a parent that is not ours, is the group itself, or would close a loop...."
     },
     {
@@ -13452,7 +13463,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "placements.py"
     },
     {
@@ -13464,7 +13475,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_playlist_for_target",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "_playlist_for_target()"
     },
     {
@@ -13475,7 +13486,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_py_playlist",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "playlist"
     },
     {
@@ -13487,7 +13498,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_place",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "_place()"
     },
     {
@@ -13499,7 +13510,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_unplace",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "_unplace()"
     },
     {
@@ -13511,7 +13522,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_effective_ends_at",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "effective_ends_at()"
     },
     {
@@ -13523,7 +13534,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_total_price_paise",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "total_price_paise()"
     },
     {
@@ -13535,7 +13546,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_resolve_client",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "resolve_client()"
     },
     {
@@ -13546,7 +13557,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_py_client",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "client"
     },
     {
@@ -13558,7 +13569,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_resolve_tenant_plan",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "resolve_tenant_plan()"
     },
     {
@@ -13569,7 +13580,7 @@
       "_origin": "ast",
       "id": "tenantplan",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "tenantplan"
     },
     {
@@ -13581,7 +13592,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_sync_placement_window",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "sync_placement_window()"
     },
     {
@@ -13593,7 +13604,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_serialize",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "_serialize()"
     },
     {
@@ -13604,7 +13615,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_py_get",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "get"
     },
     {
@@ -13616,7 +13627,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_list_placements",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "list_placements()"
     },
     {
@@ -13628,7 +13639,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_ensure_ad_slot_quota",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "ensure_ad_slot_quota()"
     },
     {
@@ -13640,7 +13651,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_create_placement",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "create_placement()"
     },
     {
@@ -13651,7 +13662,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_py_put",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "put"
     },
     {
@@ -13663,7 +13674,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_update_placement",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "update_placement()"
     },
     {
@@ -13675,7 +13686,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_add_target",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "add_target()"
     },
     {
@@ -13687,7 +13698,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_remove_target",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "remove_target()"
     },
     {
@@ -13699,7 +13710,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_split_group_target",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "split_group_target()"
     },
     {
@@ -13711,7 +13722,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_delete_placement",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "delete_placement()"
     },
     {
@@ -13723,7 +13734,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_add_extension",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "add_extension()"
     },
     {
@@ -13735,7 +13746,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_remove_extension",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "remove_extension()"
     },
     {
@@ -13747,7 +13758,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_booking_screen_ids",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "_booking_screen_ids()"
     },
     {
@@ -13759,7 +13770,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_commercials",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "_commercials()"
     },
     {
@@ -13771,7 +13782,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_screens_for_refs",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "_screens_for_refs()"
     },
     {
@@ -13783,7 +13794,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_ensure_plan_locations",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "ensure_plan_locations()"
     },
     {
@@ -13795,7 +13806,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_build_booking_report",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "build_booking_report()"
     },
     {
@@ -13807,7 +13818,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_get_booking_report",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "get_booking_report()"
     },
     {
@@ -13819,7 +13830,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_download_booking_report",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "download_booking_report()"
     },
     {
@@ -13831,7 +13842,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_render_report",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "_render_report()"
     },
     {
@@ -13855,7 +13866,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_email_booking_report",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "email_booking_report()"
     },
     {
@@ -13866,7 +13877,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_1",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "selling an advert: which client, for how long, in which places. the placement..."
     },
     {
@@ -13877,7 +13888,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_29",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "the playlist a booking should write into for this screen or group. a place with..."
     },
     {
@@ -13888,7 +13899,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_72",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "put the booked advert into one place and remember the item we created...."
     },
     {
@@ -13899,7 +13910,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_135",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "remove the advert from this one place, leaving every other place untouched."
     },
     {
@@ -13910,7 +13921,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_151",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "when the run actually finishes, extensions counted. starts_at/ends_at stay as..."
     },
     {
@@ -13921,7 +13932,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_163",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "the booking plus every extension sold against it."
     },
     {
@@ -13932,7 +13943,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_168",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "look a client up inside the tenant, 404 if it is not theirs. via scope.get..."
     },
     {
@@ -13943,7 +13954,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_191",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "push the booking's effective end onto the playlist items it placed. the player..."
     },
     {
@@ -13954,7 +13965,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_274",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "reject the caller when the organisation is already at its ad-slot limit. two..."
     },
     {
@@ -13965,7 +13976,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_450",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "stop this advert playing in one place. everywhere else is unaffected."
     },
     {
@@ -13976,7 +13987,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_471",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "take a group booking off one screen without disturbing the rest of the group. a..."
     },
     {
@@ -13987,7 +13998,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_526",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "sell more time on a booking that is already running. a row per extension, not..."
     },
     {
@@ -13998,7 +14009,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_596",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "every screen this booking actually reaches. a group target is expanded to its..."
     },
     {
@@ -14009,7 +14020,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_615",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "the client, plan, period and money blocks a client report is built around...."
     },
     {
@@ -14020,7 +14031,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_683",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "every screen a set of target refs actually reaches, groups expanded."
     },
     {
@@ -14031,7 +14042,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_694",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "a plan sells a number of tvs, so it has to actually cap them. counted on..."
     },
     {
@@ -14042,7 +14053,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_719",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "proof of delivery for one booking: only its window, only its screens. scoping..."
     },
     {
@@ -14053,7 +14064,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_930",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "the client-facing pdf for one booking."
     },
     {
@@ -14064,7 +14075,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_944",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "the pdf and the name to give it. shared by the download and the email."
     },
     {
@@ -14075,7 +14086,7 @@
       "_origin": "ast",
       "id": "backend_routers_placements_rationale_968",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "send the client their own report. the address comes from the client record,..."
     },
     {
@@ -14285,7 +14296,7 @@
       "_origin": "ast",
       "id": "backend_routers_provisioning",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "provisioning.py"
     },
     {
@@ -14298,7 +14309,7 @@
       "_origin": "ast",
       "id": "backend_routers_provisioning_provisioningrequest",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "provisioningrequest"
     },
     {
@@ -14309,7 +14320,7 @@
       "_origin": "ast",
       "id": "backend_routers_provisioning_py_basemodel",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "basemodel"
     },
     {
@@ -14321,7 +14332,7 @@
       "_origin": "ast",
       "id": "backend_routers_provisioning_generate_provisioning_qr",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "generate_provisioning_qr()"
     },
     {
@@ -14332,7 +14343,7 @@
       "_origin": "ast",
       "id": "backend_routers_releases",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "releases.py"
     },
     {
@@ -14343,7 +14354,7 @@
       "_origin": "ast",
       "id": "backend_routers_releases_py_get",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "get"
     },
     {
@@ -14355,7 +14366,7 @@
       "_origin": "ast",
       "id": "backend_routers_releases_list_releases",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "list_releases()"
     },
     {
@@ -14366,8 +14377,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_releases_create_release",
-      "community": 140,
-      "community_name": "_post",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "create_release()"
     },
     {
@@ -14377,8 +14388,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_releases_py_patch",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "patch"
     },
     {
@@ -14389,8 +14400,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_releases_promote_release",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "promote_release()"
     },
     {
@@ -14400,8 +14411,8 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "backend_routers_releases_rationale_73",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "move a build along the rollout ring: draft -> canary -> released. promoting to..."
     },
     {
@@ -15007,8 +15018,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_screens_py_patch",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 148,
+      "community_name": "screens.py",
       "norm_label": "patch"
     },
     {
@@ -15019,8 +15030,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_screens_patch_screen",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 148,
+      "community_name": "screens.py",
       "norm_label": "patch_screen()"
     },
     {
@@ -15173,8 +15184,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_screens_resolve_location_link",
-      "community": 140,
-      "community_name": "_post",
+      "community": 148,
+      "community_name": "screens.py",
       "norm_label": "resolve_location_link()"
     },
     {
@@ -15427,8 +15438,8 @@
       "source_location": "L2119",
       "_origin": "ast",
       "id": "backend_routers_screens_rationale_2119",
-      "community": 140,
-      "community_name": "_post",
+      "community": 148,
+      "community_name": "screens.py",
       "norm_label": "coordinates for a pasted google maps link. deliberately not a google api call:..."
     },
     {
@@ -15439,7 +15450,7 @@
       "_origin": "ast",
       "id": "backend_routers_screenshots",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "screenshots.py"
     },
     {
@@ -15450,8 +15461,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_screenshots_request_screenshot",
-      "community": 148,
-      "community_name": "screens.py",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "request_screenshot()"
     },
     {
@@ -15462,8 +15473,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_screenshots_upload_device_screenshot",
-      "community": 140,
-      "community_name": "_post",
+      "community": 119,
+      "community_name": "content.py",
       "norm_label": "upload_device_screenshot()"
     },
     {
@@ -15473,8 +15484,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_screenshots_py_uploadfile",
-      "community": 140,
-      "community_name": "_post",
+      "community": 119,
+      "community_name": "content.py",
       "norm_label": "uploadfile"
     },
     {
@@ -15484,8 +15495,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_screenshots_py_session",
-      "community": 140,
-      "community_name": "_post",
+      "community": 119,
+      "community_name": "content.py",
       "norm_label": "session"
     },
     {
@@ -15495,8 +15506,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_screenshots_py_httpauthorizationcredentials",
-      "community": 140,
-      "community_name": "_post",
+      "community": 119,
+      "community_name": "content.py",
       "norm_label": "httpauthorizationcredentials"
     },
     {
@@ -15506,8 +15517,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_screenshots_py_get",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "get"
     },
     {
@@ -15518,8 +15529,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_screenshots_list_screenshots",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "list_screenshots()"
     },
     {
@@ -15530,7 +15541,7 @@
       "_origin": "ast",
       "id": "backend_routers_tenant_plans",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "tenant_plans.py"
     },
     {
@@ -15540,8 +15551,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_py_get",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "get"
     },
     {
@@ -15552,8 +15563,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_list_tenant_plans",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "list_tenant_plans()"
     },
     {
@@ -15564,8 +15575,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_create_tenant_plan",
-      "community": 140,
-      "community_name": "_post",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "create_tenant_plan()"
     },
     {
@@ -15576,8 +15587,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_get_tenant_plan",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "get_tenant_plan()"
     },
     {
@@ -15587,8 +15598,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_py_put",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "put"
     },
     {
@@ -15599,8 +15610,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_update_tenant_plan",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "update_tenant_plan()"
     },
     {
@@ -15611,8 +15622,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_delete_tenant_plan",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "delete_tenant_plan()"
     },
     {
@@ -15623,7 +15634,7 @@
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_rationale_1",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "the packages a tenant sells to its own clients. deliberately separate from..."
     },
     {
@@ -15633,8 +15644,8 @@
       "source_location": "L74",
       "_origin": "ast",
       "id": "backend_routers_tenant_plans_rationale_74",
-      "community": 98,
-      "community_name": "HTTPException",
+      "community": 195,
+      "community_name": "TenantScope",
       "norm_label": "retire a plan, or delete it outright if nothing was ever sold on it. a plan..."
     },
     {
@@ -15644,8 +15655,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "backend_routers_users",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 130,
+      "community_name": "users.py",
       "norm_label": "users.py"
     },
     {
@@ -15656,8 +15667,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_users_deny_platform_account",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 130,
+      "community_name": "users.py",
       "norm_label": "deny_platform_account()"
     },
     {
@@ -15667,8 +15678,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_users_py_user",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 130,
+      "community_name": "users.py",
       "norm_label": "user"
     },
     {
@@ -15679,8 +15690,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_users_active_owner_count",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 130,
+      "community_name": "users.py",
       "norm_label": "active_owner_count()"
     },
     {
@@ -15690,8 +15701,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_users_py_get",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 130,
+      "community_name": "users.py",
       "norm_label": "get"
     },
     {
@@ -15702,8 +15713,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_users_list_users",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 130,
+      "community_name": "users.py",
       "norm_label": "list_users()"
     },
     {
@@ -15714,8 +15725,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_users_create_user",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 130,
+      "community_name": "users.py",
       "norm_label": "create_user()"
     },
     {
@@ -15725,8 +15736,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "backend_routers_users_py_put",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 130,
+      "community_name": "users.py",
       "norm_label": "put"
     },
     {
@@ -15737,8 +15748,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_users_update_user",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 130,
+      "community_name": "users.py",
       "norm_label": "update_user()"
     },
     {
@@ -15749,8 +15760,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_routers_users_delete_user",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 130,
+      "community_name": "users.py",
       "norm_label": "delete_user()"
     },
     {
@@ -15760,8 +15771,8 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "backend_routers_users_rationale_25",
-      "community": 195,
-      "community_name": "tenancy.py",
+      "community": 130,
+      "community_name": "users.py",
       "norm_label": "how many active owners the given organisation has. counted against an explicit..."
     },
     {
@@ -17138,7 +17149,7 @@
       "_origin": "ast",
       "id": "backend_schemas_placementtargetref",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "placementtargetref"
     },
     {
@@ -17433,7 +17444,7 @@
       "_origin": "ast",
       "id": "backend_schemas_rationale_931",
       "community": 24,
-      "community_name": "TenantScope",
+      "community_name": "placements.py",
       "norm_label": "one place a booking runs. exactly one of the two ids is set."
     },
     {
@@ -17500,7 +17511,7 @@
       "_origin": "ast",
       "id": "backend_tenancy",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "tenancy.py"
     },
     {
@@ -17512,7 +17523,7 @@
       "_origin": "ast",
       "id": "backend_tenancy_is_super_admin",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "is_super_admin()"
     },
     {
@@ -17523,7 +17534,7 @@
       "_origin": "ast",
       "id": "backend_tenancy_py_user",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "user"
     },
     {
@@ -17535,7 +17546,7 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "backend_tenancy_tenantscope",
-      "community": 24,
+      "community": 195,
       "community_name": "TenantScope",
       "norm_label": "tenantscope"
     },
@@ -17547,7 +17558,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_tenancy_tenantscope_organization_id",
-      "community": 24,
+      "community": 195,
       "community_name": "TenantScope",
       "norm_label": ".organization_id()"
     },
@@ -17559,7 +17570,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_tenancy_tenantscope_query",
-      "community": 24,
+      "community": 195,
       "community_name": "TenantScope",
       "norm_label": ".query()"
     },
@@ -17570,7 +17581,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tenantmodel",
-      "community": 24,
+      "community": 195,
       "community_name": "TenantScope",
       "norm_label": "tenantmodel"
     },
@@ -17581,7 +17592,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "query",
-      "community": 24,
+      "community": 195,
       "community_name": "TenantScope",
       "norm_label": "query"
     },
@@ -17593,7 +17604,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_tenancy_tenantscope_get",
-      "community": 24,
+      "community": 195,
       "community_name": "TenantScope",
       "norm_label": ".get()"
     },
@@ -17605,7 +17616,7 @@
       "_callable": true,
       "_origin": "ast",
       "id": "backend_tenancy_tenantscope_is_read_only",
-      "community": 24,
+      "community": 195,
       "community_name": "TenantScope",
       "norm_label": ".is_read_only()"
     },
@@ -17618,7 +17629,7 @@
       "_origin": "ast",
       "id": "backend_tenancy_get_tenant_scope",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "get_tenant_scope()"
     },
     {
@@ -17629,7 +17640,7 @@
       "_origin": "ast",
       "id": "backend_tenancy_py_session",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "session"
     },
     {
@@ -17641,7 +17652,7 @@
       "_origin": "ast",
       "id": "backend_tenancy_require_super_admin",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "require_super_admin()"
     },
     {
@@ -17653,7 +17664,7 @@
       "_origin": "ast",
       "id": "backend_tenancy_require_tenant_roles",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "require_tenant_roles()"
     },
     {
@@ -17664,7 +17675,7 @@
       "_origin": "ast",
       "id": "backend_tenancy_rationale_15",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "the single source of truth for platform-operator status. this used to be `role..."
     },
     {
@@ -17674,7 +17685,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "backend_tenancy_rationale_50",
-      "community": 24,
+      "community": 195,
       "community_name": "TenantScope",
       "norm_label": "the sole entry point for authenticated organization-scoped queries."
     },
@@ -17686,7 +17697,7 @@
       "_origin": "ast",
       "id": "backend_tenancy_rationale_129",
       "community": 195,
-      "community_name": "tenancy.py",
+      "community_name": "TenantScope",
       "norm_label": "platform-operator routes only. every caller of this used to accept `role in..."
     },
     {
@@ -19567,8 +19578,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_alerts_page",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "alerts/page.tsx"
     },
     {
@@ -19580,8 +19591,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_alerts_page_severity",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "severity"
     },
     {
@@ -19593,8 +19604,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_alerts_page_alert",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "alert"
     },
     {
@@ -19605,8 +19616,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_alerts_page_hourssince",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "hourssince()"
     },
     {
@@ -19617,8 +19628,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_alerts_page_buildalerts",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "buildalerts()"
     },
     {
@@ -19629,8 +19640,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_alerts_page_alertspage",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "alertspage()"
     },
     {
@@ -19640,8 +19651,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_billing_page",
-      "community": 189,
-      "community_name": "button.tsx",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "billing/page.tsx"
     },
     {
@@ -19652,8 +19663,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_billing_page_bytes",
-      "community": 189,
-      "community_name": "button.tsx",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "bytes()"
     },
     {
@@ -19664,8 +19675,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_billing_page_percent",
-      "community": 189,
-      "community_name": "button.tsx",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "percent()"
     },
     {
@@ -19676,8 +19687,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_billing_page_billingpage",
-      "community": 189,
-      "community_name": "button.tsx",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "billingpage()"
     },
     {
@@ -19688,8 +19699,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_billing_page_usage",
-      "community": 189,
-      "community_name": "button.tsx",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "usage()"
     },
     {
@@ -19699,8 +19710,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_branding_page",
-      "community": 128,
-      "community_name": "useAuthStore",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "branding/page.tsx"
     },
     {
@@ -19873,8 +19884,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_content_id_page_addetailpage",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "addetailpage()"
     },
     {
@@ -19944,8 +19955,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_emergency_page",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "emergency/page.tsx"
     },
     {
@@ -19955,8 +19966,8 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_emergency_page_targetlabels",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "targetlabels"
     },
     {
@@ -19978,8 +19989,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_error",
-      "community": 189,
-      "community_name": "button.tsx",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "dashboard/error.tsx"
     },
     {
@@ -19990,8 +20001,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_error_dashboarderror",
-      "community": 189,
-      "community_name": "button.tsx",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "dashboarderror()"
     },
     {
@@ -20037,8 +20048,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_files_page_filemanagementpage",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "filemanagementpage()"
     },
     {
@@ -20071,8 +20082,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_groups_page",
-      "community": 39,
-      "community_name": "team/page.tsx",
+      "community": 35,
+      "community_name": "content/page.tsx",
       "norm_label": "groups/page.tsx"
     },
     {
@@ -20242,8 +20253,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_playlists_id_page",
-      "community": 5,
-      "community_name": "cn",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "playlists/[id]/page.tsx"
     },
     {
@@ -20254,8 +20265,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_playlists_id_page_playlistbuilderpage",
-      "community": 5,
-      "community_name": "cn",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "playlistbuilderpage()"
     },
     {
@@ -20441,8 +20452,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_team_page_astenantrole",
-      "community": 39,
-      "community_name": "team/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "astenantrole()"
     },
     {
@@ -20453,8 +20464,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_app_dashboard_team_page_teampage",
-      "community": 39,
-      "community_name": "team/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "teampage()"
     },
     {
@@ -20731,8 +20742,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_ad_bookings_rupees",
-      "community": 39,
-      "community_name": "team/page.tsx",
+      "community": 128,
+      "community_name": "useAuthStore",
       "norm_label": "rupees()"
     },
     {
@@ -20743,8 +20754,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_ad_bookings_asdate",
-      "community": 39,
-      "community_name": "team/page.tsx",
+      "community": 128,
+      "community_name": "useAuthStore",
       "norm_label": "asdate()"
     },
     {
@@ -20755,8 +20766,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_ad_bookings_runstate",
-      "community": 39,
-      "community_name": "team/page.tsx",
+      "community": 128,
+      "community_name": "useAuthStore",
       "norm_label": "runstate()"
     },
     {
@@ -20767,8 +20778,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_ad_bookings_adbookings",
-      "community": 39,
-      "community_name": "team/page.tsx",
+      "community": 128,
+      "community_name": "useAuthStore",
       "norm_label": "adbookings()"
     },
     {
@@ -20825,8 +20836,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_assign_playlist_card",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "assign-playlist-card.tsx"
     },
     {
@@ -20838,8 +20849,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_assign_playlist_card_assigntarget",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "assigntarget"
     },
     {
@@ -20957,8 +20968,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_email_report_modal_emailreportmodalprops",
-      "community": 14,
-      "community_name": "api.ts",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "emailreportmodalprops"
     },
     {
@@ -21003,8 +21014,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_error_state",
-      "community": 143,
-      "community_name": "screens/[id]/page.tsx",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "error-state.tsx"
     },
     {
@@ -21015,8 +21026,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_error_state_errorstate",
-      "community": 143,
-      "community_name": "screens/[id]/page.tsx",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "errorstate()"
     },
     {
@@ -21180,7 +21191,7 @@
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_place_search",
       "community": 189,
-      "community_name": "button.tsx",
+      "community_name": "playlist-builder.tsx",
       "norm_label": "place-search.tsx"
     },
     {
@@ -21193,7 +21204,7 @@
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_place_search_place",
       "community": 189,
-      "community_name": "button.tsx",
+      "community_name": "playlist-builder.tsx",
       "norm_label": "place"
     },
     {
@@ -21205,7 +21216,7 @@
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_place_search_lookslikelink",
       "community": 189,
-      "community_name": "button.tsx",
+      "community_name": "playlist-builder.tsx",
       "norm_label": "lookslikelink()"
     },
     {
@@ -21217,7 +21228,7 @@
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_place_search_placesearch",
       "community": 189,
-      "community_name": "button.tsx",
+      "community_name": "playlist-builder.tsx",
       "norm_label": "placesearch()"
     },
     {
@@ -21227,8 +21238,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_playlist_builder",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "playlist-builder.tsx"
     },
     {
@@ -21238,8 +21249,8 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_playlist_builder_daylabels",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "daylabels"
     },
     {
@@ -21249,8 +21260,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_playlist_builder_daynames",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "daynames"
     },
     {
@@ -21260,8 +21271,8 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_playlist_builder_transitionoptions",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "transitionoptions"
     },
     {
@@ -21271,8 +21282,8 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_playlist_builder_rotationoptions",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "rotationoptions"
     },
     {
@@ -21283,8 +21294,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_playlist_builder_rotationlabel",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "rotationlabel()"
     },
     {
@@ -21295,8 +21306,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_playlist_builder_transitionlabel",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "transitionlabel()"
     },
     {
@@ -21308,8 +21319,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_playlist_builder_selection",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "selection"
     },
     {
@@ -21320,8 +21331,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_playlist_builder_previewstyle",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "previewstyle()"
     },
     {
@@ -21332,8 +21343,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_playlist_builder_transitionpreview",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "transitionpreview()"
     },
     {
@@ -21344,8 +21355,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_playlist_builder_defaulttransitionpanel",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "defaulttransitionpanel()"
     },
     {
@@ -21356,8 +21367,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_playlist_builder_itemrow",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "itemrow()"
     },
     {
@@ -21368,8 +21379,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_playlist_builder_playlistbuilder",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "playlistbuilder()"
     },
     {
@@ -21426,8 +21437,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_screen_hours_dialog",
-      "community": 14,
-      "community_name": "api.ts",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "screen-hours-dialog.tsx"
     },
     {
@@ -21437,8 +21448,8 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_screen_hours_dialog_all_day",
-      "community": 14,
-      "community_name": "api.ts",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "all_day"
     },
     {
@@ -21448,8 +21459,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_screen_hours_dialog_modes",
-      "community": 14,
-      "community_name": "api.ts",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "modes"
     },
     {
@@ -21461,8 +21472,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_screen_hours_dialog_windows",
-      "community": 14,
-      "community_name": "api.ts",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "windows"
     },
     {
@@ -21473,8 +21484,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_screen_hours_dialog_withdefaults",
-      "community": 14,
-      "community_name": "api.ts",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "withdefaults()"
     },
     {
@@ -21485,8 +21496,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_screen_hours_dialog_screenhoursdialog",
-      "community": 14,
-      "community_name": "api.ts",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "screenhoursdialog()"
     },
     {
@@ -21580,7 +21591,7 @@
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_screen_settings_dialog",
       "community": 189,
-      "community_name": "button.tsx",
+      "community_name": "playlist-builder.tsx",
       "norm_label": "screen-settings-dialog.tsx"
     },
     {
@@ -21591,7 +21602,7 @@
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_screen_settings_dialog_orientations",
       "community": 189,
-      "community_name": "button.tsx",
+      "community_name": "playlist-builder.tsx",
       "norm_label": "orientations"
     },
     {
@@ -21602,7 +21613,7 @@
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_screen_settings_dialog_fit_modes",
       "community": 189,
-      "community_name": "button.tsx",
+      "community_name": "playlist-builder.tsx",
       "norm_label": "fit_modes"
     },
     {
@@ -21614,7 +21625,7 @@
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_screen_settings_dialog_timezones",
       "community": 189,
-      "community_name": "button.tsx",
+      "community_name": "playlist-builder.tsx",
       "norm_label": "timezones()"
     },
     {
@@ -21626,7 +21637,7 @@
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_screen_settings_dialog_splittags",
       "community": 189,
-      "community_name": "button.tsx",
+      "community_name": "playlist-builder.tsx",
       "norm_label": "splittags()"
     },
     {
@@ -21638,7 +21649,7 @@
       "_origin": "ast",
       "id": "frontend_src_components_dashboard_screen_settings_dialog_screensettingsdialog",
       "community": 189,
-      "community_name": "button.tsx",
+      "community_name": "playlist-builder.tsx",
       "norm_label": "screensettingsdialog()"
     },
     {
@@ -21775,8 +21786,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "frontend_src_components_ui_button",
-      "community": 189,
-      "community_name": "button.tsx",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "button.tsx"
     },
     {
@@ -21786,8 +21797,8 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "frontend_src_components_ui_button_buttonvariants",
-      "community": 189,
-      "community_name": "button.tsx",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "buttonvariants"
     },
     {
@@ -21798,8 +21809,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_ui_button_button",
-      "community": 189,
-      "community_name": "button.tsx",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "button()"
     },
     {
@@ -21821,8 +21832,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_ui_card_card",
-      "community": 5,
-      "community_name": "cn",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "card()"
     },
     {
@@ -21881,8 +21892,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_ui_card_cardcontent",
-      "community": 5,
-      "community_name": "cn",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "cardcontent()"
     },
     {
@@ -22152,8 +22163,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "frontend_src_components_ui_select",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "select.tsx"
     },
     {
@@ -22176,8 +22187,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_ui_select_selectvalue",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "selectvalue()"
     },
     {
@@ -22188,8 +22199,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_ui_select_selecttrigger",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "selecttrigger()"
     },
     {
@@ -22200,8 +22211,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_ui_select_selectcontent",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "selectcontent()"
     },
     {
@@ -22224,8 +22235,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_components_ui_select_selectitem",
-      "community": 5,
-      "community_name": "cn",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "selectitem()"
     },
     {
@@ -22815,8 +22826,8 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "frontend_src_lib_api_api",
-      "community": 39,
-      "community_name": "team/page.tsx",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "api"
     },
     {
@@ -22837,8 +22848,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "frontend_src_lib_format",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "format.ts"
     },
     {
@@ -22849,8 +22860,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_lib_format_relativetime",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "relativetime()"
     },
     {
@@ -22861,8 +22872,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_lib_format_loopduration",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "loopduration()"
     },
     {
@@ -22873,8 +22884,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_lib_format_storageusedgb",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "storageusedgb()"
     },
     {
@@ -22885,8 +22896,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_lib_format_datetimelocal",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "datetimelocal()"
     },
     {
@@ -22909,8 +22920,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_lib_format_clipduration",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "clipduration()"
     },
     {
@@ -22921,8 +22932,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_lib_format_assetorientation",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "assetorientation()"
     },
     {
@@ -22933,8 +22944,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "frontend_src_lib_format_formatbytes",
-      "community": 35,
-      "community_name": "content/page.tsx",
+      "community": 143,
+      "community_name": "screens/[id]/page.tsx",
       "norm_label": "formatbytes()"
     },
     {
@@ -23230,8 +23241,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "frontend_src_lib_types_screengroup",
-      "community": 39,
-      "community_name": "team/page.tsx",
+      "community": 35,
+      "community_name": "content/page.tsx",
       "norm_label": "screengroup"
     },
     {
@@ -23243,8 +23254,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "frontend_src_lib_types_plan",
-      "community": 189,
-      "community_name": "button.tsx",
+      "community": 14,
+      "community_name": "api.ts",
       "norm_label": "plan"
     },
     {
@@ -23412,8 +23423,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "frontend_src_lib_types_fitmode",
-      "community": 189,
-      "community_name": "button.tsx",
+      "community": 14,
+      "community_name": "api.ts",
       "norm_label": "fitmode"
     },
     {
@@ -23425,8 +23436,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "frontend_src_lib_types_syncrole",
-      "community": 189,
-      "community_name": "button.tsx",
+      "community": 14,
+      "community_name": "api.ts",
       "norm_label": "syncrole"
     },
     {
@@ -23438,8 +23449,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "frontend_src_lib_types_operatingmode",
-      "community": 14,
-      "community_name": "api.ts",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "operatingmode"
     },
     {
@@ -23449,8 +23460,8 @@
       "source_location": "L275",
       "_origin": "ast",
       "id": "frontend_src_lib_types_weekdays",
-      "community": 14,
-      "community_name": "api.ts",
+      "community": 189,
+      "community_name": "playlist-builder.tsx",
       "norm_label": "weekdays"
     },
     {
@@ -23514,8 +23525,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "frontend_src_lib_types_placementtarget",
-      "community": 39,
-      "community_name": "team/page.tsx",
+      "community": 14,
+      "community_name": "api.ts",
       "norm_label": "placementtarget"
     },
     {
@@ -23579,8 +23590,8 @@
       "_callable_class": true,
       "_origin": "ast",
       "id": "frontend_src_lib_types_placement",
-      "community": 14,
-      "community_name": "api.ts",
+      "community": 39,
+      "community_name": "team/page.tsx",
       "norm_label": "placement"
     },
     {
@@ -25079,8 +25090,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_manual_pipeline_check",
-      "community": 177,
-      "community_name": "Organization",
+      "community": 185,
+      "community_name": "models.py",
       "norm_label": "manual_pipeline_check.py"
     },
     {
@@ -25091,8 +25102,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_manual_pipeline_check_setup_db",
-      "community": 177,
-      "community_name": "Organization",
+      "community": 185,
+      "community_name": "models.py",
       "norm_label": "setup_db()"
     },
     {
@@ -25103,8 +25114,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_manual_pipeline_check_run",
-      "community": 177,
-      "community_name": "Organization",
+      "community": 185,
+      "community_name": "models.py",
       "norm_label": "run()"
     },
     {
@@ -25809,8 +25820,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_seed_super_admin",
-      "community": 20,
-      "community_name": "main.py",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "seed_super_admin()"
     },
     {
@@ -25845,8 +25856,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_test_area_3_reinstall_deduplication",
-      "community": 19,
-      "community_name": "SessionLocal",
+      "community": 194,
+      "community_name": "create_access_token",
       "norm_label": "test_area_3_reinstall_deduplication()"
     },
     {
@@ -25857,8 +25868,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_test_area_4_role_promotion_and_approval_lifecycle",
-      "community": 19,
-      "community_name": "SessionLocal",
+      "community": 194,
+      "community_name": "create_access_token",
       "norm_label": "test_area_4_role_promotion_and_approval_lifecycle()"
     },
     {
@@ -25891,8 +25902,8 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_rationale_65",
-      "community": 20,
-      "community_name": "main.py",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "the platform operator area 4 acts as. seeded rather than assumed."
     },
     {
@@ -25924,8 +25935,8 @@
       "source_location": "L217",
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_rationale_217",
-      "community": 19,
-      "community_name": "SessionLocal",
+      "community": 194,
+      "community_name": "create_access_token",
       "norm_label": "area 3: test 1 tv reinstall concept (hardware deduplication on re-pairing)."
     },
     {
@@ -25935,8 +25946,8 @@
       "source_location": "L275",
       "_origin": "ast",
       "id": "tests_test_all_five_areas_e2e_rationale_275",
-      "community": 19,
-      "community_name": "SessionLocal",
+      "community": 194,
+      "community_name": "create_access_token",
       "norm_label": "area 4: test pending approval on signup, super admin approval, and role..."
     },
     {
@@ -25991,8 +26002,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_booking_report",
-      "community": 20,
-      "community_name": "main.py",
+      "community": 190,
+      "community_name": "test_booking_report.py",
       "norm_label": "test_booking_report.py"
     },
     {
@@ -26003,8 +26014,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_booking_report_rollup",
-      "community": 20,
-      "community_name": "main.py",
+      "community": 190,
+      "community_name": "test_booking_report.py",
       "norm_label": "rollup()"
     },
     {
@@ -26015,8 +26026,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_booking_report_pages_of",
-      "community": 20,
-      "community_name": "main.py",
+      "community": 190,
+      "community_name": "test_booking_report.py",
       "norm_label": "pages_of()"
     },
     {
@@ -26026,8 +26037,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_booking_report_rationale_1",
-      "community": 20,
-      "community_name": "main.py",
+      "community": 190,
+      "community_name": "test_booking_report.py",
       "norm_label": "a client report must count that client's window and that client's screens...."
     },
     {
@@ -26117,8 +26128,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_feature_parity",
-      "community": 95,
-      "community_name": "run",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "test_feature_parity.py"
     },
     {
@@ -26129,8 +26140,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_feature_parity_auth_header",
-      "community": 95,
-      "community_name": "run",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "auth_header()"
     },
     {
@@ -26140,8 +26151,8 @@
       "source_location": "",
       "_origin": "ast",
       "id": "tests_test_feature_parity_py_testclient",
-      "community": 95,
-      "community_name": "run",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "testclient"
     },
     {
@@ -26152,8 +26163,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_feature_parity_run",
-      "community": 95,
-      "community_name": "run",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "run()"
     },
     {
@@ -26164,8 +26175,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_feature_parity_main",
-      "community": 95,
-      "community_name": "run",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "main()"
     },
     {
@@ -26175,8 +26186,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_feature_parity_rationale_1",
-      "community": 95,
-      "community_name": "run",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "runnable backend parity check: python tests/test_feature_parity.py"
     },
     {
@@ -26999,8 +27010,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_media_storage_test_the_report_reads_the_creative_without_any_http",
-      "community": 139,
-      "community_name": "booking_report.py",
+      "community": 50,
+      "community_name": "test_media_storage.py",
       "norm_label": "test_the_report_reads_the_creative_without_any_http()"
     },
     {
@@ -27065,8 +27076,8 @@
       "source_location": "L248",
       "_origin": "ast",
       "id": "tests_test_media_storage_rationale_248",
-      "community": 139,
-      "community_name": "booking_report.py",
+      "community": 50,
+      "community_name": "test_media_storage.py",
       "norm_label": "the whole point: a report renders its images with the network unavailable."
     },
     {
@@ -27389,7 +27400,7 @@
       "_origin": "ast",
       "id": "tests_test_platform_admin",
       "community": 190,
-      "community_name": "test_platform_admin.py",
+      "community_name": "test_booking_report.py",
       "norm_label": "test_platform_admin.py"
     },
     {
@@ -27401,7 +27412,7 @@
       "_origin": "ast",
       "id": "tests_test_platform_admin_check",
       "community": 190,
-      "community_name": "test_platform_admin.py",
+      "community_name": "test_booking_report.py",
       "norm_label": "check()"
     },
     {
@@ -27413,7 +27424,7 @@
       "_origin": "ast",
       "id": "tests_test_platform_admin_token_for",
       "community": 190,
-      "community_name": "test_platform_admin.py",
+      "community_name": "test_booking_report.py",
       "norm_label": "token_for()"
     },
     {
@@ -27425,7 +27436,7 @@
       "_origin": "ast",
       "id": "tests_test_platform_admin_auth",
       "community": 190,
-      "community_name": "test_platform_admin.py",
+      "community_name": "test_booking_report.py",
       "norm_label": "auth()"
     },
     {
@@ -27437,7 +27448,7 @@
       "_origin": "ast",
       "id": "tests_test_platform_admin_seed",
       "community": 190,
-      "community_name": "test_platform_admin.py",
+      "community_name": "test_booking_report.py",
       "norm_label": "seed()"
     },
     {
@@ -27449,7 +27460,7 @@
       "_origin": "ast",
       "id": "tests_test_platform_admin_run",
       "community": 190,
-      "community_name": "test_platform_admin.py",
+      "community_name": "test_booking_report.py",
       "norm_label": "run()"
     },
     {
@@ -27460,7 +27471,7 @@
       "_origin": "ast",
       "id": "tests_test_platform_admin_rationale_1",
       "community": 190,
-      "community_name": "test_platform_admin.py",
+      "community_name": "test_booking_report.py",
       "norm_label": "super admin boundary and the auth holes it closed: python..."
     },
     {
@@ -27471,7 +27482,7 @@
       "_origin": "ast",
       "id": "tests_test_platform_admin_rationale_80",
       "community": 190,
-      "community_name": "test_platform_admin.py",
+      "community_name": "test_booking_report.py",
       "norm_label": "one platform operator, and one ordinary tenant owner in a separate organisation."
     },
     {
@@ -27481,8 +27492,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_play_log_attribution",
-      "community": 185,
-      "community_name": "models.py",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "test_play_log_attribution.py"
     },
     {
@@ -27493,8 +27504,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_play_log_attribution_event",
-      "community": 185,
-      "community_name": "models.py",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "_event()"
     },
     {
@@ -27516,8 +27527,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_play_log_attribution_rationale_1",
-      "community": 185,
-      "community_name": "models.py",
+      "community": 177,
+      "community_name": "Organization",
       "norm_label": "regression tests for proof-of-play attribution and durability. each of these..."
     },
     {
@@ -29027,8 +29038,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_screen_removal",
-      "community": 194,
-      "community_name": "create_access_token",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "test_screen_removal.py"
     },
     {
@@ -29039,8 +29050,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_screen_removal_check",
-      "community": 194,
-      "community_name": "create_access_token",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "check()"
     },
     {
@@ -29051,8 +29062,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_screen_removal_run",
-      "community": 194,
-      "community_name": "create_access_token",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "run()"
     },
     {
@@ -29062,8 +29073,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "tests_test_screen_removal_rationale_1",
-      "community": 194,
-      "community_name": "create_access_token",
+      "community": 20,
+      "community_name": "main.py",
       "norm_label": "removing a tv: python tests/test_screen_removal.py the feature did not exist --..."
     },
     {
@@ -29521,8 +29532,8 @@
       "_callable": true,
       "_origin": "ast",
       "id": "tests_test_storage_prefix_test_the_media_route_refuses_to_climb_out_of_the_bucket",
-      "community": 180,
-      "community_name": "resolve_media_url",
+      "community": 49,
+      "community_name": "serve_media",
       "norm_label": "test_the_media_route_refuses_to_climb_out_of_the_bucket()"
     },
     {
@@ -29675,8 +29686,8 @@
       "source_location": "L195",
       "_origin": "ast",
       "id": "tests_test_storage_prefix_rationale_195",
-      "community": 180,
-      "community_name": "resolve_media_url",
+      "community": 49,
+      "community_name": "serve_media",
       "norm_label": "the path segment reaches s3 as a key, so it is a trust boundary."
     },
     {
@@ -45763,7 +45774,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "backend/main.py",
-      "source_location": "L483",
+      "source_location": "L484",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main_health_check",
@@ -47530,7 +47541,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L493",
+      "source_location": "L494",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47658,7 +47669,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L457",
+      "source_location": "L458",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47680,7 +47691,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L593",
+      "source_location": "L594",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47724,7 +47735,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L415",
+      "source_location": "L416",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47736,7 +47747,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L429",
+      "source_location": "L430",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47748,7 +47759,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L429",
+      "source_location": "L430",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47760,7 +47771,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L429",
+      "source_location": "L430",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47784,7 +47795,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47796,7 +47807,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47808,7 +47819,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47820,7 +47831,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47832,7 +47843,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47844,7 +47855,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47856,7 +47867,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47868,7 +47879,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47880,7 +47891,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47892,7 +47903,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47904,7 +47915,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47916,7 +47927,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47928,7 +47939,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47940,7 +47951,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47952,7 +47963,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47964,7 +47975,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -47976,7 +47987,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L516",
+      "source_location": "L517",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -48000,7 +48011,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -48012,7 +48023,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -48024,7 +48035,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -48036,7 +48047,7 @@
       "context": "submodule_import",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L547",
+      "source_location": "L548",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main",
@@ -48933,7 +48944,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L456",
+      "source_location": "L457",
       "weight": 1.0,
       "context": "decorator",
       "_origin": "ast",
@@ -48945,7 +48956,7 @@
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L592",
+      "source_location": "L593",
       "weight": 1.0,
       "context": "decorator",
       "_origin": "ast",
@@ -48966,39 +48977,27 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "rationale_for",
+      "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L416",
+      "source_location": "L415",
       "weight": 1.0,
+      "context": "decorator",
       "_origin": "ast",
-      "source": "backend_main_rationale_416",
-      "target": "backend_main_serve_media",
+      "source": "backend_main_serve_media",
+      "target": "head",
       "confidence_score": 1.0
     },
     {
-      "relation": "calls",
-      "context": "call",
+      "relation": "rationale_for",
       "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
       "source_file": "backend/main.py",
-      "source_location": "L441",
+      "source_location": "L417",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "backend_main_serve_media",
-      "target": "backend_media_urls_get_s3_config"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "backend/main.py",
-      "source_location": "L435",
-      "weight": 1.0,
-      "_origin": "ast",
-      "source": "backend_main_serve_media",
-      "target": "backend_media_urls_is_s3_enabled"
+      "source": "backend_main_rationale_417",
+      "target": "backend_main_serve_media",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -49010,6 +49009,30 @@
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main_serve_media",
+      "target": "backend_media_urls_get_s3_config"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/main.py",
+      "source_location": "L436",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "backend_main_serve_media",
+      "target": "backend_media_urls_is_s3_enabled"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "backend/main.py",
+      "source_location": "L443",
+      "weight": 1.0,
+      "_origin": "ast",
+      "source": "backend_main_serve_media",
       "target": "backend_media_urls_s3_client"
     },
     {
@@ -49018,7 +49041,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "backend/main.py",
-      "source_location": "L434",
+      "source_location": "L435",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main_serve_media",
@@ -49053,7 +49076,7 @@
       "context": "parameter_type",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L457",
+      "source_location": "L458",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main_health_check",
@@ -49066,7 +49089,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "backend/main.py",
-      "source_location": "L495",
+      "source_location": "L496",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main_health_check",
@@ -49078,7 +49101,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "backend/main.py",
-      "source_location": "L518",
+      "source_location": "L519",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main_health_check",
@@ -49090,7 +49113,7 @@
       "confidence": "INFERRED",
       "confidence_score": 0.8,
       "source_file": "backend/main.py",
-      "source_location": "L468",
+      "source_location": "L469",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_main_health_check",
@@ -49100,10 +49123,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/main.py",
-      "source_location": "L458",
+      "source_location": "L459",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "backend_main_rationale_458",
+      "source": "backend_main_rationale_459",
       "target": "backend_main_health_check",
       "confidence_score": 1.0
     },
@@ -51617,7 +51640,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L172",
+      "source_location": "L175",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_urls",
@@ -51628,7 +51651,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L115",
+      "source_location": "L118",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_urls",
@@ -51650,7 +51673,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L80",
+      "source_location": "L83",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_urls",
@@ -51661,7 +51684,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L132",
+      "source_location": "L135",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_urls",
@@ -51672,7 +51695,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L146",
+      "source_location": "L149",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_urls",
@@ -51683,7 +51706,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L100",
+      "source_location": "L103",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_urls",
@@ -51694,7 +51717,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L88",
+      "source_location": "L91",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_urls",
@@ -52050,7 +52073,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L72",
+      "source_location": "L71",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_urls_get_s3_config",
@@ -52073,7 +52096,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L81",
+      "source_location": "L84",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_urls_is_s3_enabled",
@@ -52096,7 +52119,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L108",
+      "source_location": "L111",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_urls_s3_client",
@@ -52228,7 +52251,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L109",
+      "source_location": "L112",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_urls_s3_client",
@@ -52239,10 +52262,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L101",
+      "source_location": "L104",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "backend_media_urls_rationale_101",
+      "source": "backend_media_urls_rationale_104",
       "target": "backend_media_urls_s3_client",
       "confidence_score": 1.0
     },
@@ -52250,10 +52273,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L116",
+      "source_location": "L119",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "backend_media_urls_rationale_116",
+      "source": "backend_media_urls_rationale_119",
       "target": "backend_media_urls_detect_lan_host",
       "confidence_score": 1.0
     },
@@ -52261,10 +52284,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L133",
+      "source_location": "L136",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "backend_media_urls_rationale_133",
+      "source": "backend_media_urls_rationale_136",
       "target": "backend_media_urls_media_base_url",
       "confidence_score": 1.0
     },
@@ -52273,7 +52296,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L165",
+      "source_location": "L168",
       "weight": 1.0,
       "_origin": "ast",
       "source": "backend_media_urls_resolve_media_url",
@@ -52332,10 +52355,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L147",
+      "source_location": "L150",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "backend_media_urls_rationale_147",
+      "source": "backend_media_urls_rationale_150",
       "target": "backend_media_urls_resolve_media_url",
       "confidence_score": 1.0
     },
@@ -52691,10 +52714,10 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "backend/media_urls.py",
-      "source_location": "L173",
+      "source_location": "L176",
       "weight": 1.0,
       "_origin": "ast",
-      "source": "backend_media_urls_rationale_173",
+      "source": "backend_media_urls_rationale_176",
       "target": "backend_media_urls_delete_stored_file",
       "confidence_score": 1.0
     },
@@ -108246,5 +108269,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "75fabbd0ab68c1f61aab709c7f2addde30789306"
+  "built_at_commit": "c3b4e34cb39ad103bf95fc48fe866ce3fe46d14a"
 }

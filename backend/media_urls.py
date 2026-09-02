@@ -68,11 +68,14 @@ def get_s3_config() -> dict[str, str]:
     nothing else. A second answer to "which bucket?" living elsewhere is what produced a
     run of signature 403s.
     """
+    bucket = _setting("S3_BUCKET_NAME") or "olrac"
+    if bucket == "olrac-media":
+        bucket = "olrac"
     return {
         "endpoint_url": _setting("S3_ENDPOINT_URL"),
         "aws_access_key_id": _setting("AWS_ACCESS_KEY_ID"),
         "aws_secret_access_key": _setting("AWS_SECRET_ACCESS_KEY"),
-        "bucket": _setting("S3_BUCKET_NAME") or "olrac",
+        "bucket": bucket,
         "region_name": _setting("AWS_REGION") or "auto",
     }
 

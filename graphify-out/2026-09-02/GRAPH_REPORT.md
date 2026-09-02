@@ -1,7 +1,7 @@
 # Graph Report - OLRAC SIGNAGE  (2026-09-02)
 
 ## Corpus Check
-- 330 files · ~368,931 words
+- 330 files · ~369,070 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `af5afe3c`
+- Built from commit: `75fabbd0`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -157,7 +157,7 @@
 - client_key
 - models.py
 - shadcn
-- playlist-builder.tsx
+- button.tsx
 - test_platform_admin.py
 - dashboard_websocket
 - AppReleasePatch
@@ -182,7 +182,7 @@
 - AlertSummaryResponse
 - BrandingUpdate
 - ProfileUpdate
-- recharts
+- @dnd-kit/core
 
 ## God Nodes (most connected - your core abstractions)
 1. `TenantScope` - 151 edges
@@ -234,8 +234,8 @@ Cohesion: 0.17
 Nodes (5): Intent, MainActivity, GooglePollRequest, ComponentActivity, KeyEvent
 
 ### Community 5 - "cn"
-Cohesion: 0.12
-Nodes (23): exportFormats, StatusIndicator(), CardAction(), CardDescription(), CardFooter(), CardHeader(), CardTitle(), DialogOverlay() (+15 more)
+Cohesion: 0.08
+Nodes (40): exportFormats, targetLabels, AssignTarget, dayLabels, dayNames, DefaultTransitionPanel(), previewStyle(), rotationOptions (+32 more)
 
 ### Community 6 - "PlaybackService"
 Cohesion: 0.06
@@ -266,8 +266,8 @@ Cohesion: 0.26
 Nodes (11): auth_header(), Screen pairing is instant: python tests/test_screen_approval.py This file used…, sign_in(), test_a_secret_does_not_authenticate_a_different_screen(), test_a_signed_in_screen_syncs_straight_away(), test_enrolment_token_admits_immediately(), test_pairing_admits_immediately(), test_re_signing_in_keeps_the_screen_admitted() (+3 more)
 
 ### Community 14 - "api.ts"
-Cohesion: 0.06
-Nodes (49): AdminReleasesPage(), EditClientAdModalProps, MediaThumbnail(), API_HOST, ApiError, authFetch(), configuredUrl, fetchWithAuth() (+41 more)
+Cohesion: 0.05
+Nodes (54): AdminReleasesPage(), EditClientAdModalProps, EmailReportModalProps, MediaThumbnail(), ALL_DAY, MODES, ScreenHoursDialog(), Windows (+46 more)
 
 ### Community 15 - "components.json"
 Cohesion: 0.09
@@ -299,7 +299,7 @@ Nodes (19): change_own_password(), ensure_initial_owner(), get_current_user(), g
 
 ### Community 22 - "dependencies"
 Cohesion: 0.10
-Nodes (21): @base-ui/react, class-variance-authority, @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/utilities, dependencies, @base-ui/react, class-variance-authority (+13 more)
+Nodes (21): @base-ui/react, class-variance-authority, @dnd-kit/sortable, @dnd-kit/utilities, dependencies, @base-ui/react, class-variance-authority, @dnd-kit/sortable (+13 more)
 
 ### Community 23 - "devDependencies"
 Cohesion: 0.09
@@ -350,8 +350,8 @@ Cohesion: 0.22
 Nodes (5): bringToFront(), AccessibilityEvent, AccessibilityService, Context, WatchdogAccessibilityService
 
 ### Community 35 - "content/page.tsx"
-Cohesion: 0.10
-Nodes (36): ContentPage(), isSupported(), QueuedUpload, stripExtension(), FileSort, SORTS, GroupsPage(), accountLinks (+28 more)
+Cohesion: 0.07
+Nodes (51): Alert, AlertsPage(), buildAlerts(), hoursSince(), Severity, AdDetailPage(), ContentPage(), isSupported() (+43 more)
 
 ### Community 36 - "test_alerting.py"
 Cohesion: 0.07
@@ -366,8 +366,8 @@ Cohesion: 0.22
 Nodes (8): Build, Checking a TV, How recovery actually works, Known issue in the player (not the watchdog), OLRAC Watchdog — build and TV setup, Provision a TV, Retargeting, The three things that silently break this
 
 ### Community 39 - "team/page.tsx"
-Cohesion: 0.16
-Nodes (27): BillingPage(), percent(), BLANK, roleDescription, TENANT_ROLES, EmailReportModal(), EmailReportModalProps, ErrorState() (+19 more)
+Cohesion: 0.18
+Nodes (27): BLANK, asTenantRole(), roleDescription, TeamPage(), TENANT_ROLES, AdBookings(), asDate(), runState() (+19 more)
 
 ### Community 40 - "BootReceiver"
 Cohesion: 0.33
@@ -538,8 +538,8 @@ Cohesion: 0.22
 Nodes (18): Screen, Selects the most appropriate media rendition for a screen based on its hardware…, select_rendition(), Filtering everything out must not fall through to the biggest file we own. When…, test_a_constrained_panel_is_never_handed_the_master(), Rendition selection, against the set the transcoder actually produces.…, Content carrying exactly what the transcoder produces today., real_content() (+10 more)
 
 ### Community 128 - "useAuthStore"
-Cohesion: 0.13
-Nodes (25): AdminLayout(), navItems, AccountPage(), BrandingPage(), LOGO_TYPES, ClientsPage(), EmergencyPage(), GroupDetailPage() (+17 more)
+Cohesion: 0.16
+Nodes (21): AdminLayout(), navItems, AccountPage(), BrandingPage(), LOGO_TYPES, ClientsPage(), EmergencyPage(), GroupDetailPage() (+13 more)
 
 ### Community 130 - "groups.py"
 Cohesion: 0.33
@@ -566,8 +566,8 @@ Cohesion: 0.29
 Nodes (11): build_tenant(), check(), fill_to_cap(), The screen cap actually caps: python tests/test_screen_quota.py A tenant on a…, The derivation itself, before any endpoint uses it., The bypass: /register first, then /enroll finds the row and skips the check., A workspace capped at CAP screens, limited either by its package or by an…, CAP screens already claimed, so the next one is the one over the line. (+3 more)
 
 ### Community 143 - "screens/[id]/page.tsx"
-Cohesion: 0.08
-Nodes (40): Alert, AlertsPage(), buildAlerts(), hoursSince(), Severity, asDate(), CampaignsPage(), getPlacementState() (+32 more)
+Cohesion: 0.14
+Nodes (23): asDate(), CampaignsPage(), getPlacementState(), rupees(), orientationLabel(), ScreenDetailPage(), AssignPlaylistCard(), EditClientAdModal() (+15 more)
 
 ### Community 144 - "test_rollout_policy.py"
 Cohesion: 0.18
@@ -645,9 +645,9 @@ Nodes (3): client_key(), Request, Who to count this request against. slowapi's g
 Cohesion: 0.10
 Nodes (27): AdPlacementExtension, Alert, Campaign, Client, EmergencyBroadcast, Plan, PlayLog, PlayLogHourlyRollup (+19 more)
 
-### Community 189 - "playlist-builder.tsx"
-Cohesion: 0.10
-Nodes (31): targetLabels, AssignTarget, looksLikeLink(), Place, PlaceSearch(), dayLabels, dayNames, DefaultTransitionPanel() (+23 more)
+### Community 189 - "button.tsx"
+Cohesion: 0.13
+Nodes (15): BillingPage(), percent(), looksLikeLink(), Place, PlaceSearch(), FIT_MODES, ORIENTATIONS, ScreenSettingsDialog() (+7 more)
 
 ### Community 190 - "test_platform_admin.py"
 Cohesion: 0.39

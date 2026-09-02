@@ -412,6 +412,7 @@ _MEDIA_REDIRECT_CACHE_SECONDS = 60
 
 
 @app.get("/api/media/{key:path}")
+@app.head("/api/media/{key:path}")
 def serve_media(key: str):
     """Stable URL for a stored object; signs the real one fresh on every request.
 

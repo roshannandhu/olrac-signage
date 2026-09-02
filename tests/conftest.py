@@ -62,6 +62,7 @@ ISOLATED_SCRIPTS = {
     "test_ad_placements.py",
     "test_booking_report.py",
     "test_tenant_plans.py",
+    "test_ad_payments.py",
     "test_media_report.py",
     "test_reinstall_dedup.py",
     "test_storage_cleanup.py",

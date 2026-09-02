@@ -405,6 +405,41 @@ export interface Placement {
   notes: string | null
   created_at: string
   targets: PlacementTarget[]
+  /** Screens this booking actually reaches, groups expanded — the way the cap counts them. */
+  screens_used: number
+  /** The plan's screen allowance. 0 when the plan does not cap locations, or there is no plan. */
+  plan_max_locations: number
+  /** Paid for and not being used. Never blocks a save; it is money the client is owed. */
+  screens_unused: number
+  /** How the booking was settled. Null until someone records it. */
+  payment: Payment | null
+}
+
+/** What a client actually paid, and how. `Placement.is_paid` is this record's shadow. */
+export interface Payment {
+  id: number
+  amount_paise: number
+  method: PaymentMethod
+  reference: string | null
+  paid_at: string
+  notes: string | null
+  /** Who took the money, kept even after they leave. */
+  recorded_by: string | null
+  created_at: string
+}
+
+export type PaymentMethod = 'cash' | 'upi' | 'bank_transfer' | 'cheque' | 'card' | 'other'
+
+/** One plan a booking could move to, and what moving would mean. */
+export interface PlanOption {
+  plan: TenantPlan
+  is_current: boolean
+  /** Whether it covers the screens the booking ALREADY runs on. */
+  fits: boolean
+  price_difference_paise: number
+  extra_days: number
+  /** Exactly one option carries this: the cheapest that fits the screens in use. */
+  recommended: boolean
 }
 
 export interface BookingReportScreen {

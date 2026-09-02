@@ -221,6 +221,83 @@ try:
     ).first(), "a campaign that ended hours ago was swept inside its grace period"
     print("  ok  a campaign that just ended is left alone during the grace period")
 
+    # --- the screen genuinely stops being offered the advert ----------------------------
+    # The sweep is housekeeping; THIS is what takes the advert off air, and it is the half
+    # that runs with no worker and no Redis. Worth pinning end to end, because a dev
+    # machine never runs the sweep and so never exercises the other half at all.
+    tv = client.post("/api/screens/register", json={"device_id": "expiry-proof-tv"})
+    assert tv.status_code in (200, 201), tv.text
+    assert client.post("/api/screens/pair", headers=auth,
+                       json={"pair_code": tv.json()["pair_code"]}).status_code == 200
+
+    live = client.post("/api/placements/", headers=auth, json={
+        "content_id": ad.id, "advertiser": "Still Running", "price_paise": 1000,
+        "starts_at": (now - timedelta(days=1)).isoformat(),
+        "ends_at": (now + timedelta(days=20)).isoformat(),
+        "targets": [{"screen_id": tv.json()["id"]}],
+    })
+    assert live.status_code == 201, live.text
+
+    def synced_advertisers():
+        payload = client.get("/api/screens/expiry-proof-tv/sync")
+        assert payload.status_code == 200, payload.text
+        items = payload.json().get("playlist", {}).get("items", [])
+        return [i["content"]["id"] for i in items]
+
+    assert ad.id in synced_advertisers(), "a running campaign must reach the screen"
+
+    # Move the sold window into the past, exactly as the calendar would.
+    db.expire_all()
+    running = db.query(models.AdPlacement).filter(
+        models.AdPlacement.id == live.json()["id"]
+    ).one()
+    running.ends_at = now - timedelta(hours=1)
+    for placed in db.query(models.AdPlacementTarget).filter(
+        models.AdPlacementTarget.placement_id == running.id
+    ).all():
+        item = db.query(models.PlaylistItem).filter(
+            models.PlaylistItem.id == placed.playlist_item_id
+        ).one()
+        item.end_at = running.ends_at
+    db.commit()
+
+    assert ad.id not in synced_advertisers(), (
+        "the campaign's window has passed and the screen is still being sent the advert -- "
+        "this is the half of expiry that works without a worker, so if it fails the advert "
+        "runs forever on any deployment with no Redis"
+    )
+    print("  ok  once the window passes the screen stops being sent the advert at all")
+
+    # --- an extension protects a booking from the sweep ---------------------------------
+    # The sweep now filters in SQL on the EFFECTIVE end. Filtering on the sold `ends_at`
+    # would tear down a campaign that had just been renewed -- the worst possible bug,
+    # because the tenant has taken money for it.
+    renewed = client.post("/api/placements/", headers=auth, json={
+        "content_id": ad.id, "advertiser": "Renewed Co", "price_paise": 1000,
+        "starts_at": (now - timedelta(days=60)).isoformat(),
+        "ends_at": (now - timedelta(days=30)).isoformat(),
+        "targets": [{"screen_id": b.id}],
+    })
+    assert renewed.status_code == 201, renewed.text
+    assert client.post(f"/api/placements/{renewed.json()['id']}/extensions", headers=auth, json={
+        "extended_to": (now + timedelta(days=30)).isoformat(), "additional_price_paise": 500,
+    }).status_code == 201
+
+    db.expire_all()
+    renewed_target = db.query(models.AdPlacementTarget).filter(
+        models.AdPlacementTarget.placement_id == renewed.json()["id"]
+    ).one()
+    asyncio.run(prune_finished_bookings({}))
+    db.expire_all()
+    assert db.query(models.PlaylistItem).filter(
+        models.PlaylistItem.id == renewed_target.playlist_item_id
+    ).first(), (
+        "a campaign whose sold window has passed but which has been EXTENDED was swept -- "
+        "the sweep is reading ends_at rather than the effective end, and has just taken "
+        "down an advert the client has paid to keep running"
+    )
+    print("  ok  an extended campaign survives the sweep even though its sold window passed")
+
     print("ad placements: all checks passed")
 finally:
     try:

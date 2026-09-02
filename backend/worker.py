@@ -370,9 +370,13 @@ async def reconcile_alerts(ctx):
             # Only bookings that have not already finished: a campaign that ended last
             # month can never satisfy the "ending soon" window, so loading it is pure cost
             # on an estate with years of history.
+            # On the EFFECTIVE end, not the sold one. Filtering on `ends_at` dropped any
+            # campaign kept alive by an extension or by a longer per-location window, so
+            # the booking most likely to be renewed again was the one that stopped being
+            # watched -- and its "ending soon" alert never fired a second time.
             placements = db.query(models.AdPlacement).filter(
                 models.AdPlacement.organization_id == org_id,
-                models.AdPlacement.ends_at >= now - alerting.CAMPAIGN_ENDING_WITHIN,
+                models.AdPlacement.effective_ends_at >= now - alerting.CAMPAIGN_ENDING_WITHIN,
             ).all()
 
             # How many screens each booking actually reaches, groups expanded, in two
@@ -694,6 +698,8 @@ async def prune_finished_bookings(ctx):
     """
     from datetime import timedelta
 
+    from sqlalchemy import func
+
     from . import models as _models
 
     db = SessionLocal()
@@ -704,16 +710,27 @@ async def prune_finished_bookings(ctx):
         # sold, and deleting an item minutes after it lapsed would take an advert down that
         # the tenant is mid-way through renewing.
         cutoff = now - timedelta(days=2)
+        # Filtered in SQL, not in Python. This used to load EVERY target that still had a
+        # live item and dereference target.placement one row at a time, so the work grew
+        # with the whole history of bookings rather than with the handful that had just
+        # finished -- an estate with three years of campaigns paid for all of them nightly.
+        #
+        # coalesce, because a location sold its own shorter window finishes on that date
+        # while the campaign around it runs on: the item it put on that screen is done and
+        # should go, and only a location with no window of its own waits for the booking.
         targets = (
             db.query(_models.AdPlacementTarget)
             .join(_models.AdPlacement, _models.AdPlacement.id == _models.AdPlacementTarget.placement_id)
-            .filter(_models.AdPlacementTarget.playlist_item_id.isnot(None))
+            .filter(
+                _models.AdPlacementTarget.playlist_item_id.isnot(None),
+                func.coalesce(
+                    _models.AdPlacementTarget.ends_at,
+                    _models.AdPlacement.effective_ends_at,
+                ) <= cutoff,
+            )
             .all()
         )
         for target in targets:
-            placement = target.placement
-            if not placement or placement.effective_ends_at > cutoff:
-                continue
             item = db.query(_models.PlaylistItem).filter(
                 _models.PlaylistItem.id == target.playlist_item_id
             ).first()

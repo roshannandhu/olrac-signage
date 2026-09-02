@@ -18,8 +18,8 @@ import { api } from '@/lib/api'
 import { canEditTenantContent } from '@/lib/roles'
 import { useAuthStore } from '@/lib/store'
 import type { TenantPlan } from '@/lib/types'
+import { rupees } from '@/lib/format'
 
-const rupees = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN')}`
 
 const BLANK = {
   name: '', description: '', duration_days: '30',

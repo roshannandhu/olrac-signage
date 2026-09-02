@@ -23,6 +23,7 @@ import {
   Tags,
   UserRound,
   Users,
+  Receipt,
 } from 'lucide-react'
 import { ThemeToggle } from '@/components/dashboard/theme-toggle'
 import {
@@ -48,6 +49,10 @@ const primaryLinks = [
 
 const toolLinks = [
   { href: '/dashboard/campaigns', label: 'Playback report', icon: BarChart3, ownerOnly: false },
+  // Directly under the report on purpose: they are the two halves of one booking, and
+  // keeping them adjacent is what makes the split legible. NOT /dashboard/billing, which
+  // is this workspace's own subscription to OLRAC.
+  { href: '/dashboard/invoices', label: 'Invoices', icon: Receipt, ownerOnly: false },
   { href: '/dashboard/alerts', label: 'Alerts', icon: Bell, ownerOnly: false },
   { href: '/dashboard/files', label: 'File management', icon: FolderCheck, ownerOnly: false },
   { href: '/dashboard/emergency', label: 'Emergency broadcast', icon: RadioTower, ownerOnly: false },

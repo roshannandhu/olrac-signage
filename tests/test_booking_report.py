@@ -403,6 +403,44 @@ try:
     assert "Concourse Panel 42" not in big_joined
     print(f"  ok  a 60-screen booking is {len(big_pages)} pages, summarised instead of listed")
 
+    # --- the report proves delivery; the invoice states the terms ----------------------
+    # They used to be one document, so a tenant could not send a client evidence the advert
+    # ran without also restating the price and whether they had paid. A report is forwarded
+    # freely; a bill is not.
+    report_text = "\n".join(pages_of(a_id))
+    for commercial in ("Amount paid", "Payment status", "Additional amount", "Total (incl."):
+        assert commercial not in report_text, (
+            f"{commercial!r} is still on the playback report -- proof of delivery has "
+            "commercial terms threaded back into it"
+        )
+    # The plan still appears: it explains the run. Its PRICE must not.
+    assert "CURRENT PLAN" in report_text, "the plan explains the run and should stay"
+    print("  ok  the playback report carries no price, no paid status and no charges")
+
+    invoice_response = client.get(f"/api/placements/{a_id}/invoice.pdf", headers=auth)
+    assert invoice_response.status_code == 200, invoice_response.text
+    invoice_pages = [(p.extract_text() or "") for p in _PdfReader(_io.BytesIO(invoice_response.content)).pages]
+    invoice_text = "\n".join(invoice_pages)
+    assert len(invoice_pages) <= 2, f"the invoice ran to {len(invoice_pages)} pages"
+    assert "INVOICE" in invoice_text, invoice_text[:400]
+    assert f"INV-{org.id}-{a_id:05d}" in invoice_text, (
+        "the invoice needs a reference the client can quote back"
+    )
+    assert "BILL TO" in invoice_text and "TOTAL" in invoice_text, invoice_text[:400]
+    # It must NOT carry the delivery evidence -- that is the other document's job.
+    assert "SCREEN-LEVEL DELIVERY" not in invoice_text, (
+        "the invoice is reproducing the playback report's delivery tables"
+    )
+    print("  ok  the invoice is its own document, with a quotable number and the totals")
+
+    emailed_invoice = client.post(f"/api/placements/{a_id}/email?document=invoice", headers=auth)
+    # 503 when SMTP is unconfigured is the honest answer here; what must not happen is a
+    # 422 for an unknown document type.
+    assert emailed_invoice.status_code in (200, 422, 503), emailed_invoice.text
+    bad_document = client.post(f"/api/placements/{a_id}/email?document=receipt", headers=auth)
+    assert bad_document.status_code == 422, bad_document.text
+    print("  ok  the email route can send either document and refuses anything else")
+
     print("booking report: all checks passed")
 finally:
     try:

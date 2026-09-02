@@ -1,5 +1,5 @@
 import { useAuthStore } from './store'
-import type { Package, PackageWrite, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, BookingReport, Placement, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
+import type { Package, PackageWrite, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, BookingReport, Placement, PaymentMethod, PlanOption, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
 
 const PROD_API_URL = 'https://olrac-signage-32lh.onrender.com'
 const configuredUrl = (process.env.NEXT_PUBLIC_API_URL || PROD_API_URL).replace(/\/$/, '')
@@ -292,16 +292,28 @@ export const api = {
   // trap the comment on downloadCampaignReport below already warned about. The report is
   // never stored anywhere: the endpoint builds the PDF per request and streams it, so the
   // only way to get at it is an authenticated fetch.
-  fetchBookingReportPdf: async (placementId: number): Promise<{ blob: Blob; filename: string }> => {
-    const response = await authFetch(`/placements/${placementId}/report.pdf`)
-    if (!response.ok) throw new ApiError('The report could not be generated.', response.status)
+  // One fetcher for both documents. They are the same shape of request and differ only in
+  // which PDF the server builds -- proof of delivery, or the bill.
+  fetchBookingPdf: async (
+    placementId: number,
+    document: 'report' | 'invoice' = 'report',
+  ): Promise<{ blob: Blob; filename: string }> => {
+    const response = await authFetch(`/placements/${placementId}/${document}.pdf`)
+    if (!response.ok) throw new ApiError(`The ${document} could not be generated.`, response.status)
     const disposition = response.headers.get('content-disposition') || ''
     const match = disposition.match(/filename="?([^"]+)"?/)
-    return { blob: await response.blob(), filename: match?.[1] || `booking-${placementId}-report.pdf` }
+    return { blob: await response.blob(), filename: match?.[1] || `booking-${placementId}-${document}.pdf` }
   },
 
+  fetchBookingReportPdf: (placementId: number) => api.fetchBookingPdf(placementId, 'report'),
+
   downloadBookingReport: async (placementId: number) => {
-    const { blob, filename } = await api.fetchBookingReportPdf(placementId)
+    const { blob, filename } = await api.fetchBookingPdf(placementId, 'report')
+    saveBlob(blob, filename)
+  },
+
+  downloadInvoice: async (placementId: number) => {
+    const { blob, filename } = await api.fetchBookingPdf(placementId, 'invoice')
     saveBlob(blob, filename)
   },
 
@@ -334,7 +346,40 @@ export const api = {
   getAllPlacements: () => fetchWithAuth<Placement[]>('/placements/'),
   getPlacements: (contentId: number) => fetchWithAuth<Placement[]>(`/placements/?content_id=${contentId}`),
   getEmailStatus: () => fetchWithAuth<{ is_configured: boolean; sender: string | null; missing_variables: string[] }>('/placements/email-status'),
-  emailBookingReport: (placementId: number) => fetchWithAuth<{ status: string; to: string }>(`/placements/${placementId}/email`, { method: 'POST' }),
+  emailBookingReport: (placementId: number, document: 'report' | 'invoice' = 'report') =>
+    fetchWithAuth<{ status: string; to: string }>(
+      `/placements/${placementId}/email?document=${document}`, { method: 'POST' }),
+
+  // --- Billing on a booking. `is_paid` is the shadow of this record, so these are the
+  // only two calls that change whether a booking counts as paid.
+  recordPayment: (placementId: number, body: {
+    amount_paise: number
+    method: PaymentMethod
+    reference?: string | null
+    paid_at?: string | null
+    notes?: string | null
+  }) => fetchWithAuth<Placement>(`/placements/${placementId}/payment`, {
+    // The header is not optional: without it fetch labels a string body text/plain and
+    // FastAPI rejects it before the handler runs, returning a validation LIST in `detail`
+    // where authFetch expects a string -- so a perfectly good payment fails as
+    // "Something went wrong". resolveLocationLink above carries the same scar.
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }),
+
+  clearPayment: (placementId: number) =>
+    fetchWithAuth<Placement>(`/placements/${placementId}/payment`, { method: 'DELETE' }),
+
+  // --- Moving a client to a different plan.
+  getPlanOptions: (placementId: number) =>
+    fetchWithAuth<PlanOption[]>(`/placements/${placementId}/plan-options`),
+
+  upgradePlan: (placementId: number, body: {
+    plan_id: number
+    extend?: boolean
+    price_difference_paise?: number | null
+  }) => fetchWithAuth<Placement>(`/placements/${placementId}/upgrade`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }),
   createPlacement: (data: {
     content_id: number
     // One or the other: a client record is the supported path, a bare name still works.

@@ -380,7 +380,7 @@ def _band_color(value: str | None):
 
 
 def _page_furniture(canvas, doc, org_name: str, generated: str, contact: str | None,
-                    logo: bytes | None = None, band=INK):
+                    logo: bytes | None = None, band=INK, label: str = "Report generated on"):
     canvas.saveState()
     canvas.setFillColor(band)
     canvas.rect(0, PAGE_H - BAND_H, PAGE_W, BAND_H, stroke=0, fill=1)
@@ -404,7 +404,9 @@ def _page_furniture(canvas, doc, org_name: str, generated: str, contact: str | N
     canvas.setFont(_FONT_BOLD, 11)
     canvas.drawString(text_x, PAGE_H - BAND_H + 5.5 * mm, org_name[:48])
     canvas.setFont(_FONT_REGULAR, 7)
-    canvas.drawRightString(PAGE_W - MARGIN, PAGE_H - BAND_H + 6 * mm, f"Report generated on: {generated}")
+    # Labelled by the caller: the invoice shares this letterhead deliberately, and
+    # "Report generated on" printed across the top of a bill is simply wrong.
+    canvas.drawRightString(PAGE_W - MARGIN, PAGE_H - BAND_H + 6 * mm, f"{label}: {generated}")
 
     canvas.setFillColor(TILE_BG)
     canvas.rect(0, 0, PAGE_W, FOOTER_H, stroke=0, fill=1)
@@ -480,8 +482,11 @@ def build_pdf(report: dict) -> bytes:
         ("Total locations", str(len(report["per_location"])), "Active locations"),
         ("Total ad plays", f"{totals['total_plays']:,}", "Verified count"),
         ("Days remaining", f"{report.get('days_remaining', 0)} days", f"of {report.get('days_total', 0)} days"),
-        ("Amount paid", _money(report.get("total_price_paise", report["price_paise"])),
-         "Booking + extensions" if report.get("extensions") else "Booking total"),
+        # Completion rate, not "Amount paid". This document is proof of delivery and goes to
+        # the client; what they owe belongs on the invoice, which is now a separate PDF.
+        # The figure was already computed here and never shown.
+        ("Completion rate", f"{totals.get('success_percent', 0):.1f}%",
+         f"{totals.get('completed_plays', 0):,} played in full"),
     ]))
     story.append(Spacer(1, 4 * mm))
 
@@ -583,16 +588,15 @@ def build_pdf(report: dict) -> bytes:
     ] + ([[Paragraph("Extended to", style["body"]), Paragraph(f'<para align="right">{_date(ends_at)}</para>', style["body"])]] if extensions else []) + [
         [Paragraph("Total days", style["body"]), Paragraph(f'<para align="right">{report.get("days_total", "-")} days</para>', style["body"])],
         [Paragraph("Days remaining", style["body"]), Paragraph(f'<para align="right">{report.get("days_remaining", "-")} days</para>', style["body"])],
-        [Paragraph("Amount paid", style["body"]), Paragraph(f'<para align="right">{_money(report["price_paise"])}</para>', style["body"])],
+        [Paragraph("Locations", style["body"]), Paragraph(f'<para align="right">{len(report["per_location"])}</para>', style["body"])],
     ]
     details = _grid(details_rows, [28 * mm, 52 * mm], header=False)
 
+    # Campaign status only. Payment status moved to the invoice: a client reading proof
+    # that their advert ran should not be handed a reminder of what they owe in the same
+    # breath, and a tenant forwarding delivery evidence should not have to redact terms.
     status = Table(
-        [[Paragraph("Payment status", style["body"]),
-          _pill(style, "Paid" if report["is_paid"] else "Unpaid",
-                OK_INK if report["is_paid"] else PLAN_INK,
-                OK_BG if report["is_paid"] else PLAN_BG)],
-         [Paragraph("Campaign status", style["body"]),
+        [[Paragraph("Campaign status", style["body"]),
           _pill(style, running, OK_INK if running == "Active" else MUTED,
                 OK_BG if running == "Active" else TILE_BG)]],
         colWidths=[28 * mm, 52 * mm],
@@ -608,8 +612,10 @@ def build_pdf(report: dict) -> bytes:
     plan_card = _card(
         [[Paragraph('<font color="#6d28d9"><b>CURRENT PLAN</b></font>', style["label"])],
          [Table([[Paragraph(_safe(plan["name"]) if plan else "No plan", style["value_sm"]),
-                  Paragraph(f'<para align="right">{_money(report["price_paise"])}'
-                            f'<font size="6.5" color="#64748b"> / {plan["duration_days"] if plan else report.get("days_total", 0)} days</font></para>',
+                  # The plan's NAME and length, not its price. What the plan cost is a
+                  # commercial term and lives on the invoice.
+                  Paragraph(f'<para align="right"><font size="6.5" color="#64748b">'
+                            f'{plan["duration_days"] if plan else report.get("days_total", 0)} days</font></para>',
                             style["value_sm"])]],
                 colWidths=[42 * mm, 42 * mm],
                 style=TableStyle([("LEFTPADDING", (0, 0), (-1, -1), 0),
@@ -635,10 +641,8 @@ def build_pdf(report: dict) -> bytes:
                              Paragraph(f'<para align="right">{_date(extension["extended_from"])}</para>', style["body"])])
             ext_rows.append([Paragraph("Extended to", style["body"]),
                              Paragraph(f'<para align="right">{_date(extension["extended_to"])}</para>', style["body"])])
-            ext_rows.append([Paragraph("Additional amount", style["body"]),
-                             Paragraph(f'<para align="right">{_money(extension["additional_price_paise"])}</para>', style["body"])])
-        ext_rows.append([Paragraph("<b>Total (incl. extension)</b>", style["body"]),
-                         Paragraph(f'<para align="right"><b>{_money(report.get("total_price_paise", report["price_paise"]))}</b></para>', style["body"])])
+        # Dates only. An extension's DATES explain the run and belong on proof of delivery;
+        # what it cost is billing and belongs on the invoice.
         ext_card = _card(ext_rows, [46 * mm, 40 * mm], bg=OK_BG, border=colors.HexColor("#bbf7d0"))
     else:
         ext_card = _card(

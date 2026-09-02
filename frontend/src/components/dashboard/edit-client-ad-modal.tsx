@@ -470,9 +470,17 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
+          {/* Save is blocked when over the cap, not merely coloured red. Switching to a
+              smaller plan left the earlier selection in place, so the badge turned danger
+              and Save stayed enabled -- and the API then refused the whole edit with a 409
+              that read as a failure rather than as the choice it was. */}
           <Button
             type="button"
-            disabled={!clientName.trim() || updateMutation.isPending}
+            disabled={
+              !clientName.trim()
+              || updateMutation.isPending
+              || selectedScreenIds.length > maxAllowedScreens
+            }
             onClick={() => updateMutation.mutate()}
             className="font-semibold shadow-md"
           >

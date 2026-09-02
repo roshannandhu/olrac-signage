@@ -1,7 +1,8 @@
 import secrets
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, String, Text, Time, UniqueConstraint, JSON, Float
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, String, Text, Time, UniqueConstraint, JSON, Float, case, func, select
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship, backref
 from sqlalchemy.types import TypeDecorator
 
@@ -711,9 +712,9 @@ class AdPlacement(Base):
     created_at = Column(UtcDateTime, nullable=False, default=utcnow)
     updated_at = Column(UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
-    @property
+    @hybrid_property
     def effective_ends_at(self):
-        """When the run actually finishes, extensions counted.
+        """When the run actually finishes, extensions and per-location windows counted.
 
         starts_at/ends_at stay as SOLD -- they are the original deal and an invoice should
         still be able to show it. On the model rather than in one router because the alert
@@ -734,6 +735,41 @@ class AdPlacement(Base):
                 latest = target.ends_at
         return latest
 
+    @effective_ends_at.expression
+    def effective_ends_at(cls):
+        """The same answer, computed in SQL.
+
+        Without this it was a plain property, so every DB-level "is this still running"
+        filter had to fall back to the raw `ends_at` column -- and each of them then
+        under-counted a booking kept alive by an extension or by a longer per-location
+        window. The ad-slot quota freed a slot that was still occupied, the alert
+        reconciler stopped loading a campaign that was still running, and the expiry sweep
+        could not filter in SQL at all and walked every target ever created instead.
+
+        Built from nested CASE rather than GREATEST: GREATEST is Postgres-only and the
+        in-process suite runs on SQLite, so the one place this could silently diverge
+        between test and production is exactly the place not to use it.
+        """
+        latest_extension = (
+            select(func.max(AdPlacementExtension.extended_to))
+            .where(AdPlacementExtension.placement_id == cls.id)
+            .correlate(cls)
+            .scalar_subquery()
+        )
+        latest_target = (
+            select(func.max(AdPlacementTarget.ends_at))
+            .where(AdPlacementTarget.placement_id == cls.id)
+            .correlate(cls)
+            .scalar_subquery()
+        )
+        # coalesce first: a booking with no extensions and no per-location window must fall
+        # back to its own end, not to NULL, or every comparison against it goes unknown and
+        # the row silently vanishes from the filter.
+        by_extension = func.coalesce(latest_extension, cls.ends_at)
+        by_target = func.coalesce(latest_target, cls.ends_at)
+        later_of_the_two = case((by_extension > by_target, by_extension), else_=by_target)
+        return case((later_of_the_two > cls.ends_at, later_of_the_two), else_=cls.ends_at)
+
     content = relationship("Content", back_populates="ad_placements")
     organization = relationship("Organization")
     client = relationship("Client")
@@ -744,6 +780,11 @@ class AdPlacement(Base):
         back_populates="placement",
         cascade="all, delete-orphan",
         order_by="AdPlacementExtension.extended_from",
+    )
+    # One or none. delete-orphan because a deleted booking's payment record has nothing
+    # left to be a payment for.
+    payment = relationship(
+        "AdPayment", back_populates="placement", uselist=False, cascade="all, delete-orphan"
     )
 
 
@@ -843,6 +884,51 @@ class AdPlacementExtension(Base):
 
     __table_args__ = (
         CheckConstraint("extended_to > extended_from", name="ck_extension_window_forward"),
+    )
+
+
+class AdPayment(Base):
+    """What the client actually paid, and how.
+
+    `AdPlacement.is_paid` was the whole of this: one boolean, flipped through the same
+    generic PUT that edits dates and price. It could say a campaign was paid without
+    recording the amount, the date, the method, the reference number, or who entered it --
+    so "did Brightmart pay by UPI or is that the cheque that bounced?" had no answer
+    anywhere in the system, and a mis-click was indistinguishable from a receipt.
+
+    One row per booking, enforced by the unique constraint. That is a deliberate ceiling,
+    not an oversight: it records a settled payment, not a ledger. Instalments would mean
+    dropping the constraint and summing against the booking total -- the shape of the row
+    does not have to change for that, so the smaller thing is worth having now.
+
+    `method` is validated in the schema against PAYMENT_METHODS rather than by a database
+    enum, so accepting a new one is a deploy and not a migration.
+    """
+
+    __tablename__ = "ad_payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    placement_id = Column(Integer, ForeignKey("ad_placements.id", ondelete="CASCADE"), nullable=False, index=True)
+    # Smallest currency unit, like AdPlacement.price_paise, so money never touches a float.
+    amount_paise = Column(BigInteger, nullable=False, default=0)
+    method = Column(String(20), nullable=False)
+    # UTR, cheque number, card slip -- whatever the tenant needs to find it in their bank.
+    reference = Column(String(80), nullable=True)
+    # When the money arrived, which is not when the row was typed. Backdating a payment
+    # entered on Monday for a cheque banked on Friday has to be possible.
+    paid_at = Column(UtcDateTime, nullable=False, default=utcnow)
+    # SET NULL: a staff member leaving must not delete the record of a payment they took.
+    recorded_by_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    notes = Column(String, nullable=True)
+    created_at = Column(UtcDateTime, nullable=False, default=utcnow)
+    updated_at = Column(UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    placement = relationship("AdPlacement", back_populates="payment")
+    recorded_by = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("placement_id", name="uq_ad_payments_placement"),
     )
 
 

@@ -70,3 +70,35 @@ export function formatBytes(bytes: number | null | undefined): string {
   const value = bytes / 1024 ** exponent
   return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`
 }
+
+/**
+ * Paise as rupees. Money is stored in the smallest unit so it never touches a float.
+ *
+ * One copy because there were six, in ad-bookings, campaigns, plans, clients, content and
+ * the client-ad modal, and they had already drifted — some grouped with en-IN lakh
+ * separators and some did not, so the same booking read as ₹2,50,000 on one page and
+ * ₹250,000 on the next.
+ */
+export function rupees(paise: number | null | undefined): string {
+  return `₹${((paise ?? 0) / 100).toLocaleString('en-IN')}`
+}
+
+/**
+ * Whether a booking is scheduled, running or finished.
+ *
+ * Reads `effective_ends_at`, which counts extensions and per-location windows. There were
+ * two copies of this and they disagreed: the bookings tab compared against the SOLD
+ * `ends_at`, so a campaign the client had just paid to extend showed as "Ended" on the
+ * page where you extend it, while the campaigns list showed the same booking as Running.
+ */
+export function bookingState(placement: {
+  starts_at: string
+  ends_at: string
+  effective_ends_at?: string | null
+}): { label: 'Scheduled' | 'Running' | 'Ended'; tone: 'success' | 'warning' | 'outline' } {
+  const now = Date.now()
+  const end = Date.parse(placement.effective_ends_at || placement.ends_at)
+  if (Date.parse(placement.starts_at) > now) return { label: 'Scheduled', tone: 'warning' }
+  if (end < now) return { label: 'Ended', tone: 'outline' }
+  return { label: 'Running', tone: 'success' }
+}

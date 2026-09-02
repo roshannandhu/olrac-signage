@@ -1023,6 +1023,67 @@ class PlacementTargetResponse(BaseModel):
     days: Optional[int] = None
 
 
+class PlanOption(BaseModel):
+    """One plan a booking could move to, and what moving would mean."""
+    plan: "TenantPlanResponse"
+    is_current: bool
+    # Whether it covers the screens this booking ALREADY runs on. A plan that does not fit
+    # is still listed -- the operator may intend to drop a screen -- but it cannot be
+    # applied without the cap refusing it, so the UI can say why up front.
+    fits: bool
+    # Floored at zero: moving to a cheaper plan does not credit the client money, it just
+    # changes what they get next. A refund is a conversation, not an arithmetic result.
+    price_difference_paise: int
+    extra_days: int
+    recommended: bool = False
+
+
+class PlanUpgrade(BaseModel):
+    plan_id: int
+    # Whether to add the new plan's duration to the run. On by default because "upgrade"
+    # normally means "sell them the bigger package from here", but a mid-term correction of
+    # the wrong plan should not silently extend the campaign.
+    extend: bool = True
+    # Overrides the computed difference, for a discount or a negotiated figure.
+    price_difference_paise: Optional[int] = Field(default=None, ge=0)
+
+
+# Validated here rather than as a database enum so adding one is a deploy, not a migration.
+PAYMENT_METHODS = ("cash", "upi", "bank_transfer", "cheque", "card", "other")
+
+
+class PaymentWrite(BaseModel):
+    """Recording that a client settled a booking."""
+    amount_paise: int = Field(ge=0)
+    method: str
+    reference: Optional[str] = Field(default=None, max_length=80)
+    # Defaults to now in the router. Backdating matters: a cheque banked on Friday and
+    # entered on Monday was received on Friday.
+    paid_at: Optional[datetime] = None
+    notes: Optional[str] = None
+
+    @field_validator("method")
+    @classmethod
+    def known_method(cls, value: str) -> str:
+        normalised = (value or "").strip().lower()
+        if normalised not in PAYMENT_METHODS:
+            raise ValueError(f"Payment method must be one of: {', '.join(PAYMENT_METHODS)}")
+        return normalised
+
+
+class PaymentResponse(BaseModel):
+    id: int
+    amount_paise: int
+    method: str
+    reference: Optional[str] = None
+    paid_at: datetime
+    notes: Optional[str] = None
+    recorded_by: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class PlacementResponse(BaseModel):
     id: int
     content_id: int
@@ -1051,6 +1112,9 @@ class PlacementResponse(BaseModel):
     screens_used: int = 0
     plan_max_locations: int = 0
     screens_unused: int = 0
+    # How the booking was settled. `is_paid` above says whether; this says what, when and
+    # by which method, and is None until someone records it.
+    payment: Optional[PaymentResponse] = None
 
 
 class ResolveLinkRequest(BaseModel):

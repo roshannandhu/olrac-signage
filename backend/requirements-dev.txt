@@ -1,3 +1,7 @@
 -r requirements.txt
 moto[s3]==5.2.2
 pytest==8.3.5
+# The report tests skip their page-layout and report-vs-invoice checks without this, and a
+# skip reads as a pass -- the same way a missing moto quietly retired every object-storage
+# check. Anything a test silently skips over belongs in here.
+pypdf==6.16.2

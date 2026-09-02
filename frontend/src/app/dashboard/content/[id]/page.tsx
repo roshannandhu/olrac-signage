@@ -209,7 +209,10 @@ export default function AdDetailPage() {
       <Tabs defaultValue="playback">
         <TabsList>
           <TabsTrigger value="playback">Playback</TabsTrigger>
-          <TabsTrigger value="bookings">Ad Bookings &amp; Reports</TabsTrigger>
+          {/* Not "& Reports" any more: the report and the invoice are documents you take
+              off a booking, not the subject of the tab, and they live in each booking's
+              own menu. Money across all clients is under Invoices. */}
+          <TabsTrigger value="bookings">Ad booking &amp; billing</TabsTrigger>
           <TabsTrigger value="places">Groups &amp; screens</TabsTrigger>
           <TabsTrigger value="technical">Technical</TabsTrigger>
           <TabsIndicator />

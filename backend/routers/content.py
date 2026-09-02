@@ -456,8 +456,9 @@ def update_content_client_ad(
         # Remove targets not in target_screen_ids
         for target in current_targets:
             if target.screen_id and target.screen_id not in target_screen_ids:
+                # _unplace already deletes the target row; a second delete here was
+                # redundant.
                 _unplace(scope, target)
-                scope.db.delete(target)
         
         # Re-price the run length of places that are already on the booking. Handling only
         # new targets would mean an operator could add a location with 30 days but never

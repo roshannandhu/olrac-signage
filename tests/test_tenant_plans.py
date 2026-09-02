@@ -275,6 +275,178 @@ try:
     assert unlimited.status_code == 422, "max_locations must be at least 1 in the schema"
     print("  ok  a plan cannot be created with a meaningless zero screen count")
 
+    # --- the cap binds on every path that can change the screens ------------------------
+    # It was enforced when the SCREENS changed and not when the PLAN did, so the same
+    # breach was one PUT away from being legal.
+    roomy = http.post("/api/tenant-plans/", headers=auth, json={
+        "name": "Roomy", "duration_days": 30, "max_locations": 3,
+        "ad_slots": 1, "price_paise": 900000, "support_tier": "Basic Support",
+    }).json()
+    spread = http.post("/api/placements/", headers=auth, json={
+        "content_id": ad.id, "plan_id": roomy["id"], "advertiser": "Three Screens",
+        "starts_at": now.isoformat(),
+        "targets": [{"screen_id": fleet[0].id}, {"screen_id": fleet[1].id}, {"screen_id": fleet[2].id}],
+    })
+    assert spread.status_code == 201, spread.text
+    spread_id = spread.json()["id"]
+
+    downgrade = http.put(f"/api/placements/{spread_id}", headers=auth,
+                         json={"plan_id": small_plan["id"]})
+    assert downgrade.status_code == 409, (
+        "a three-screen booking was moved onto a two-screen plan -- the cap is checked when "
+        "the screens change but not when the plan does, which is the same breach by the "
+        "other door"
+    )
+    assert http.get(f"/api/placements/{spread_id}", headers=auth) is not None
+    still = [p for p in http.get("/api/placements/", headers=auth).json() if p["id"] == spread_id][0]
+    assert still["plan"]["id"] == roomy["id"], "the refused plan swap must not have been applied"
+    print("  ok  a plan swap onto a smaller plan is refused, not silently applied")
+
+    # The client-ad editor reaches _place/_unplace directly and was the one door with no
+    # check at all on it.
+    via_editor = http.put(f"/api/content/{ad.id}/client-ad", headers=auth, json={
+        "client_name": "Editor Sneak", "plan_id": small_plan["id"],
+        "screen_ids": [fleet[0].id, fleet[1].id, fleet[2].id],
+    })
+    assert via_editor.status_code == 409, (
+        "the client-ad editor placed three screens on a two-screen plan -- this path calls "
+        "_place directly and skipped the cap entirely"
+    )
+    print("  ok  the client-ad editor is held to the plan's screen count too")
+
+    # --- under-use is reported, never refused -------------------------------------------
+    # The other half of the same number: a client paying for three screens and running on
+    # one is owed two, and nothing was saying so. It must never block the sale.
+    short = http.post("/api/placements/", headers=auth, json={
+        "content_id": ad.id, "plan_id": roomy["id"], "advertiser": "Only One",
+        "starts_at": now.isoformat(), "targets": [{"screen_id": fleet[3].id}],
+    })
+    assert short.status_code == 201, "selling a plan and filling it later must stay possible"
+    body = short.json()
+    assert body["screens_used"] == 1, body
+    assert body["plan_max_locations"] == 3, body
+    assert body["screens_unused"] == 2, body
+    print("  ok  a part-filled plan is reported as 1 of 3 with 2 unused, and still saves")
+
+    # A booking with no plan has nothing to be short of.
+    planless = http.post("/api/placements/", headers=auth, json={
+        "content_id": ad.id, "advertiser": "No Plan", "starts_at": now.isoformat(),
+        "ends_at": (now + timedelta(days=5)).isoformat(),
+        "targets": [{"screen_id": fleet[0].id}],
+    }).json()
+    assert planless["plan_max_locations"] == 0 and planless["screens_unused"] == 0, planless
+    print("  ok  a booking with no plan reports no allowance and no shortfall")
+
+    # --- a sold booking is never silently repriced --------------------------------------
+    # placements.py copies the price once and says so; the client-ad editor copied it again
+    # on EVERY edit, so correcting a phone number rebilled the campaign at today's price.
+    sold = http.post("/api/placements/", headers=auth, json={
+        "content_id": ad.id, "plan_id": roomy["id"], "advertiser": "Agreed Price",
+        "starts_at": now.isoformat(), "price_paise": 111111,
+        "targets": [{"screen_id": fleet[0].id}],
+    })
+    assert sold.status_code == 201, sold.text
+    http.put(f"/api/tenant-plans/{roomy['id']}", headers=auth, json={"price_paise": 5000000})
+    http.put(f"/api/content/{ad.id}/client-ad", headers=auth, json={
+        "client_name": "Agreed Price", "plan_id": roomy["id"], "client_phone": "9999999999",
+    })
+    after = [p for p in http.get("/api/placements/", headers=auth).json() if p["id"] == sold.json()["id"]][0]
+    assert after["price_paise"] == 111111, (
+        f"the agreed price became {after['price_paise']} -- editing a client detail "
+        "rebilled the campaign at the plan's current list price"
+    )
+    print("  ok  editing client details never rebills a campaign already sold")
+
+    # --- upgrading a client to a bigger plan --------------------------------------------
+    # The client outgrew Basic. Moving them used to mean hand-editing the booking, and
+    # nothing suggested what to move them to.
+    outgrown = http.post("/api/placements/", headers=auth, json={
+        "content_id": ad.id, "plan_id": small_plan["id"], "advertiser": "Growing Co",
+        "starts_at": now.isoformat(), "price_paise": small_plan["price_paise"],
+        "targets": [{"screen_id": fleet[0].id}, {"screen_id": fleet[1].id}],
+    })
+    assert outgrown.status_code == 201, outgrown.text
+    grow_id = outgrown.json()["id"]
+    sold_ends_at = outgrown.json()["effective_ends_at"]
+
+    options = http.get(f"/api/placements/{grow_id}/plan-options", headers=auth)
+    assert options.status_code == 200, options.text
+    by_name = {o["plan"]["name"]: o for o in options.json()}
+    assert by_name["Basic"]["is_current"] is True, by_name["Basic"]
+    recommended = [o for o in options.json() if o["recommended"]]
+    assert len(recommended) == 1, f"exactly one plan should be recommended, got {len(recommended)}"
+    assert recommended[0]["plan"]["name"] == "Roomy", (
+        "the cheapest active plan that covers the screens already assigned should be the "
+        f"recommendation, got {recommended[0]['plan']['name']}"
+    )
+    # Against the plan's CURRENT price, not the figure it was created with -- an earlier
+    # check in this file repriced Roomy, and the difference is quoted from today's list.
+    roomy_now = http.get(f"/api/tenant-plans/{roomy['id']}", headers=auth).json()["price_paise"]
+    assert recommended[0]["price_difference_paise"] == roomy_now - small_plan["price_paise"], (
+        recommended[0]
+    )
+    assert by_name["Basic"]["fits"] is True and by_name["Basic"]["recommended"] is False, (
+        "the plan they are already on is never the recommendation"
+    )
+    print("  ok  plan options recommend exactly one plan: the cheapest that fits the screens in use")
+
+    upgraded = http.post(f"/api/placements/{grow_id}/upgrade", headers=auth,
+                         json={"plan_id": roomy["id"]})
+    assert upgraded.status_code == 200, upgraded.text
+    after_upgrade = upgraded.json()
+    assert after_upgrade["plan"]["id"] == roomy["id"], after_upgrade["plan"]
+    assert len(after_upgrade["extensions"]) == 1, (
+        "the price difference should be recorded as an extension, keeping one booking"
+    )
+    extension = after_upgrade["extensions"][0]
+    assert extension["additional_price_paise"] == roomy_now - small_plan["price_paise"], extension
+    assert extension["is_paid"] is False, "an upgrade is owed until it is paid"
+    assert after_upgrade["effective_ends_at"] > sold_ends_at, (
+        "upgrading with extend should carry the run forward, not leave it ending on the "
+        "old plan's date"
+    )
+    assert after_upgrade["ends_at"] == outgrown.json()["ends_at"], (
+        "the SOLD window must not be rewritten -- an invoice still has to show the original deal"
+    )
+    assert after_upgrade["plan_max_locations"] == 3, after_upgrade
+    print("  ok  upgrading swaps the plan, bills the difference as an extension, and extends the run")
+
+    # The item on the screen has to carry the new end, or the player stops the advert on
+    # the old plan's date and the upgrade was sold for nothing.
+    db.expire_all()
+    placed_ends = [
+        t.playlist_item_id for t in db.query(models.AdPlacementTarget).filter(
+            models.AdPlacementTarget.placement_id == grow_id
+        ).all()
+    ]
+    items = db.query(models.PlaylistItem).filter(models.PlaylistItem.id.in_(placed_ends)).all()
+    assert items and all(i.end_at.isoformat() > sold_ends_at for i in items), (
+        "the placed items still end on the old plan's date -- the upgrade never reached the screens"
+    )
+    print("  ok  the upgrade reaches the screens, not just the database")
+
+    # An upgrade that would leave the booking over the new plan's cap is refused, the same
+    # as any other route to that breach. Three screens on the roomy plan first, so that
+    # moving DOWN to the two-screen plan is a real breach and not merely a tight fit.
+    assert http.post(f"/api/placements/{grow_id}/targets", headers=auth,
+                     json={"screen_id": fleet[2].id}).status_code == 201
+    over_cap = http.post(f"/api/placements/{grow_id}/upgrade", headers=auth,
+                         json={"plan_id": small_plan["id"]})
+    assert over_cap.status_code == 409, (
+        "a booking running on three screens was moved onto a two-screen plan through the "
+        f"upgrade route, which is the cap breached by a third door: {over_cap.text}"
+    )
+    print("  ok  an upgrade cannot be used to sneak a booking onto a plan that does not cover it")
+
+    # extend=false is a correction, not a sale: no extension, no extra time.
+    correcting = http.post(f"/api/placements/{grow_id}/upgrade", headers=auth,
+                           json={"plan_id": roomy["id"], "extend": False})
+    assert correcting.status_code == 200, correcting.text
+    assert len(correcting.json()["extensions"]) == 1, (
+        "extend=false must not add a second extension -- it corrects the plan, it does not sell time"
+    )
+    print("  ok  correcting the plan without extending sells nothing")
+
     print("tenant plans: all checks passed")
 finally:
     try:

@@ -9,11 +9,9 @@ import {
   Building2,
   Calendar,
   Clock,
-  Download,
   ExternalLink,
   Eye,
   FileDown,
-  Layers3,
   Mail,
   MapPin,
   MonitorPlay,
@@ -36,18 +34,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTrigger } from '@/components/ui/tabs'
 import { api, resolveMediaUrl } from '@/lib/api'
 import type { ContentItem, Placement } from '@/lib/types'
+import { bookingState } from '@/lib/format'
 
-const rupees = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN')}`
 const asDate = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-
-function getPlacementState(p: Placement): { label: string; tone: 'success' | 'warning' | 'outline' } {
-  const now = Date.now()
-  const end = p.effective_ends_at ? Date.parse(p.effective_ends_at) : Date.parse(p.ends_at)
-  if (Date.parse(p.starts_at) > now) return { label: 'Scheduled', tone: 'warning' }
-  if (end < now) return { label: 'Ended', tone: 'outline' }
-  return { label: 'Running', tone: 'success' }
-}
 
 export default function CampaignsPage() {
   const [activeTab, setActiveTab] = useState<'placements' | 'analytics'>('placements')
@@ -74,7 +64,7 @@ export default function CampaignsPage() {
   const filteredPlacements = useMemo(() => {
     const term = search.trim().toLowerCase()
     return placements.filter((p) => {
-      const state = getPlacementState(p)
+      const state = bookingState(p)
       const matchesFilter = filterState === 'all' || state.label.toLowerCase() === filterState
       const matchesSearch =
         !term ||
@@ -89,12 +79,14 @@ export default function CampaignsPage() {
 
   // Aggregate Metrics
   const metrics = useMemo(() => {
-    const now = Date.now()
-    const active = placements.filter((p) => {
-      const end = p.effective_ends_at ? Date.parse(p.effective_ends_at) : Date.parse(p.ends_at)
-      return Date.parse(p.starts_at) <= now && end >= now
-    })
-    const totalBilledPaise = placements.reduce((sum, p) => sum + (p.total_price_paise || p.price_paise), 0)
+    // Through the shared helper rather than re-deriving the dates here. Two answers to
+    // "is this running" on one page meant the tile could count a campaign the row beside
+    // it labelled Ended -- and calling Date.now() inside a memo is what the purity rule
+    // objects to, correctly: the result is not a function of the dependencies.
+    const active = placements.filter((p) => bookingState(p).label === 'Running')
+    // Counted over RUNNING campaigns only: a plan that finished under-filled is history,
+    // and there is nothing an operator can do about it now.
+    const screensUnused = active.reduce((sum, p) => sum + (p.screens_unused || 0), 0)
     const activeScreens = new Set(
       active.flatMap((p) => p.targets.filter((t) => t.screen_id).map((t) => t.screen_id!)),
     ).size
@@ -102,7 +94,7 @@ export default function CampaignsPage() {
     return {
       activeCount: active.length,
       totalCount: placements.length,
-      totalBilledPaise,
+      screensUnused,
       activeScreens,
     }
   }, [placements])
@@ -138,7 +130,7 @@ export default function CampaignsPage() {
       <PageHeader
         eyebrow="Advertising & Proof of Play"
         title="Campaigns & Placements"
-        description="Track commercial client ad bookings, live screen runs, billing revenue, and branded PDF playback reports."
+        description="Where each client's advert ran and how it performed. Billing lives under Invoices."
       />
 
       {/* Metric Tiles */}
@@ -154,17 +146,20 @@ export default function CampaignsPage() {
           <p className="text-muted-foreground mt-1 text-xs">{metrics.totalCount} total bookings on file</p>
         </div>
 
+        {/* Revenue used to be totted up here, on a page the nav calls "Playback report".
+            Money now lives on /dashboard/invoices; this page is delivery evidence. What
+            belongs here instead is whether the plans clients paid for are being filled. */}
         <div className="ring-hairline bg-card rounded-2xl p-5 ring-1 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">Total Ad Revenue</span>
+            <span className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">Unused screens</span>
             <span className="bg-primary/10 text-primary dark:text-brand grid size-8 place-items-center rounded-lg">
-              <Receipt className="size-4" />
+              <MonitorPlay className="size-4" />
             </span>
           </div>
           <p className="text-foreground mt-3 text-3xl font-bold tabular-nums font-mono">
-            {rupees(metrics.totalBilledPaise)}
+            {metrics.screensUnused}
           </p>
-          <p className="text-muted-foreground mt-1 text-xs">Across all clients &amp; extensions</p>
+          <p className="text-muted-foreground mt-1 text-xs">Paid for on a plan and not running</p>
         </div>
 
         <div className="ring-hairline bg-card rounded-2xl p-5 ring-1 shadow-sm">
@@ -258,9 +253,8 @@ export default function CampaignsPage() {
           ) : (
             <div className="divide-hairline divide-y rounded-2xl border border-border/60 bg-card overflow-hidden shadow-sm">
               {filteredPlacements.map((placement) => {
-                const state = getPlacementState(placement)
+                const state = bookingState(placement)
                 const isBusy = busyReportId === placement.id
-                const total = placement.total_price_paise || placement.price_paise
                 const clientName = placement.client?.name || placement.advertiser
 
                 return (
@@ -293,13 +287,11 @@ export default function CampaignsPage() {
                               {placement.client.client_code}
                             </Badge>
                           )}
-                          {placement.is_paid ? (
-                            <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/30">
-                              Paid
-                            </Badge>
-                          ) : (
+                          {/* Paid / unpaid moved to /dashboard/invoices. A report a client
+                              may be forwarded should not carry their payment status. */}
+                          {placement.screens_unused > 0 && (
                             <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/30">
-                              Payment pending
+                              {placement.screens_unused} screen{placement.screens_unused === 1 ? '' : 's'} unused
                             </Badge>
                           )}
                         </div>
@@ -342,7 +334,9 @@ export default function CampaignsPage() {
                     {/* Right: Revenue & Actions */}
                     <div className="flex flex-wrap sm:flex-nowrap items-center justify-between lg:justify-end gap-3 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-border/40">
                       <div className="text-left lg:text-right">
-                        <p className="text-base font-bold font-mono text-foreground">{rupees(total)}</p>
+                        <p className="text-base font-bold font-mono text-foreground">
+                          {placement.days_remaining ?? 0}d left
+                        </p>
                         {placement.extensions.length > 0 && (
                           <p className="text-[11px] text-muted-foreground">
                             {placement.extensions.length} extension{placement.extensions.length === 1 ? '' : 's'} included

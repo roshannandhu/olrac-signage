@@ -3,30 +3,24 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { CalendarRange, FileDown, Layers3, Mail, MonitorPlay, Plus, Receipt, Share2, Trash2, X } from 'lucide-react'
+import { ArrowUpCircle, CalendarRange, FileDown, IndianRupee, Layers3, Mail, MonitorPlay, MoreHorizontal, Plus, Receipt, Share2, Trash2, X } from 'lucide-react'
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { EmailReportModal } from '@/components/dashboard/email-report-modal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import { canEditTenantContent } from '@/lib/roles'
 import { useAuthStore } from '@/lib/store'
-import type { Placement, PlacementTarget, Screen, ScreenGroup } from '@/lib/types'
+import type { PaymentMethod, Placement, PlacementTarget, PlanOption, Screen, ScreenGroup } from '@/lib/types'
+import { bookingState, rupees } from '@/lib/format'
 
-const rupees = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN')}`
 const asDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-
-function runState(placement: Placement): { label: string; tone: 'success' | 'warning' | 'outline' } {
-  const now = Date.now()
-  if (Date.parse(placement.starts_at) > now) return { label: 'Scheduled', tone: 'warning' }
-  if (Date.parse(placement.ends_at) < now) return { label: 'Ended', tone: 'outline' }
-  return { label: 'Running', tone: 'success' }
-}
 
 /**
  * Selling this advert: who bought it, for how long, and in which places.
@@ -58,10 +52,12 @@ export function AdBookings({ contentId }: { contentId: number }) {
   // one report generating does not disable the buttons on every other row.
   const [busyReport, setBusyReport] = useState<number | null>(null)
 
-  const runReport = async (placement: Placement, mode: 'share' | 'download') => {
+  const runReport = async (placement: Placement, mode: 'share' | 'download' | 'invoice') => {
     setBusyReport(placement.id)
     try {
-      if (mode === 'download') {
+      if (mode === 'invoice') {
+        await api.downloadInvoice(placement.id)
+      } else if (mode === 'download') {
         await api.downloadBookingReport(placement.id)
       } else {
         const outcome = await api.shareBookingReport(placement.id, `Playback report — ${placement.advertiser}`)
@@ -96,6 +92,9 @@ export function AdBookings({ contentId }: { contentId: number }) {
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ['placements', contentId] })
+    // The campaigns page reads this key. Without it, marking a booking paid here left
+    // that page showing "Payment pending" until it was reloaded by hand.
+    queryClient.invalidateQueries({ queryKey: ['all-placements'] })
     queryClient.invalidateQueries({ queryKey: ['playlists'] })
     queryClient.invalidateQueries({ queryKey: ['screens'] })
     queryClient.invalidateQueries({ queryKey: ['groups'] })
@@ -105,6 +104,69 @@ export function AdBookings({ contentId }: { contentId: number }) {
   const [extending, setExtending] = useState<Placement | null>(null)
   const [extendTo, setExtendTo] = useState('')
   const [extendPrice, setExtendPrice] = useState('')
+
+  const [deleting, setDeleting] = useState<Placement | null>(null)
+
+  // --- Changing a client's plan -------------------------------------------------------
+  const [upgrading, setUpgrading] = useState<Placement | null>(null)
+  const [chosenPlan, setChosenPlan] = useState<number | null>(null)
+  const [alsoExtend, setAlsoExtend] = useState(true)
+  const planOptionsQuery = useQuery({
+    queryKey: ['plan-options', upgrading?.id],
+    queryFn: () => api.getPlanOptions(upgrading!.id),
+    enabled: Boolean(upgrading),
+  })
+
+  const openUpgrade = (placement: Placement) => {
+    setUpgrading(placement)
+    setChosenPlan(null)
+    setAlsoExtend(true)
+  }
+
+  const upgrade = useMutation({
+    mutationFn: () => api.upgradePlan(upgrading!.id, { plan_id: chosenPlan!, extend: alsoExtend }),
+    onSuccess: () => {
+      refresh()
+      toast.success(alsoExtend ? 'Plan changed and the run extended' : 'Plan changed')
+      setUpgrading(null)
+    },
+    onError: fail,
+  })
+
+  // --- Recording what the client paid --------------------------------------------------
+  const [paying, setPaying] = useState<Placement | null>(null)
+  const [payAmount, setPayAmount] = useState('')
+  const [payMethod, setPayMethod] = useState<PaymentMethod>('upi')
+  const [payReference, setPayReference] = useState('')
+  const [payDate, setPayDate] = useState('')
+
+  const openPayment = (placement: Placement) => {
+    setPaying(placement)
+    const existing = placement.payment
+    // Prefilled with the full amount owed, because that is what is being recorded almost
+    // every time. Correcting it down is one edit; typing it out is not.
+    setPayAmount(String(((existing?.amount_paise ?? placement.total_price_paise ?? placement.price_paise) || 0) / 100))
+    setPayMethod(existing?.method ?? 'upi')
+    setPayReference(existing?.reference ?? '')
+    setPayDate((existing?.paid_at ?? new Date().toISOString()).slice(0, 10))
+  }
+
+  const savePayment = useMutation({
+    mutationFn: () => api.recordPayment(paying!.id, {
+      amount_paise: Math.round(Number(payAmount || 0) * 100),
+      method: payMethod,
+      reference: payReference.trim() || null,
+      paid_at: new Date(`${payDate}T12:00:00`).toISOString(),
+    }),
+    onSuccess: () => { refresh(); toast.success('Payment recorded'); setPaying(null) },
+    onError: fail,
+  })
+
+  const clearPayment = useMutation({
+    mutationFn: () => api.clearPayment(paying!.id),
+    onSuccess: () => { refresh(); toast.success('Payment cleared; the booking is unpaid again'); setPaying(null) },
+    onError: fail,
+  })
 
   const openExtend = (placement: Placement) => {
     setExtending(placement)
@@ -173,12 +235,6 @@ export function AdBookings({ contentId }: { contentId: number }) {
     onError: fail,
   })
 
-  const togglePaid = useMutation({
-    mutationFn: (p: Placement) => api.updatePlacement(p.id, { is_paid: !p.is_paid }),
-    onSuccess: () => { refresh() },
-    onError: fail,
-  })
-
   const remove = useMutation({
     mutationFn: (id: number) => api.deletePlacement(id),
     onSuccess: () => { refresh(); toast.success('Booking deleted and pulled from every place') },
@@ -211,7 +267,7 @@ export function AdBookings({ contentId }: { contentId: number }) {
           action={canEdit ? <Button onClick={() => setCreateOpen(true)}>New booking</Button> : undefined}
         />
       ) : placements.map((placement) => {
-        const state = runState(placement)
+        const state = bookingState(placement)
         return (
           <Card key={placement.id} className="ring-hairline bg-card border-0 ring-1">
             <CardContent className="p-5">
@@ -222,9 +278,22 @@ export function AdBookings({ contentId }: { contentId: number }) {
                     <Badge variant={state.tone}>{state.label}</Badge>
                     {placement.client && <Badge variant="outline">{placement.client.client_code}</Badge>}
                     {placement.plan && <Badge variant="outline">{placement.plan.name}</Badge>}
-                    {placement.price_paise > 0 && (
-                      <Badge variant={placement.is_paid ? 'success' : 'warning'}>
-                        {rupees(placement.price_paise)} · {placement.is_paid ? 'paid' : 'unpaid'}
+                    {/* The TOTAL, not the originally sold price. After an upgrade or an
+                        extension those differ, and showing the sold figure read as
+                        "₹5,000 · paid" on a booking that owed ₹12,000 and had received
+                        ₹5,000 of it. */}
+                    {(placement.total_price_paise ?? placement.price_paise) > 0 && (
+                      <Badge variant={
+                        (placement.payment?.amount_paise ?? 0) >= (placement.total_price_paise ?? placement.price_paise)
+                          ? 'success' : 'warning'
+                      }>
+                        {rupees(placement.total_price_paise ?? placement.price_paise)}
+                        {' · '}
+                        {!placement.payment
+                          ? 'unpaid'
+                          : (placement.payment.amount_paise >= (placement.total_price_paise ?? placement.price_paise)
+                            ? 'paid'
+                            : `${rupees((placement.total_price_paise ?? placement.price_paise) - placement.payment.amount_paise)} owing`)}
                       </Badge>
                     )}
                   </div>
@@ -242,52 +311,97 @@ export function AdBookings({ contentId }: { contentId: number }) {
                     )}
                   </p>
                 </div>
+                {/* Two actions inline, everything else behind the overflow. Seven controls
+                    in one row read as a toolbar with no hierarchy: the two a tenant
+                    actually reaches for -- move the client up a plan, take their money --
+                    sat between Share and Add places at the same weight. */}
                 {canEdit && (
-                  <div className="flex items-center gap-2">
-                    {placement.price_paise > 0 && (
-                      <Button size="sm" variant="outline" onClick={() => togglePaid.mutate(placement)}>
-                        Mark {placement.is_paid ? 'unpaid' : 'paid'}
-                      </Button>
-                    )}
-                    {/* Both fetch the PDF with the auth header. This used to be a plain
-                        <a href> to the endpoint, which navigates WITHOUT the header and so
-                        401'd every time -- the report button had never worked. */}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={busyReport === placement.id}
-                      onClick={() => runReport(placement, 'share')}
-                    >
-                      <Share2 data-icon="inline-start" /> Share
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button size="sm" variant="outline" onClick={() => openUpgrade(placement)}>
+                      <ArrowUpCircle data-icon="inline-start" /> Change plan
                     </Button>
                     <Button
                       size="sm"
-                      variant="outline"
-                      disabled={busyReport === placement.id}
-                      onClick={() => runReport(placement, 'download')}
+                      variant={placement.is_paid ? 'outline' : 'default'}
+                      onClick={() => openPayment(placement)}
                     >
-                      <FileDown data-icon="inline-start" /> PDF
+                      <IndianRupee data-icon="inline-start" />
+                      {placement.is_paid ? 'Payment' : 'Record payment'}
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setEmailPlacement(placement)}
-                      title="Email report to client"
-                    >
-                      <Mail data-icon="inline-start" /> Email
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => openExtend(placement)}>
-                      <CalendarRange data-icon="inline-start" /> Extend
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => setAddTo(placement)}>
-                      <Plus data-icon="inline-start" /> Add places
-                    </Button>
-                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => remove.mutate(placement.id)} aria-label={`Delete booking for ${placement.advertiser}`}>
-                      <Trash2 />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={<Button size="icon-sm" variant="ghost" aria-label={`More actions for ${placement.advertiser}`} />}
+                      >
+                        <MoreHorizontal />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Documents</DropdownMenuLabel>
+                        {/* All three fetch with the auth header. These were once plain
+                            <a href> links, which navigate WITHOUT it and 401'd every
+                            time -- the report button had never worked. */}
+                        <DropdownMenuItem
+                          disabled={busyReport === placement.id}
+                          onClick={() => runReport(placement, 'download')}
+                        >
+                          <FileDown data-icon="inline-start" /> Playback report
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={busyReport === placement.id}
+                          onClick={() => runReport(placement, 'invoice')}
+                        >
+                          <Receipt data-icon="inline-start" /> Invoice
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={busyReport === placement.id}
+                          onClick={() => runReport(placement, 'share')}
+                        >
+                          <Share2 data-icon="inline-start" /> Share report
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setEmailPlacement(placement)}>
+                          <Mail data-icon="inline-start" /> Email to client
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel>Booking</DropdownMenuLabel>
+                        <DropdownMenuItem onClick={() => openExtend(placement)}>
+                          <CalendarRange data-icon="inline-start" /> Extend the run
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setAddTo(placement)}>
+                          <Plus data-icon="inline-start" /> Add places
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        {/* Confirmed, unlike before. This deletes the sale AND pulls the
+                            advert off every screen it was placed on, and it was the one
+                            destructive action in the app that fired on a single click. */}
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => setDeleting(placement)}
+                        >
+                          <Trash2 data-icon="inline-start" /> Delete booking
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 )}
               </div>
+
+              {/* What the client is paying for versus what they are getting. Over the plan
+                  is refused by the API and never reaches here; UNDER it is nobody's error
+                  and was invisible -- a five-screen plan running on three is two screens
+                  the client has bought and is not receiving. */}
+              {placement.plan_max_locations > 0 && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+                  <MonitorPlay className="text-muted-foreground size-3.5" aria-hidden="true" />
+                  <span className="text-muted-foreground">
+                    {placement.screens_used} of {placement.plan_max_locations} screens on the{' '}
+                    {placement.plan?.name} plan
+                  </span>
+                  {placement.screens_unused > 0 && (
+                    <Badge variant="warning">
+                      {placement.screens_unused} paid for, not used
+                    </Badge>
+                  )}
+                </div>
+              )}
 
               <div className="mt-4 flex flex-wrap gap-2">
                 {!placement.targets.length && <p className="text-muted-foreground text-sm">Not running anywhere yet.</p>}
@@ -410,14 +524,18 @@ export function AdBookings({ contentId }: { contentId: number }) {
             </div>
           </div>
           <DialogFooter showCloseButton>
-            <Button disabled={!advertiser.trim() || !picked.length || endsAt <= startsAt || create.isPending} onClick={() => create.mutate()}>
+            {/* A saved client OR a typed name -- the mutation already sends whichever is
+                set. Requiring the typed name regardless meant picking a client from the
+                dropdown left this button permanently disabled, so the saved-client path
+                could never actually be used. */}
+            <Button disabled={(!clientId && !advertiser.trim()) || !picked.length || endsAt <= startsAt || create.isPending} onClick={() => create.mutate()}>
               {create.isPending ? 'Creating…' : 'Create booking'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Add more places to an existing booking */}
+      {/* Sell more time on an existing booking */}
       <Dialog open={Boolean(extending)} onOpenChange={(open) => !open && setExtending(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -524,6 +642,166 @@ export function AdBookings({ contentId }: { contentId: number }) {
             </Button>
             <Button disabled={!excluded.length || split.isPending} onClick={() => split.mutate()}>
               {split.isPending ? 'Updating…' : 'Keep the rest'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- Change plan ------------------------------------------------------------ */}
+      <Dialog open={Boolean(upgrading)} onOpenChange={(open) => { if (!open) setUpgrading(null) }}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Change {upgrading?.advertiser}&apos;s plan</DialogTitle>
+            <DialogDescription>
+              The booking keeps its history and its report. The difference in price is added
+              as an extension, so one client stays one campaign and one invoice.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[50vh] space-y-2 overflow-y-auto py-1">
+            {planOptionsQuery.isPending && <Skeleton className="h-24 w-full" />}
+            {planOptionsQuery.data?.map((option: PlanOption) => {
+              const selected = chosenPlan === option.plan.id
+              return (
+                <button
+                  key={option.plan.id}
+                  type="button"
+                  disabled={option.is_current || !option.fits}
+                  onClick={() => setChosenPlan(option.plan.id)}
+                  className={`w-full rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                    selected ? 'border-primary bg-primary/10 shadow-sm' : 'border-input hover:bg-muted/50'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium">{option.plan.name}</span>
+                    {option.recommended && <Badge variant="success">Recommended</Badge>}
+                    {option.is_current && <Badge variant="outline">Current plan</Badge>}
+                    {/* Said plainly rather than just disabled: "why can I not pick this?"
+                        is the question a greyed-out row always provokes. */}
+                    {!option.fits && (
+                      <Badge variant="danger">
+                        Covers {option.plan.max_locations}, this booking runs on {upgrading?.screens_used}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-muted-foreground mt-1 text-sm">
+                    {rupees(option.plan.price_paise)} · {option.plan.duration_days} days · up to{' '}
+                    {option.plan.max_locations} screen{option.plan.max_locations === 1 ? '' : 's'}
+                    {!option.is_current && option.price_difference_paise > 0 && (
+                      <span className="text-foreground"> · +{rupees(option.price_difference_paise)} to move</span>
+                    )}
+                  </p>
+                </button>
+              )
+            })}
+          </div>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="accent-primary size-4"
+              checked={alsoExtend}
+              onChange={(event) => setAlsoExtend(event.target.checked)}
+            />
+            Extend the run by the new plan&apos;s length and charge the difference
+          </label>
+          <p className="text-muted-foreground text-xs">
+            Leave this off to correct a booking that is on the wrong plan without selling
+            any extra time.
+          </p>
+
+          <DialogFooter showCloseButton>
+            <Button disabled={!chosenPlan || upgrade.isPending} onClick={() => upgrade.mutate()}>
+              {upgrade.isPending ? 'Changing…' : 'Change plan'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- Record payment --------------------------------------------------------- */}
+      <Dialog open={Boolean(paying)} onOpenChange={(open) => { if (!open) setPaying(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Payment from {paying?.advertiser}</DialogTitle>
+            <DialogDescription>
+              Recording this is what marks the booking paid. Owed in total:{' '}
+              {rupees(paying?.total_price_paise ?? paying?.price_paise ?? 0)}.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="pay-amount">Amount received (₹)</Label>
+              <Input id="pay-amount" type="number" min={0} value={payAmount}
+                     onChange={(event) => setPayAmount(event.target.value)} autoFocus />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="pay-method">Method</Label>
+                <select
+                  id="pay-method"
+                  className="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm"
+                  value={payMethod}
+                  onChange={(event) => setPayMethod(event.target.value as PaymentMethod)}
+                >
+                  <option value="cash">Cash</option>
+                  <option value="upi">UPI</option>
+                  <option value="bank_transfer">Bank transfer</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="card">Card</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="pay-date">Received on</Label>
+                <Input id="pay-date" type="date" value={payDate}
+                       onChange={(event) => setPayDate(event.target.value)} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="pay-ref">Reference</Label>
+              <Input id="pay-ref" value={payReference} placeholder="UTR, cheque number, transaction id"
+                     onChange={(event) => setPayReference(event.target.value)} />
+            </div>
+            {paying?.payment?.recorded_by && (
+              <p className="text-muted-foreground text-xs">
+                Last recorded by {paying.payment.recorded_by}.
+              </p>
+            )}
+          </div>
+
+          <DialogFooter showCloseButton>
+            {paying?.payment && (
+              <Button variant="ghost" className="text-destructive" disabled={clearPayment.isPending}
+                      onClick={() => clearPayment.mutate()}>
+                Clear payment
+              </Button>
+            )}
+            <Button disabled={savePayment.isPending} onClick={() => savePayment.mutate()}>
+              {savePayment.isPending ? 'Saving…' : 'Record payment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- Delete confirmation ---------------------------------------------------- */}
+      <Dialog open={Boolean(deleting)} onOpenChange={(open) => { if (!open) setDeleting(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {deleting?.advertiser}&apos;s booking?</DialogTitle>
+            <DialogDescription>
+              This removes the sale and pulls the advert off{' '}
+              {deleting?.targets.length ?? 0} place{deleting?.targets.length === 1 ? '' : 's'} straight
+              away. The playback history stays, but the booking and its report do not.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter showCloseButton>
+            <Button
+              variant="destructive"
+              disabled={remove.isPending}
+              onClick={() => { remove.mutate(deleting!.id); setDeleting(null) }}
+            >
+              {remove.isPending ? 'Deleting…' : 'Delete booking'}
             </Button>
           </DialogFooter>
         </DialogContent>

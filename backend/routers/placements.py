@@ -295,6 +295,23 @@ def _serialize(scope: TenantScope, placement: models.AdPlacement) -> schemas.Pla
         screens_used=usage["used"],
         plan_max_locations=usage["allowed"],
         screens_unused=usage["unused"],
+        payment=(
+            schemas.PaymentResponse(
+                id=placement.payment.id,
+                amount_paise=placement.payment.amount_paise,
+                method=placement.payment.method,
+                reference=placement.payment.reference,
+                paid_at=placement.payment.paid_at,
+                notes=placement.payment.notes,
+                # The name, not the id: this is read by a human chasing a receipt.
+                recorded_by=(
+                    placement.payment.recorded_by.username
+                    if placement.payment.recorded_by else None
+                ),
+                created_at=placement.payment.created_at,
+            )
+            if placement.payment else None
+        ),
     )
 
 
@@ -338,9 +355,12 @@ def ensure_ad_slot_quota(scope: TenantScope) -> None:
     if limit is None:
         return
 
+    # On the EFFECTIVE end. Counting the sold `ends_at` freed the slot of any campaign kept
+    # running by an extension or a longer per-location window, so a tenant at their limit
+    # could sell past it simply by having extended something.
     active_ads = scope.db.query(models.AdPlacement).filter(
         models.AdPlacement.organization_id == scope.organization_id,
-        models.AdPlacement.ends_at >= models.utcnow(),
+        models.AdPlacement.effective_ends_at >= models.utcnow(),
     ).count()
     if active_ads >= limit:
         raise HTTPException(
@@ -418,7 +438,11 @@ def update_placement(
         raise HTTPException(status_code=404, detail="Booking not found")
 
     fields = payload.model_fields_set
-    for field in ("advertiser", "price_paise", "is_paid", "notes", "starts_at", "ends_at"):
+    # `is_paid` is deliberately not in this list any more. It is now the shadow of the
+    # payment record, set only by POST/DELETE /payment, so the flag and the receipt cannot
+    # tell different stories -- which they could when a blind PUT alongside a date edit
+    # could mark a campaign paid with no amount, method or date behind it.
+    for field in ("advertiser", "price_paise", "notes", "starts_at", "ends_at"):
         if field in fields:
             setattr(placement, field, getattr(payload, field))
 
@@ -642,6 +666,163 @@ def remove_extension(
     return _serialize(scope, placement)
 
 
+@router.get("/{placement_id}/plan-options", response_model=list[schemas.PlanOption])
+def plan_options(
+    placement_id: int,
+    scope: TenantScope = Depends(require_tenant_roles("owner", "editor", "viewer")),
+):
+    """Every plan this booking could move to, with one marked as the one to pick.
+
+    The recommendation is answered from what the client is ACTUALLY using -- the cheapest
+    active plan that covers the screens already assigned. A client on Basic running five
+    screens is told to move up because five screens is what they are being given, not
+    because a heuristic guessed at their appetite.
+    """
+    placement = scope.get(models.AdPlacement, placement_id)
+    if not placement:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    used = len(_booking_screen_ids(scope, placement))
+    current = placement.plan
+    current_price = current.price_paise if current else 0
+    plans = scope.query(models.TenantPlan).filter(
+        models.TenantPlan.is_active.is_(True)
+    ).order_by(models.TenantPlan.price_paise).all()
+
+    options = [
+        schemas.PlanOption(
+            plan=schemas.TenantPlanResponse.model_validate(plan),
+            is_current=bool(current and plan.id == current.id),
+            # max_locations of 0 means uncapped, so it fits anything.
+            fits=plan.max_locations <= 0 or plan.max_locations >= used,
+            price_difference_paise=max(0, plan.price_paise - current_price),
+            extra_days=plan.duration_days,
+        )
+        for plan in plans
+    ]
+
+    # Cheapest that fits and is not the one they are already on. `plans` is already ordered
+    # by price, so the first match is the cheapest. Nothing is recommended when the current
+    # plan is the only one that fits -- an upgrade prompt with nowhere better to go is
+    # noise, and recommending a costlier plan for no reason is worse than that.
+    upgrade = next((o for o in options if o.fits and not o.is_current), None)
+    if upgrade is not None:
+        upgrade.recommended = True
+    return options
+
+
+@router.post("/{placement_id}/upgrade", response_model=schemas.PlacementResponse)
+def upgrade_plan(
+    placement_id: int,
+    payload: schemas.PlanUpgrade,
+    scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
+):
+    """Move a booking onto a different plan and bill the difference.
+
+    One booking throughout, deliberately. Closing the old sale and opening a new one would
+    split a single client's campaign across two records, two reports and two invoices, and
+    the proof-of-play a client receives should cover the campaign they think they bought.
+    The price difference becomes an extension, which is the shape the codebase already has
+    for "more time was sold against this booking".
+    """
+    placement = scope.get(models.AdPlacement, placement_id)
+    if not placement:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    plan = resolve_tenant_plan(scope, payload.plan_id)
+    if plan is None:
+        raise HTTPException(status_code=422, detail="An upgrade needs a plan to move to")
+
+    # An upgrade must never leave the booking delivering more screens than the plan it is
+    # now billed on -- that is the same breach as adding a screen, arrived at sideways.
+    ensure_plan_locations(scope, plan, set(_booking_screen_ids(scope, placement)), set())
+
+    difference = payload.price_difference_paise
+    if difference is None:
+        difference = max(0, plan.price_paise - (placement.plan.price_paise if placement.plan else 0))
+
+    placement.plan_id = plan.id
+
+    if payload.extend:
+        # From the current effective end, not from today: back-to-back, so the advert never
+        # goes dark between the old plan finishing and the new one starting.
+        starts = effective_ends_at(placement)
+        scope.db.add(models.AdPlacementExtension(
+            placement_id=placement.id,
+            extended_from=starts,
+            extended_to=starts + timedelta(days=plan.duration_days),
+            additional_price_paise=difference,
+            is_paid=False,
+            notes=f"Upgraded to {plan.name}",
+        ))
+        scope.db.flush()
+        scope.db.refresh(placement)
+        # Without this the extension is a row and nothing else -- every placed item still
+        # carries the old end date and the player stops the advert on it.
+        sync_placement_window(scope, placement)
+
+    scope.db.commit()
+    scope.db.refresh(placement)
+    return _serialize(scope, placement)
+
+
+@router.post("/{placement_id}/payment", response_model=schemas.PlacementResponse, status_code=201)
+def record_payment(
+    placement_id: int,
+    payload: schemas.PaymentWrite,
+    scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
+):
+    """Record what the client paid and how. The only way a booking becomes paid.
+
+    Replaces the existing record rather than adding to it -- one settlement per booking is
+    the modelled shape, so re-recording is how a wrong amount or method gets corrected.
+    """
+    placement = scope.get(models.AdPlacement, placement_id)
+    if not placement:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    payment = placement.payment
+    if payment is None:
+        payment = models.AdPayment(
+            organization_id=scope.organization_id,
+            placement_id=placement.id,
+        )
+        scope.db.add(payment)
+
+    payment.amount_paise = payload.amount_paise
+    payment.method = payload.method
+    payment.reference = (payload.reference or "").strip() or None
+    payment.paid_at = payload.paid_at or models.utcnow()
+    payment.notes = (payload.notes or "").strip() or None
+    # Who took the money. Kept even if they later leave -- the FK is SET NULL, not CASCADE.
+    payment.recorded_by_user_id = scope.user.id
+    placement.is_paid = True
+
+    scope.db.commit()
+    scope.db.refresh(placement)
+    return _serialize(scope, placement)
+
+
+@router.delete("/{placement_id}/payment", response_model=schemas.PlacementResponse)
+def clear_payment(
+    placement_id: int,
+    scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
+):
+    """Undo a payment recorded in error. The booking goes back to unpaid."""
+    placement = scope.get(models.AdPlacement, placement_id)
+    if not placement:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if placement.payment is not None:
+        scope.db.delete(placement.payment)
+    # Set regardless: a booking marked paid before payments were recorded has no row to
+    # delete, and leaving the flag true would make it unclearable.
+    placement.is_paid = False
+
+    scope.db.commit()
+    scope.db.refresh(placement)
+    return _serialize(scope, placement)
+
+
 def _booking_screen_ids(scope: TenantScope, placement: models.AdPlacement) -> list[int]:
     """Every screen this booking actually reaches.
 
@@ -726,6 +907,16 @@ def _commercials(placement: models.AdPlacement, generated_at: "datetime") -> dic
         "days_elapsed": days_elapsed,
         "extension_price_paise": sum(e.additional_price_paise for e in placement.extensions),
         "total_price_paise": total_price_paise(placement),
+        # For the invoice: its reference number is derived from these two ids, and the
+        # payment block is what turns "unpaid" into "unpaid, and here is what we chased".
+        # Both live here rather than at each exit so the two report shapes cannot diverge.
+        "organization_id": placement.organization_id,
+        "payment": {
+            "amount_paise": placement.payment.amount_paise,
+            "method": placement.payment.method,
+            "reference": placement.payment.reference,
+            "paid_at": placement.payment.paid_at,
+        } if placement.payment else None,
     }
 
 
@@ -1017,6 +1208,36 @@ def download_booking_report(
     )
 
 
+@router.get("/{placement_id}/invoice.pdf")
+def download_invoice(
+    placement_id: int,
+    scope: TenantScope = Depends(require_tenant_roles("owner", "editor", "viewer")),
+):
+    """The commercial document: what was sold, what it cost, what was paid.
+
+    Separate from report.pdf because they answer to different people. The report proves
+    delivery and is safe to forward to anyone; this one restates the terms.
+    """
+    placement = scope.get(models.AdPlacement, placement_id)
+    if not placement:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    pdf, filename = _render_invoice(scope, placement)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _render_invoice(scope: TenantScope, placement: models.AdPlacement) -> tuple[bytes, str]:
+    """The invoice PDF and the name to give it. Mirrors _render_report."""
+    from ..reports.invoice import build_pdf, invoice_number
+
+    report = build_booking_report(scope, placement)
+    return build_pdf(report), f"{invoice_number(report)}.pdf"
+
+
 def _render_report(scope: TenantScope, placement: models.AdPlacement) -> tuple[bytes, str]:
     """The PDF and the name to give it. Shared by the download and the email."""
     from ..reports.booking_report import build_pdf
@@ -1040,13 +1261,15 @@ def email_status():
 @router.post("/{placement_id}/email")
 def email_booking_report(
     placement_id: int,
+    document: str = "report",
     scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
 ):
-    """Send the client their own report.
+    """Send the client their own report, or their invoice.
 
     The address comes from the client record, never from the request: accepting a
     recipient here would turn an authenticated tenant endpoint into a way to mail an
-    arbitrary attachment to an arbitrary address from this server's domain.
+    arbitrary attachment to an arbitrary address from this server's domain. `document`
+    chooses which PDF rather than a second route existing, so that guard is written once.
     """
     from .. import mailer
 
@@ -1061,19 +1284,24 @@ def email_booking_report(
             detail="This booking has no client email address. Add one on the client record first.",
         )
 
-    pdf, filename = _render_report(scope, placement)
+    if document not in ("report", "invoice"):
+        raise HTTPException(status_code=422, detail="document must be 'report' or 'invoice'")
+
+    is_invoice = document == "invoice"
+    pdf, filename = (_render_invoice if is_invoice else _render_report)(scope, placement)
     organization = scope.db.query(models.Organization).filter(
         models.Organization.id == placement.organization_id
     ).first()
     sender_name = organization.name if organization else "your signage partner"
+    noun = "invoice" if is_invoice else "playback report"
 
     try:
         mailer.send(
             to=client.email,
-            subject=f"Playback report - {placement.advertiser}",
+            subject=f"{'Invoice' if is_invoice else 'Playback report'} - {placement.advertiser}",
             body=(
                 f"Hello {client.name},\n\n"
-                f"Attached is the playback report for your campaign "
+                f"Attached is the {noun} for your campaign "
                 f"\"{placement.advertiser}\", covering "
                 f"{placement.starts_at:%d %b %Y} to {effective_ends_at(placement):%d %b %Y}.\n\n"
                 f"Regards,\n{sender_name}"

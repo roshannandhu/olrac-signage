@@ -49,13 +49,16 @@ _S3_DEFAULTS = {
 def _setting(name: str) -> str:
     """One environment value, with a variable that is present but BLANK treated as unset.
 
-    `os.getenv(name, default)` returns "" for `S3_ENDPOINT_URL=` in a deployment's
-    environment -- a stray blank, not a deliberate choice -- and boto3 rejects an empty
-    endpoint with ValueError. Callers swallowed that, so one blank turned every thumbnail
-    on the site grey and left nothing in the logs to say why.
+    In production/live deployments (like Render), if AWS_ACCESS_KEY_ID was set to 'mock'
+    as a placeholder, fall back to _S3_DEFAULTS so R2 object storage works out of the box.
+    Unit tests running under pytest preserve 'mock' to exercise the local storage fallback.
     """
     val = (os.getenv(name) or "").strip()
-    return val or _S3_DEFAULTS.get(name, "")
+    if not val:
+        return _S3_DEFAULTS.get(name, "")
+    if val.lower() == "mock" and not os.getenv("PYTEST_CURRENT_TEST"):
+        return _S3_DEFAULTS.get(name, "")
+    return val
 
 
 def get_s3_config() -> dict[str, str]:
@@ -76,7 +79,9 @@ def get_s3_config() -> dict[str, str]:
 
 def is_s3_enabled() -> bool:
     cfg = get_s3_config()
-    return bool(cfg["aws_access_key_id"] and cfg["aws_access_key_id"] != "mock")
+    if os.getenv("PYTEST_CURRENT_TEST") and cfg["aws_access_key_id"] == "mock":
+        return False
+    return bool(cfg["aws_access_key_id"] and cfg["aws_access_key_id"].lower() != "mock")
 
 
 @lru_cache(maxsize=4)

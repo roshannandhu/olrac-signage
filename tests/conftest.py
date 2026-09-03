@@ -86,6 +86,8 @@ ISOLATED_SCRIPTS = {
     "test_screen_quota.py",
     # One booking, different run lengths per location.
     "test_per_location_ad_window.py",
+    # The dashboard and the player must resolve the same playlist for a screen.
+    "test_playlist_resolution_parity.py",
 }
 
 # Pure-logic tests: no database, no import-time engine, safe to run in-process.
@@ -139,6 +141,8 @@ NEEDS_POSTGRES = ISOLATED_SCRIPTS - {
     "test_google_signin.py",
     # Skips itself when Redis is absent; falls back to SQLite otherwise.
     "test_ws_connection_pool.py",
+    # Playlist resolution is plain Python over the ORM, so SQLite exercises it fully.
+    "test_playlist_resolution_parity.py",
 }
 
 

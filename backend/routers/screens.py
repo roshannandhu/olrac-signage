@@ -1339,9 +1339,16 @@ async def get_screens(
         scope.db.commit()
 
     shots = _latest_screenshots(scope, screens)
+    # Resolved against the whole group set so a card reports what the player will
+    # actually do -- ancestor and dynamic groups included. The bare effective_playlist_id
+    # property cannot reach those without spending a query per screen.
+    groups = groups_by_id(scope.db, {screen.organization_id for screen in screens})
     return [
         schemas.ScreenResponse.model_validate(screen).model_copy(
-            update={"latest_screenshot": shots.get(screen.id)}
+            update={
+                "latest_screenshot": shots.get(screen.id),
+                "effective_playlist_id": screen.resolve_playlist_id(groups),
+            }
         )
         for screen in screens
     ]
@@ -1785,75 +1792,69 @@ def player_version(db: Session = Depends(database.get_db)):
 
 
 # A group tree deeper than this is a mistake or a cycle, either way not worth walking.
-MAX_GROUP_DEPTH = 32
+MAX_GROUP_DEPTH = models.MAX_GROUP_DEPTH
+
+
+def groups_by_id(db: Session, organization_ids) -> dict[int, models.ScreenGroup]:
+    """Every group in the given organizations, keyed by id, in one query.
+
+    Resolving a playlist walks a screen's group ancestry and then scans dynamic groups.
+    Left to the relationships that is a query per ancestor hop plus one for the dynamic
+    groups, for every screen. The set is small and one round trip serves the whole
+    request.
+    """
+    ids = {organization_id for organization_id in organization_ids if organization_id is not None}
+    if not ids:
+        return {}
+    return {
+        group.id: group
+        for group in db.query(models.ScreenGroup)
+        .filter(models.ScreenGroup.organization_id.in_(ids))
+        .all()
+    }
 
 
 def resolve_screen_playlist(screen: models.Screen, db: Session) -> int | None:
-    # 1. Emergency Broadcast Overrides
+    """What this screen should be playing right now.
+
+    An active emergency broadcast takes over; otherwise it is whatever the screen is
+    configured to play, resolved by models.Screen.resolve_playlist_id -- the same call
+    the dashboard serializes. That shared call is the point: this used to resolve the
+    configuration itself, and its copy drifted from the model's, so a screen inheriting
+    from an ancestor group or matched by a dynamic group played correctly here while the
+    dashboard reported it had nothing scheduled and offered to assign a playlist.
+    """
+    groups = groups_by_id(db, [screen.organization_id])
+
     active_broadcasts = db.query(models.EmergencyBroadcast).filter(
         models.EmergencyBroadcast.organization_id == screen.organization_id,
         models.EmergencyBroadcast.is_active == True
     ).all()
-    
+
     # Priority: screen > group > org (all)
     for broadcast in active_broadcasts:
         if broadcast.target_type == "screen" and broadcast.target_id == screen.id:
             return broadcast.playlist_id
-            
-    # For group, we need to check screen's group and its parents.
-    #
-    # Bounded. ScreenGroup.parent_id is operator-settable and was never validated, so a
-    # cycle (A -> B -> A) was reachable, and every one of these `while current_group` walks
-    # would then spin forever holding a database connection and a request thread. The
-    # create/update routes now reject cycles outright; this cap is the backstop for rows
-    # that predate that check.
+
+    # A group broadcast reaches every screen beneath it, so collect the ancestry.
     screen_group_ids = []
-    current_group = screen.group
+    group = groups.get(screen.group_id)
     for _ in range(MAX_GROUP_DEPTH):
-        if current_group is None:
+        if group is None:
             break
-        screen_group_ids.append(current_group.id)
-        current_group = current_group.parent
-        
+        screen_group_ids.append(group.id)
+        group = groups.get(group.parent_id)
+
     for broadcast in active_broadcasts:
         if broadcast.target_type == "group" and broadcast.target_id in screen_group_ids:
             return broadcast.playlist_id
-            
+
     for broadcast in active_broadcasts:
         if broadcast.target_type == "all":
             return broadcast.playlist_id
-            
-    # 2. Direct Playlist Assignment
-    if screen.playlist_id:
-        return screen.playlist_id
-        
-    # 3. Hierarchical Group Inheritance (bounded, see MAX_GROUP_DEPTH above)
-    current_group = screen.group
-    for _ in range(MAX_GROUP_DEPTH):
-        if current_group is None:
-            break
-        if current_group.playlist_id:
-            return current_group.playlist_id
-        current_group = current_group.parent
-        
-    # 4. Dynamic Groups (Evaluating criteria)
-    dynamic_groups = db.query(models.ScreenGroup).filter(
-        models.ScreenGroup.organization_id == screen.organization_id,
-        models.ScreenGroup.is_dynamic == True
-    ).all()
-    for dg in dynamic_groups:
-        if not dg.dynamic_criteria or not dg.playlist_id:
-            continue
-        # Evaluate simple JSON criteria like {"orientation": 1}
-        match = True
-        for k, v in dg.dynamic_criteria.items():
-            if getattr(screen, k, None) != v:
-                match = False
-                break
-        if match:
-            return dg.playlist_id
 
-    return None
+    return screen.resolve_playlist_id(groups)
+
 
 @router.get(
     "/{device_id}/sync",

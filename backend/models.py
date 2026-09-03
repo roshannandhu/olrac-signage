@@ -14,6 +14,12 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# Ceiling on any walk up ScreenGroup.parent_id. Cycles are rejected on write, so this
+# only ever bounds rows that predate that check -- but a walk with no ceiling is an
+# infinite loop holding a database connection, so it keeps one.
+MAX_GROUP_DEPTH = 32
+
+
 class UtcDateTime(TypeDecorator):
     """A DateTime that always reads back as timezone-aware UTC.
 
@@ -380,9 +386,57 @@ class Screen(Base):
     organization = relationship("Organization", back_populates="screens")
     screenshots = relationship("ScreenshotLog", back_populates="screen", cascade="all, delete-orphan")
 
+    def resolve_playlist_id(self, groups=None):
+        """The playlist this screen is configured to play, or None.
+
+        Its own assignment wins, then the nearest ancestor group that has one, then the
+        first dynamic group whose criteria it matches. Emergency broadcasts outrank all
+        of it, but they are a temporary takeover rather than configuration, so the one
+        caller that cares (the player sync) layers them on top of this.
+
+        `groups` is the organization's groups as {id: ScreenGroup}. Pass it whenever
+        more than one screen is being resolved: without it every ancestor hop is a lazy
+        load, which on a fleet listing is a query per screen per level. It is also the
+        only way dynamic groups can be considered at all, since nothing links one to a
+        screen to be walked.
+        """
+        if self.playlist_id:
+            return self.playlist_id
+
+        # Bounded: parent_id is operator-settable, so a cycle (A -> B -> A) would spin
+        # here forever holding a connection. routers/groups.py rejects cycles on write;
+        # this is the backstop for rows that predate that check.
+        group = groups.get(self.group_id) if groups is not None else self.group
+        for _ in range(MAX_GROUP_DEPTH):
+            if group is None:
+                break
+            if group.playlist_id:
+                return group.playlist_id
+            group = groups.get(group.parent_id) if groups is not None else group.parent
+
+        for group in (groups or {}).values():
+            # A caller resolving a whole fleet may pass several tenants' groups at once
+            # (a platform operator listing every screen), and a dynamic group must never
+            # reach outside its own organization.
+            if group.organization_id != self.organization_id:
+                continue
+            if not (group.is_dynamic and group.playlist_id and group.dynamic_criteria):
+                continue
+            if all(getattr(self, key, None) == value for key, value in group.dynamic_criteria.items()):
+                return group.playlist_id
+
+        return None
+
     @property
     def effective_playlist_id(self):
-        return self.playlist_id or (self.group.playlist_id if self.group else None)
+        """resolve_playlist_id for a screen being serialized on its own.
+
+        Sees the screen's own assignment and its ancestor groups, but not dynamic groups:
+        those need the organization's group set, and querying for it from a serialized
+        property would be one query per screen on every list endpoint. Endpoints that
+        serialize a fleet resolve with the map and override this field.
+        """
+        return self.resolve_playlist_id()
 
 
 class AppRelease(Base):

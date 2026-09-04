@@ -423,6 +423,16 @@ class ContentClientAdUpdate(BaseModel):
     # refused when it created a target and accepted when it corrected one -- in the same
     # request.
     screen_days: Optional[dict[int, Annotated[int, Field(ge=1, le=3650)]]] = None
+    # Wiping every location's bespoke window is its own instruction, not something an
+    # empty map implies.
+    #
+    # `screen_days: {}` used to mean "clear them all", which is also exactly what a client
+    # that has never heard of per-location windows sends. One such client shipped: the
+    # dashboard's campaigns page built its payload from a placement and had no screen_days
+    # to put in it, so opening that editor and pressing Save turned a booking sold as
+    # "50 days at the airport, 30 in the mall" into a flat 30 everywhere -- on the playlist
+    # items the players enforce, not just in the record.
+    clear_screen_days: bool = False
     notes: Optional[str] = None
 
 

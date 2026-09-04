@@ -531,7 +531,7 @@ def update_content_client_ad(
                 base = target.effective_starts_at
                 target.starts_at = base
                 target.ends_at = base + timedelta(days=days)
-            elif payload.screen_days is not None:
+            elif payload.clear_screen_days:
                 # Explicitly cleared: this location goes back to following the booking.
                 target.starts_at = None
                 target.ends_at = None

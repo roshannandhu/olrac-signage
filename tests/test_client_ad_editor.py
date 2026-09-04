@@ -177,6 +177,66 @@ def run() -> None:
         db.close()
         ok("correcting a location's days moves the playlist item and bumps the playlist")
 
+        # 1b. A client that does not send screen_days must not wipe the ones on file.
+        #     The dashboard's campaigns page was exactly such a client: it built its
+        #     payload from a placement, had no screen_days to include, and so cleared every
+        #     location's window -- through to the playlist items the players enforce.
+        db = database.SessionLocal()
+        placement = db.query(models.AdPlacement).filter(
+            models.AdPlacement.content_id == content_id).one()
+        windows_before = {
+            t.screen_id: (t.starts_at, t.ends_at) for t in placement.targets if t.screen_id
+        }
+        items_before = {
+            t.screen_id: db.query(models.PlaylistItem).filter(
+                models.PlaylistItem.id == t.playlist_item_id).one()
+            for t in placement.targets if t.playlist_item_id
+        }
+        items_before = {k: (v.start_at, v.end_at) for k, v in items_before.items()}
+        db.close()
+
+        unaware = client.put(f"/api/content/{content_id}/client-ad", headers=headers, json={
+            "client_name": "Prakrithi Roots",
+            "screen_ids": [screens["mall"], screens["shop"]],
+            "screen_days": {},
+        })
+        check(unaware.status_code == 200, f"unaware save failed: {unaware.text}")
+
+        db = database.SessionLocal()
+        placement = db.query(models.AdPlacement).filter(
+            models.AdPlacement.content_id == content_id).one()
+        windows_after = {
+            t.screen_id: (t.starts_at, t.ends_at) for t in placement.targets if t.screen_id
+        }
+        items_after = {
+            t.screen_id: db.query(models.PlaylistItem).filter(
+                models.PlaylistItem.id == t.playlist_item_id).one()
+            for t in placement.targets if t.playlist_item_id
+        }
+        items_after = {k: (v.start_at, v.end_at) for k, v in items_after.items()}
+        db.close()
+        check(windows_after == windows_before,
+              "an empty screen_days map wiped the per-location windows on the booking")
+        check(items_after == items_before,
+              "an empty screen_days map rewrote the playlist items the players enforce")
+        ok("a client that omits screen_days leaves the sold windows alone")
+
+        # 1c. Clearing is still possible, but has to be asked for.
+        cleared = client.put(f"/api/content/{content_id}/client-ad", headers=headers, json={
+            "client_name": "Prakrithi Roots",
+            "screen_ids": [screens["mall"], screens["shop"]],
+            "clear_screen_days": True,
+        })
+        check(cleared.status_code == 200, f"explicit clear failed: {cleared.text}")
+        db = database.SessionLocal()
+        placement = db.query(models.AdPlacement).filter(
+            models.AdPlacement.content_id == content_id).one()
+        still_set = [t.screen_id for t in placement.targets if t.screen_id and t.ends_at]
+        db.close()
+        check(not still_set,
+              f"clear_screen_days left windows on screens {still_set}")
+        ok("clear_screen_days still resets every location to the booking window")
+
         # 2. Campaign notes must not touch the client's own record.
         db = database.SessionLocal()
         client_row = db.query(models.Client).filter(

@@ -269,6 +269,7 @@ export const api = {
       // Keyed by screen id. {} clears a bespoke booking back to one uniform window;
       // omitting it leaves the existing lengths alone.
       screen_days?: Record<number, number>
+    clear_screen_days?: boolean
       notes?: string
     }
   ) =>

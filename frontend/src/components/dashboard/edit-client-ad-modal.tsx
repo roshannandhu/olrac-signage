@@ -129,11 +129,14 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
         plan_id: planId,
         screen_ids: selectedScreenIds,
     // Only the selected screens, and only when the operator asked for per-location
-    // lengths. Sending {} rather than undefined is what clears a previously bespoke
-    // booking back to one uniform window.
+    // lengths. Turning the toggle off is a deliberate "make this one uniform window",
+    // sent as its own flag -- an empty map would be indistinguishable from a client that
+    // does not know the field exists, and the API refuses to destroy a paid schedule on
+    // that basis.
     screen_days: customDurations
       ? Object.fromEntries(selectedScreenIds.filter((id) => screenDays[id]).map((id) => [id, screenDays[id]]))
-      : {},
+      : undefined,
+    clear_screen_days: !customDurations,
         notes: notes.trim() || undefined,
       })
     },

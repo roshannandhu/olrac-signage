@@ -15,6 +15,7 @@ import { ScreenHoursDialog } from '@/components/dashboard/screen-hours-dialog'
 import { ScreenMap } from '@/components/dashboard/screen-map'
 import { ScreenSettingsDialog } from '@/components/dashboard/screen-settings-dialog'
 import { AssignPlaylistCard } from '@/components/dashboard/assign-playlist-card'
+import { ScreenAdBookings } from '@/components/dashboard/screen-ad-bookings'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -178,6 +179,10 @@ export default function ScreenDetailPage() {
           />
         </div>
       )}
+
+      <div className="mb-6">
+        <ScreenAdBookings screenId={screen.id} groupId={screen.group_id ?? null} />
+      </div>
 
       {!screen.effective_playlist_id ? (
         canEdit

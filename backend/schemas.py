@@ -582,8 +582,8 @@ class RegisterRequest(BaseModel):
 class RegisterResponse(BaseModel):
     """
     Deliberately narrow: /screens/register is unauthenticated, so it must not reuse
-    ScreenResponse. That schema carries tenant configuration — including
-    maintenance_pin — and anyone who knows a device_id can call this route.
+    ScreenResponse. That schema carries tenant configuration â€” including
+    maintenance_pin â€” and anyone who knows a device_id can call this route.
     Only what the TV needs to finish pairing goes here.
     """
 
@@ -917,6 +917,45 @@ class TenantPlanResponse(TenantPlanBase):
     created_at: datetime
 
 
+class PlanQuoteRequest(BaseModel):
+    """A custom shape to price: one entry per location, holding that location's days.
+
+    Null entries mean "the plan's own duration", which is what a target with no window of
+    its own already does -- so the ordinary booking prices correctly with an empty-ish body
+    rather than having to spell the default out per screen.
+    """
+
+    days: List[Optional[int]] = Field(default_factory=list, max_length=500)
+
+    @model_validator(mode="after")
+    def positive_days(self):
+        if any(d is not None and d < 1 for d in self.days):
+            raise ValueError("a location runs for at least one day")
+        return self
+
+
+class PlanQuoteResponse(BaseModel):
+    """What a custom shape costs on a plan, and how far past the package it goes.
+
+    Advisory: no booking is priced from this. It exists so an operator agreeing "50 days at
+    the airport" can see that it is 1.6x the package before they say yes, rather than after
+    the campaign has run.
+    """
+
+    plan_id: int
+    plan_name: str
+    locations: int
+    # locations x days, the unit both the request and the plan are measured in.
+    screen_days: int
+    capacity_screen_days: int
+    plan_price_paise: int
+    quoted_price_paise: int
+    # Zero when the shape fits inside the package -- underuse is never a discount.
+    extra_price_paise: int
+    # The one hard limit: ensure_plan_locations will refuse this booking outright.
+    exceeds_locations: bool
+
+
 class ExtensionCreate(BaseModel):
     """Extend a booking's run. `extended_from` defaults to where the booking currently ends."""
 
@@ -1016,7 +1055,7 @@ class PlacementTargetResponse(BaseModel):
     # still recorded, it just is not on air there any more.
     is_placed: bool
     # This location's own window, when it was sold one. Null means it follows the booking.
-    # Reported so the dashboard can show "Airport TV — 50 days" beside a 30-day campaign
+    # Reported so the dashboard can show "Airport TV â€” 50 days" beside a 30-day campaign
     # rather than making the operator infer it from dates.
     starts_at: Optional[datetime] = None
     ends_at: Optional[datetime] = None

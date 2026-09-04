@@ -4,7 +4,7 @@
 DATABASE_URL. Each test script points that variable at its own temporary
 database, but a single pytest process imports every module together, so the
 first import wins and the rest end up querying a database that has already been
-torn down — every script passes alone and the suite fails as a whole.
+torn down â€” every script passes alone and the suite fails as a whole.
 
 Collecting these files as subprocesses fixes it at the root: one process per
 script, one engine per database, and no import-order coupling. It also keeps
@@ -105,6 +105,8 @@ PURE_MODULES = {
     "test_storage_prefix.py",
     # Pure string rewriting over the TV hand-back link; reads no rows.
     "test_tv_deep_link.py",
+    # Pricing a custom run in screen-days; arithmetic over a fake plan, no session.
+    "test_plan_quote.py",
 }
 
 

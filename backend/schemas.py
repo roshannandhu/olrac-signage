@@ -411,6 +411,15 @@ class ContentClientAdUpdate(BaseModel):
     client_email: Optional[str] = None
     client_phone: Optional[str] = None
     plan_id: Optional[int] = None
+    # What this booking is actually billed. Null means "leave it alone", which is what an
+    # ordinary edit -- a corrected phone number, a renamed client -- has to send.
+    #
+    # A plan only ever fills this in as a DEFAULT, and only when the booking is created.
+    # Without the field there was no way to state a price at all: a booking sold on no plan
+    # was created at zero and stayed there, so "the client does not want a package, we
+    # agreed a figure" was the one sale the editor could not record. Selecting a plan is a
+    # convenience, not the only way to have a price.
+    price_paise: Optional[int] = Field(default=None, ge=0)
     screen_ids: Optional[List[int]] = None
     # Per-location run lengths, keyed by screen id: {"12": 30, "13": 10, "14": 50}.
     # A screen absent from this map runs for the booking's own window, so the ordinary

@@ -380,6 +380,148 @@ def run() -> None:
         db.close()
         ok("booking one inheriting screen keeps its loop and spares the rest of the group")
 
+        # 7. THE BUG. A client who does not want a package. The editor offered plans and
+        # nothing else: no plan meant no price, because a price was only ever COPIED from a
+        # plan. The sale was recorded at zero and the ad's own page read "Contract value
+        # Rs.0 -- Unpaid", with no field anywhere to correct it.
+        db = database.SessionLocal()
+        custom_content = models.Content(
+            organization_id=org_id, name="Custom Deal", type="image",
+            file_url="s3://x/custom.png", status="ready",
+        )
+        db.add(custom_content)
+        db.commit()
+        custom_id = custom_content.id
+        db.close()
+
+        sold_custom = client.put(f"/api/content/{custom_id}/client-ad", headers=headers, json={
+            "client_name": "Moolans Textiles",
+            "price_paise": 4_000_000,
+            "screen_ids": [screens["airport"]],
+        })
+        check(sold_custom.status_code == 200, f"custom sale failed: {sold_custom.text}")
+
+        db = database.SessionLocal()
+        custom = db.query(models.AdPlacement).filter(
+            models.AdPlacement.content_id == custom_id).one()
+        check(custom.price_paise == 4_000_000,
+              f"a booking sold on no plan is billed {custom.price_paise}, expected "
+              "4000000 -- the agreed figure was thrown away and the sale recorded free")
+        check(custom.plan_id is None, "a custom sale was silently attached to a plan")
+        db.close()
+        ok("a booking sold on no plan keeps the price the operator agreed")
+
+        # The plan is still the default when no figure is typed, so selling a package is
+        # unchanged -- the new field adds a way to state a price, it does not require one.
+        db = database.SessionLocal()
+        package_content = models.Content(
+            organization_id=org_id, name="Package Deal", type="image",
+            file_url="s3://x/package.png", status="ready",
+        )
+        db.add(package_content)
+        db.commit()
+        package_id = package_content.id
+        db.close()
+
+        client.put(f"/api/content/{package_id}/client-ad", headers=headers, json={
+            "client_name": "Package Buyer",
+            "plan_id": plan_id,
+            "screen_ids": [screens["mall"]],
+        })
+        db = database.SessionLocal()
+        from_plan = db.query(models.AdPlacement).filter(
+            models.AdPlacement.content_id == package_id).one()
+        check(from_plan.price_paise == 2_500_000,
+              f"a plan sale is billed {from_plan.price_paise}, expected the plan's 2500000")
+        db.close()
+        ok("a plan still fills the price in when the operator types none")
+
+        # The guard that makes the field safe. An ordinary edit -- a corrected name, a phone
+        # number -- sends no price, and the agreed figure has to survive it. Without this,
+        # an editable price is just the silent rebill the plan-copy rule already forbids.
+        client.put(f"/api/content/{custom_id}/client-ad", headers=headers, json={
+            "client_name": "Moolans Textiles Pvt Ltd",
+            "screen_ids": [screens["airport"]],
+        })
+        db = database.SessionLocal()
+        untouched = db.query(models.AdPlacement).filter(
+            models.AdPlacement.content_id == custom_id).one()
+        check(untouched.price_paise == 4_000_000,
+              f"renaming the client rebilled the booking to {untouched.price_paise}")
+        db.close()
+
+        client.put(f"/api/content/{custom_id}/client-ad", headers=headers, json={
+            "client_name": "Moolans Textiles Pvt Ltd",
+            "price_paise": 3_500_000,
+            "screen_ids": [screens["airport"]],
+        })
+        db = database.SessionLocal()
+        recorrected = db.query(models.AdPlacement).filter(
+            models.AdPlacement.content_id == custom_id).one()
+        check(recorrected.price_paise == 3_500_000,
+              f"an explicitly corrected price did not stick: {recorrected.price_paise}")
+        db.close()
+        ok("only an explicit figure changes a price; an ordinary edit leaves it alone")
+
+        # 8. Going custom is what lifts the location cap, and the cap is real until it is.
+        # Both halves matter together: a third screen must be refused while the booking is
+        # on a two-location plan, and allowed the moment it is moved off one. Checking only
+        # the second would pass just as well if the cap had been switched off altogether.
+        #
+        # Its own asset, because `content_id` above now carries more than one booking and
+        # the editor always edits the latest.
+        db = database.SessionLocal()
+        freed_content = models.Content(
+            organization_id=org_id, name="Outgrew The Plan", type="image",
+            file_url="s3://x/outgrew.png", status="ready",
+        )
+        db.add(freed_content)
+        db.commit()
+        freed_id = freed_content.id
+        db.close()
+
+        # Sold on the plan, filling both of its two locations.
+        on_plan = client.put(f"/api/content/{freed_id}/client-ad", headers=headers, json={
+            "client_name": "Outgrew Ltd",
+            "plan_id": plan_id,
+            "screen_ids": [screens["mall"], screens["shop"]],
+        })
+        check(on_plan.status_code == 200, f"plan sale failed: {on_plan.text}")
+
+        # A third screen while still ON the plan is a real breach and must stay refused --
+        # otherwise the check below proves only that the cap was switched off.
+        breach = client.put(f"/api/content/{freed_id}/client-ad", headers=headers, json={
+            "client_name": "Outgrew Ltd",
+            "plan_id": plan_id,
+            "screen_ids": [screens["mall"], screens["shop"], screens["airport"]],
+        })
+        check(breach.status_code == 409,
+              f"a third screen on a two-location plan was allowed: {breach.status_code}")
+
+        # The same third screen, off the plan and on an agreed figure, is the sale the
+        # operator is actually making.
+        off_plan = client.put(f"/api/content/{freed_id}/client-ad", headers=headers, json={
+            "client_name": "Outgrew Ltd",
+            "plan_id": None,
+            "price_paise": 6_000_000,
+            "screen_ids": [screens["mall"], screens["shop"], screens["airport"]],
+        })
+        check(off_plan.status_code == 200,
+              f"going custom was refused by the cap of the plan it left: {off_plan.text}")
+
+        db = database.SessionLocal()
+        freed = db.query(models.AdPlacement).filter(
+            models.AdPlacement.content_id == freed_id).order_by(
+            models.AdPlacement.id.desc()).first()
+        reached = {t.screen_id for t in freed.targets if t.screen_id}
+        check(freed.plan_id is None, "the plan was not cleared")
+        check(freed.price_paise == 6_000_000,
+              f"the freed booking is billed {freed.price_paise}, expected 6000000")
+        check(len(reached) == 3,
+              f"the custom booking reaches {len(reached)} screens, expected all 3")
+        db.close()
+        ok("a booking taken off a plan is no longer bound by that plan's location cap")
+
     finally:
         client.__exit__(None, None, None)
 

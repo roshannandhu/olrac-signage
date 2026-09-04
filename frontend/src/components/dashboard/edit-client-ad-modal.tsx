@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Building2, Check, Mail, Phone, Tag, X } from 'lucide-react'
+import { Building2, Check, IndianRupee, Mail, Phone, Tag, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { rupees } from '@/lib/format'
 import { invalidateBookingViews } from '@/lib/query-keys'
@@ -40,6 +40,10 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
   const [clientEmail, setClientEmail] = useState('')
   const [clientPhone, setClientPhone] = useState('')
   const [planId, setPlanId] = useState<number | null>(null)
+  // Rupees as typed, converted to paise on the wire. A string rather than a number so the
+  // box can be EMPTY -- which is not the same as zero, and zero is a real price a booking
+  // can legitimately carry (a make-good, a bonus run).
+  const [price, setPrice] = useState('')
   const [selectedScreenIds, setSelectedScreenIds] = useState<number[]>([])
   const [notes, setNotes] = useState('')
   // Per-location run lengths, keyed by screen id.
@@ -81,6 +85,14 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
       setClientEmail(contentItem.client_email || '')
       setClientPhone(contentItem.client_phone || '')
       setPlanId(contentItem.plan_id || null)
+      // What this booking is actually billed, which for a custom sale is the only place
+      // the figure exists. Blank on an advert with no booking yet, so picking a plan can
+      // fill it without overwriting anything.
+      setPrice(
+        contentItem.placement_price_paise != null
+          ? String(contentItem.placement_price_paise / 100)
+          : '',
+      )
       // Existing targets win; the default only fills an empty selection.
       const existing = contentItem.screen_ids || []
       setSelectedScreenIds(existing.length ? existing : (defaultScreenIds || []))
@@ -127,6 +139,9 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
         client_email: clientEmail.trim() || undefined,
         client_phone: clientPhone.trim() || undefined,
         plan_id: planId,
+        // Only when a figure was typed. Sending null leaves the agreed price alone, so an
+        // edit to a phone number cannot restate what a client owes.
+        price_paise: price.trim() === '' ? undefined : Math.round(Number(price) * 100),
         screen_ids: selectedScreenIds,
     // Only the selected screens, and only when the operator asked for per-location
     // lengths. Turning the toggle off is a deliberate "make this one uniform window",
@@ -331,13 +346,40 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Not every client buys a package. Without this tile a plan could be picked
+                  but never un-picked, so a booking sold on an agreed figure had no way to
+                  be recorded as one -- and a new advert left on no plan was created at zero
+                  with no field anywhere to say otherwise. */}
+              <button
+                type="button"
+                onClick={() => setPlanId(null)}
+                className={`text-left p-3 rounded-xl border transition-all ${
+                  planId === null
+                    ? 'border-primary bg-primary/10 shadow-sm'
+                    : 'border-border/60 hover:border-border hover:bg-muted/30'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-xs text-foreground">Custom — no package</span>
+                  <span className="text-xs font-bold text-primary">You set the price</span>
+                </div>
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  No location cap · set the run length per screen below
+                </div>
+              </button>
               {plans.map((p) => {
                 const isSelected = planId === p.id
                 return (
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => setPlanId(p.id)}
+                    onClick={() => {
+                      setPlanId(p.id)
+                      // Fills the price only when nothing is there. Overwriting would
+                      // restate a figure already agreed with the client -- the same
+                      // silent rebill the API refuses to do when a plan is repriced.
+                      setPrice((current) => (current.trim() === '' ? String(p.price_paise / 100) : current))
+                    }}
                     className={`text-left p-3 rounded-xl border transition-all ${
                       isSelected
                         ? 'border-primary bg-primary/10 shadow-sm'
@@ -356,6 +398,33 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
                   </button>
                 )
               })}
+            </div>
+
+            {/* The figure the client is actually billed, whichever tile is selected. A plan
+                fills it in as a starting point; it stays editable because a negotiated
+                price and a discount are both ordinary, and neither was expressible. */}
+            <div className="space-y-1.5 pt-1">
+              <Label htmlFor="ad-price" className="text-xs font-medium">
+                Contract price (₹) {planId === null && <span className="text-rose-500">*</span>}
+              </Label>
+              <div className="relative">
+                <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                <Input
+                  id="ad-price"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder={selectedPlan ? String(selectedPlan.price_paise / 100) : '25000'}
+                  className="pl-9 text-sm bg-background"
+                />
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                {planId === null
+                  ? 'No package selected, so this is the whole of what the client is billed.'
+                  : `Pre-filled from ${selectedPlan?.name || 'the plan'}. Change it to bill something else.`}
+              </p>
             </div>
           </div>
 
@@ -486,6 +555,8 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
               || updateMutation.isPending
               || (maxAllowedScreens !== null && selectedScreenIds.length > maxAllowedScreens)
               || (customDurations && selectedScreenIds.some((id) => !screenDays[id]))
+              // No package AND no figure is exactly how a sale ended up recorded as free.
+              || (planId === null && price.trim() === '')
             }
             onClick={() => updateMutation.mutate()}
             className="font-semibold shadow-md"

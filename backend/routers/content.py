@@ -463,7 +463,13 @@ def update_content_client_ad(
         ensure_ad_slot_quota(scope)
         now = models.utcnow()
         duration_days = plan.duration_days if plan else 30
-        price_paise = plan.price_paise if plan else 0
+        # The operator's figure first, the plan's as the default. A booking sold on no plan
+        # used to be created at zero with no way to say otherwise, so every custom sale --
+        # the client who wants a negotiated price rather than a package -- was recorded as
+        # free and read as free on the ad's own page.
+        price_paise = payload.price_paise if payload.price_paise is not None else (
+            plan.price_paise if plan else 0
+        )
         placement = models.AdPlacement(
             organization_id=scope.organization_id,
             content_id=content.id,
@@ -491,6 +497,12 @@ def update_content_client_ad(
             # never rebills a campaign already sold on it. Reassigning it on every edit
             # broke that through this door: renaming a client, or correcting a phone
             # number, silently rebilled the booking at today's list price.
+        # An operator typing a figure is not that. It is the same edit PUT /placements/{id}
+        # has always allowed, and it is the only way to correct a price -- or to set one at
+        # all on a booking sold without a package. Null means "leave it", so the ordinary
+        # edit still cannot touch it.
+        if payload.price_paise is not None:
+            placement.price_paise = payload.price_paise
         if payload.notes is not None:
             placement.notes = notes
 
@@ -503,7 +515,15 @@ def update_content_client_ad(
         kept_group_screens = _screens_for_refs(
             scope, [t for t in placement.targets if t.group_id]
         )
-        ensure_plan_locations(scope, plan or placement.plan, kept_group_screens, target_screen_ids)
+        # The plan this edit puts the booking ON, which for an explicit null is no plan at
+        # all. Read off the payload rather than as `plan or placement.plan`: that spelling
+        # gives the right answer only because placement.plan_id was set to None a few lines
+        # up and SQLAlchemy resolves the relationship from the pending value. Touch .plan
+        # anywhere above this and the fallback starts returning the plan being ABANDONED,
+        # which would refuse a booking moving off a package using the cap of the package it
+        # just left. Not worth leaving load order in charge of a quota.
+        binding_plan = plan if "plan_id" in payload.model_fields_set else placement.plan
+        ensure_plan_locations(scope, binding_plan, kept_group_screens, target_screen_ids)
 
         # Remove targets not in target_screen_ids
         for target in list(placement.targets):

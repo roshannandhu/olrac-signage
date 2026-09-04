@@ -265,6 +265,9 @@ export const api = {
       client_email?: string
       client_phone?: string
       plan_id?: number | null
+      // Omitted leaves the agreed price alone; sent, it IS the agreed price. A booking on
+      // no plan has no other source for one.
+      price_paise?: number
       screen_ids?: number[]
       // Keyed by screen id. {} clears a bespoke booking back to one uniform window;
       // omitting it leaves the existing lengths alone.

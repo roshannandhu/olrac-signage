@@ -33,7 +33,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTrigger } from '@/components/ui/tabs'
 import { api, resolveMediaUrl } from '@/lib/api'
-import type { ContentItem, Placement } from '@/lib/types'
+import type { Placement } from '@/lib/types'
 import { bookingState } from '@/lib/format'
 
 const asDate = (iso: string) =>
@@ -44,7 +44,15 @@ export default function CampaignsPage() {
   const [filterState, setFilterState] = useState<'all' | 'running' | 'scheduled' | 'ended'>('all')
   const [search, setSearch] = useState('')
   const [selectedPlacementForEmail, setSelectedPlacementForEmail] = useState<Placement | null>(null)
-  const [editingContentItem, setEditingContentItem] = useState<ContentItem | null>(null)
+  const [editingContentId, setEditingContentId] = useState<number | null>(null)
+
+  // One user-initiated fetch when the editor opens. The modal renders nothing while
+  // contentItem is null, so this needs no loading branch of its own.
+  const editingContentQuery = useQuery({
+    queryKey: ['content', editingContentId],
+    queryFn: () => api.getContentItem(editingContentId as number),
+    enabled: editingContentId !== null,
+  })
   const [busyReportId, setBusyReportId] = useState<number | null>(null)
 
   const placementsQuery = useQuery({
@@ -349,26 +357,7 @@ export default function CampaignsPage() {
                           variant="outline"
                           size="sm"
                           onClick={() =>
-                            setEditingContentItem({
-                              id: placement.content_id,
-                              name: placement.creative_name || `Asset #${placement.content_id}`,
-                              type: 'image',
-                              file_url: '',
-                              thumbnail: placement.creative_thumbnail_url || null,
-                              tags: null,
-                              uploaded_at: placement.created_at || new Date().toISOString(),
-                              file_size_bytes: 0,
-                              expires_at: null,
-                              status: 'ready',
-                              failed_reason: null,
-                              client_id: placement.client?.id,
-                              client_name: clientName,
-                              client_email: placement.client?.email,
-                              client_phone: placement.client?.phone,
-                              plan_id: placement.plan?.id,
-                              screen_ids: placement.targets.map((t) => t.screen_id).filter(Boolean) as number[],
-                              placement_notes: placement.notes,
-                            })
+                            setEditingContentId(placement.content_id)
                           }
                           title="Edit Client & Ad Details"
                           className="h-8 px-2 text-xs text-primary"
@@ -476,11 +465,11 @@ export default function CampaignsPage() {
 
       {/* Unified Edit Client & Ad Details Modal */}
       <EditClientAdModal
-        open={Boolean(editingContentItem)}
+        open={editingContentId !== null}
         onOpenChange={(open) => {
-          if (!open) setEditingContentItem(null)
+          if (!open) setEditingContentId(null)
         }}
-        contentItem={editingContentItem}
+        contentItem={editingContentQuery.data ?? null}
       />
     </div>
   )

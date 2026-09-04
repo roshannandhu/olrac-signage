@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { ArrowUpCircle, CalendarRange, FileDown, IndianRupee, Layers3, Mail, MonitorPlay, MoreHorizontal, Plus, Receipt, Share2, Trash2, X } from 'lucide-react'
 import { EmptyState } from '@/components/dashboard/empty-state'
+import { ErrorState } from '@/components/dashboard/error-state'
 import { EmailReportModal } from '@/components/dashboard/email-report-modal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -18,9 +19,8 @@ import { api } from '@/lib/api'
 import { canEditTenantContent } from '@/lib/roles'
 import { useAuthStore } from '@/lib/store'
 import type { PaymentMethod, Placement, PlacementTarget, PlanOption, Screen, ScreenGroup } from '@/lib/types'
-import { bookingState, rupees } from '@/lib/format'
-
-const asDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+import { addDays, asDate, bookingState, dateInput, rupees } from '@/lib/format'
+import { invalidateBookingViews } from '@/lib/query-keys'
 
 /**
  * Selling this advert: who bought it, for how long, and in which places.
@@ -82,23 +82,15 @@ export function AdBookings({ contentId }: { contentId: number }) {
   const [price, setPrice] = useState('')
   // Lazy initialisers: reading the clock during render is impure and would drift on
   // every re-render.
-  const [startsAt, setStartsAt] = useState(() => new Date().toISOString().slice(0, 10))
-  const [endsAt, setEndsAt] = useState(() => new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10))
+  const [startsAt, setStartsAt] = useState(() => dateInput(new Date()))
+  const [endsAt, setEndsAt] = useState(() => dateInput(Date.now() + 30 * 864e5))
   const [picked, setPicked] = useState<string[]>([])
 
   const [addTo, setAddTo] = useState<Placement | null>(null)
   const [splitting, setSplitting] = useState<{ placement: Placement; target: PlacementTarget } | null>(null)
   const [excluded, setExcluded] = useState<number[]>([])
 
-  const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['placements', contentId] })
-    // The campaigns page reads this key. Without it, marking a booking paid here left
-    // that page showing "Payment pending" until it was reloaded by hand.
-    queryClient.invalidateQueries({ queryKey: ['all-placements'] })
-    queryClient.invalidateQueries({ queryKey: ['playlists'] })
-    queryClient.invalidateQueries({ queryKey: ['screens'] })
-    queryClient.invalidateQueries({ queryKey: ['groups'] })
-  }
+  const refresh = () => invalidateBookingViews(queryClient)
   const fail = (error: Error) => toast.error(error.message)
 
   const [extending, setExtending] = useState<Placement | null>(null)
@@ -148,7 +140,7 @@ export function AdBookings({ contentId }: { contentId: number }) {
     setPayAmount(String(((existing?.amount_paise ?? placement.total_price_paise ?? placement.price_paise) || 0) / 100))
     setPayMethod(existing?.method ?? 'upi')
     setPayReference(existing?.reference ?? '')
-    setPayDate((existing?.paid_at ?? new Date().toISOString()).slice(0, 10))
+    setPayDate(dateInput(existing?.paid_at ?? new Date()))
   }
 
   const savePayment = useMutation({
@@ -174,7 +166,7 @@ export function AdBookings({ contentId }: { contentId: number }) {
     // is one click and a price. extended_from defaults server side to the same point,
     // which is what stops an unpaid gap opening mid-campaign.
     const from = Date.parse(placement.effective_ends_at || placement.ends_at)
-    setExtendTo(new Date(from + 15 * 864e5).toISOString().slice(0, 10))
+    setExtendTo(dateInput(from + 15 * 864e5))
     setExtendPrice('')
   }
 
@@ -245,6 +237,19 @@ export function AdBookings({ contentId }: { contentId: number }) {
     ...groups.map((g) => ({ key: `g${g.id}`, label: g.name, kind: 'group' as const })),
     ...screens.map((s) => ({ key: `s${s.id}`, label: s.name || `Screen ${s.id}`, kind: 'screen' as const })),
   ]
+
+  // Ordered before the loading branch, and before the empty state below it, because
+  // `placements` falls back to [] on failure -- so a request that errored used to render
+  // "Not sold to anyone yet" for a paid, running campaign. An operator reading that would
+  // sell the slot a second time.
+  if (placementsQuery.isError) {
+    return (
+      <ErrorState
+        message="This advert's bookings could not be loaded."
+        onRetry={() => placementsQuery.refetch()}
+      />
+    )
+  }
 
   if (placementsQuery.isLoading) {
     return <div className="space-y-3">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}</div>
@@ -414,6 +419,12 @@ export function AdBookings({ contentId }: { contentId: number }) {
                       ? <Layers3 className="text-primary dark:text-brand size-3.5" aria-hidden="true" />
                       : <MonitorPlay className="text-primary dark:text-brand size-3.5" aria-hidden="true" />}
                     {target.name}
+                    {/* The location's own run length, when it was sold one. The API has
+                        always returned it; until the type carried it, a booking sold as
+                        "airport 50 days, mall 30" looked identical to a uniform one. */}
+                    {target.days != null && (
+                      <span className="text-muted-foreground text-xs tabular-nums">{target.days}d</span>
+                    )}
                     {!target.is_placed && <span className="text-muted-foreground text-xs">(removed by hand)</span>}
                     {canEdit && (
                       <button
@@ -472,11 +483,16 @@ export function AdBookings({ contentId }: { contentId: number }) {
                 className="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm"
                 value={planId}
                 onChange={(e) => {
+                  const previous = plans.find((candidate) => String(candidate.id) === planId)
                   setPlanId(e.target.value)
                   const plan = plans.find((candidate) => String(candidate.id) === e.target.value)
                   if (plan) {
-                    setPrice(String(plan.price_paise / 100))
-                    setEndsAt(new Date(Date.parse(`${startsAt}T00:00:00`) + plan.duration_days * 864e5).toISOString().slice(0, 10))
+                    // Only overwrite a price the operator has not set themselves. Picking a
+                    // plan to fill in the dates used to silently discard a negotiated figure
+                    // typed moments earlier.
+                    const untouched = !price.trim() || (previous && price === String(previous.price_paise / 100))
+                    if (untouched) setPrice(String(plan.price_paise / 100))
+                    setEndsAt(addDays(startsAt, plan.duration_days))
                   }
                 }}
               >
@@ -495,7 +511,19 @@ export function AdBookings({ contentId }: { contentId: number }) {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="from">From</Label>
-                <Input id="from" type="date" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} />
+                <Input
+                  id="from"
+                  type="date"
+                  value={startsAt}
+                  onChange={(e) => {
+                    setStartsAt(e.target.value)
+                    // The end date was derived from the old start. Leaving it put meant
+                    // picking a 30-day plan and then moving the start sold whatever was
+                    // left of the original window.
+                    const plan = plans.find((candidate) => String(candidate.id) === planId)
+                    if (plan) setEndsAt(addDays(e.target.value, plan.duration_days))
+                  }}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="to">Until</Label>
@@ -580,7 +608,22 @@ export function AdBookings({ contentId }: { contentId: number }) {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setExtending(null)}>Cancel</Button>
-            <Button onClick={() => extend.mutate()} disabled={extend.isPending || !extendTo}>Extend</Button>
+            <Button
+              onClick={() => extend.mutate()}
+              // An end before the current one is a 422 from the server, and a blank price
+              // booked a free extension without saying so. A typed 0 is still allowed --
+              // goodwill extensions are real, silent ones are not.
+              disabled={
+                extend.isPending
+                || !extendTo
+                || !extendPrice.trim()
+                || (extending != null
+                    && Date.parse(`${extendTo}T23:59:59`)
+                       <= Date.parse(extending.effective_ends_at || extending.ends_at))
+              }
+            >
+              Extend
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -636,7 +679,7 @@ export function AdBookings({ contentId }: { contentId: number }) {
           <DialogFooter showCloseButton>
             <Button
               variant="outline"
-              onClick={() => { removeTarget.mutate({ id: splitting!.placement.id, targetId: splitting!.target.id }); setSplitting(null) }}
+              onClick={() => { removeTarget.mutate({ id: splitting!.placement.id, targetId: splitting!.target.id }); setSplitting(null); setExcluded([]) }}
             >
               Remove from the whole group
             </Button>

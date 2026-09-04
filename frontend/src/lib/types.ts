@@ -45,7 +45,6 @@ export interface ContentItem {
   plan_id?: number | null
   plan_name?: string | null
   placement_id?: number | null
-  placement_status?: string | null
   placement_price_paise?: number | null
   placement_starts_at?: string | null
   placement_ends_at?: string | null
@@ -170,6 +169,8 @@ export interface Screen {
 export interface ScreenGroup {
   id: number
   name: string
+  parent_id: number | null
+  is_dynamic: boolean
   playlist_id: number | null
   created_at: string
   updated_at: string
@@ -333,6 +334,15 @@ export interface PlacementTarget {
   kind: 'screen' | 'group'
   /** False if the playlist item was deleted by hand — sold, but no longer on air there. */
   is_placed: boolean
+  /**
+   * This location's own window, when it was sold one. Null means it follows the booking.
+   *
+   * The API has always returned these; nothing read them, so "Airport TV — 50 days" beside
+   * a 30-day campaign was invisible everywhere except inside the edit modal.
+   */
+  starts_at: string | null
+  ends_at: string | null
+  days: number | null
 }
 
 /** What a tenant puts at the top of the report they hand their client. */
@@ -440,38 +450,6 @@ export interface PlanOption {
   extra_days: number
   /** Exactly one option carries this: the cheapest that fits the screens in use. */
   recommended: boolean
-}
-
-export interface BookingReportScreen {
-  screen_id: number
-  screen_name: string
-  location: string | null
-  latitude: number | null
-  longitude: number | null
-  online: boolean
-  last_seen: string | null
-  total_plays: number
-  completed_plays: number
-  /** The screen has not reported recently, so this figure may still rise. */
-  counts_may_be_incomplete: boolean
-}
-
-/** Proof of delivery for one booking: only its window, only its screens. */
-export interface BookingReport {
-  placement_id: number
-  advertiser: string
-  content_name: string
-  content_id: number
-  starts_at: string
-  ends_at: string
-  price_paise: number
-  is_paid: boolean
-  generated_at: string
-  totals: { total_plays: number; completed_plays: number; error_plays: number; success_percent: number }
-  per_screen: BookingReportScreen[]
-  per_location: { location: string; screens: number; total_plays: number }[]
-  daily: { date: string; total_plays: number }[]
-  stale_screens: string[]
 }
 
 export type AlertSeverity = 'critical' | 'warning'

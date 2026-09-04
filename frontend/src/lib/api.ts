@@ -1,5 +1,5 @@
 import { useAuthStore } from './store'
-import type { Package, PackageWrite, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, BookingReport, Placement, PaymentMethod, PlanOption, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
+import type { Package, PackageWrite, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, Placement, PaymentMethod, PlanOption, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
 
 const PROD_API_URL = 'https://olrac-signage-32lh.onrender.com'
 const configuredUrl = (process.env.NEXT_PUBLIC_API_URL || PROD_API_URL).replace(/\/$/, '')
@@ -207,6 +207,8 @@ export const api = {
   deleteGroup: (groupId: number) => fetchWithAuth<{ status: string }>(`/groups/${groupId}`, { method: 'DELETE' }),
 
   getContent: () => fetchWithAuth<ContentItem[]>('/content/'),
+
+  getContentItem: (contentId: number) => fetchWithAuth<ContentItem>(`/content/${contentId}`),
   getMediaReport: (contentId: number) => fetchWithAuth<MediaReport>(`/analytics/media/${contentId}`),
   // Uses XHR rather than fetch purely for upload progress: fetch cannot report it, and a
   // several-hundred-megabyte advert otherwise sits on "uploading" for minutes with no sign
@@ -284,8 +286,6 @@ export const api = {
   }) => fetchWithAuth<Record<string, unknown>>('/provisioning/qr', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
   }),
-
-  getBookingReport: (placementId: number) => fetchWithAuth<BookingReport>(`/placements/${placementId}/report`),
 
   // There used to be a `bookingReportPdfUrl` here, rendered straight into an <a href>.
   // That navigates without the Authorization header, so it 401'd every time -- the exact
@@ -393,7 +393,7 @@ export const api = {
     starts_at: string
     ends_at?: string
     notes?: string | null
-    targets: { screen_id?: number; group_id?: number }[]
+    targets: { screen_id?: number; group_id?: number; days?: number }[]
   }) => fetchWithAuth<Placement>('/placements/', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
   }),

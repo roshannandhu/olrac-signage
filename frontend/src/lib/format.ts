@@ -34,6 +34,40 @@ export function dateTimeLocal(value: string | null | undefined): string {
   return value ? value.slice(0, 16) : ''
 }
 
+/**
+ * A value for `<input type="date">`, in the operator's own timezone.
+ *
+ * `toISOString().slice(0, 10)` is the obvious way to write this and it is wrong: it takes
+ * the UTC date off an instant, while the input renders and the operator reads a LOCAL one.
+ * In IST that is a day out in two different ways -- `new Date()` before 05:30 gives
+ * yesterday, and adding a plan's duration to a local midnight lands the previous UTC day,
+ * so picking a 30-day plan sold 29 days. Every plan-based booking was short by one.
+ *
+ * `en-CA` is the locale whose short date format is already YYYY-MM-DD, so this needs no
+ * padding of its own.
+ */
+export function dateInput(value: Date | string | number): string {
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('en-CA')
+}
+
+/** Add whole days to a `<input type="date">` value, staying on local calendar days. */
+export function addDays(value: string, days: number): string {
+  const date = new Date(`${value}T00:00:00`)
+  if (Number.isNaN(date.getTime())) return value
+  date.setDate(date.getDate() + days)
+  return dateInput(date)
+}
+
+/** A stored instant as a readable day. Timestamps arrive tz-aware, so this is local. */
+export function asDate(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime())
+    ? '—'
+    : date.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
 export function expiryLabel(value: string | null): string | null {
   if (!value) return null
   const days = Math.ceil((new Date(value).getTime() - Date.now()) / 86_400_000)

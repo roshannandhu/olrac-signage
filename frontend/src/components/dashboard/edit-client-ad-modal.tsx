@@ -3,19 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import {
-  Building2,
-  Check,
-  ChevronsUpDown,
-  CreditCard,
-  Mail,
-  Monitor,
-  Phone,
-  Sparkles,
-  Tag,
-  X,
-} from 'lucide-react'
+import { Building2, Check, Mail, Phone, Tag, X } from 'lucide-react'
 import { api } from '@/lib/api'
+import { rupees } from '@/lib/format'
+import { invalidateBookingViews } from '@/lib/query-keys'
 import type { Client, ContentItem, Screen, TenantPlan } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -40,8 +31,6 @@ interface EditClientAdModalProps {
    */
   defaultScreenIds?: number[]
 }
-
-const formatRupees = (paise: number) => `₹${(paise / 100).toLocaleString('en-IN')}`
 
 export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScreenIds }: EditClientAdModalProps) {
   const queryClient = useQueryClient()
@@ -102,14 +91,25 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
       setCustomDurations(Object.keys(soldDays).length > 0)
       setNotes(contentItem.placement_notes || '')
     }
-  }, [contentItem, open, defaultScreenIds])
+    // Deliberately narrower than the values used. `contentItem` is a fresh object after
+    // every ['content'] refetch and `defaultScreenIds` a fresh array after every ['screens']
+    // one, so depending on them by identity re-seeded this form -- wiping whatever the
+    // operator was halfway through typing -- any time something else invalidated a query.
+    // Seeding is keyed on which asset is open, which is what actually decides it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, contentItem?.id, (defaultScreenIds || []).join(',')])
 
   // Selected plan metadata
   const selectedPlan = useMemo(() => {
     return plans.find((p) => p.id === planId) || null
   }, [plans, planId])
 
-  const maxAllowedScreens = selectedPlan ? selectedPlan.max_locations : screens.length || 1
+  // Null means "no cap", which is not the same as "capped at however many screens exist".
+  // A booking on a RETIRED plan also lands here, because getTenantPlans returns active
+  // plans only -- so the badge must not imply an allowance that was never sold.
+  const maxAllowedScreens = selectedPlan && selectedPlan.max_locations > 0
+    ? selectedPlan.max_locations
+    : null
 
   // Filter client suggestions
   const filteredClients = useMemo(() => {
@@ -139,17 +139,11 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
     },
     onSuccess: () => {
       toast.success('Ad and client details updated successfully')
-      queryClient.invalidateQueries({ queryKey: ['content'] })
-      queryClient.invalidateQueries({ queryKey: ['placements'] })
-      queryClient.invalidateQueries({ queryKey: ['campaigns'] })
-      queryClient.invalidateQueries({ queryKey: ['clients'] })
-      if (contentItem?.id) {
-        queryClient.invalidateQueries({ queryKey: ['content', contentItem.id] })
-      }
+      invalidateBookingViews(queryClient)
       onOpenChange(false)
     },
-    onError: (err: any) => {
-      toast.error(err?.message || 'Failed to update client & ad details')
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to update client & ad details')
     },
   })
 
@@ -158,7 +152,7 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
       if (prev.includes(screenId)) {
         return prev.filter((id) => id !== screenId)
       }
-      if (prev.length >= maxAllowedScreens) {
+      if (maxAllowedScreens !== null && prev.length >= maxAllowedScreens) {
         toast.error(`Your plan (${selectedPlan?.name || 'Selected'}) is capped at ${maxAllowedScreens} screen(s).`)
         return prev
       }
@@ -166,11 +160,17 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
     })
   }
 
+  /** Close the suggestion list when focus leaves the name field and the list together. */
+  const closeSuggestionsOnBlur = (event: React.FocusEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setShowClientSuggestions(false)
+    }
+  }
+
   const handleSelectClient = (c: Client) => {
     setClientName(c.name)
     if (c.email) setClientEmail(c.email)
     if (c.phone) setClientPhone(c.phone)
-    if (c.notes && !notes) setNotes(c.notes)
     setShowClientSuggestions(false)
   }
 
@@ -225,7 +225,7 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
 
             <div className="space-y-3">
               {/* Client Name with Auto-Complete */}
-              <div className="space-y-1.5 relative">
+              <div className="space-y-1.5 relative" onBlur={closeSuggestionsOnBlur}>
                 <Label htmlFor="client-name" className="text-xs font-medium">
                   Client / Brand Name <span className="text-rose-500">*</span>
                 </Label>
@@ -322,7 +322,7 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
               </Label>
               {selectedPlan && (
                 <Badge variant="outline" className="text-[11px] font-semibold text-emerald-500 border-emerald-500/30">
-                  {formatRupees(selectedPlan.price_paise)} • {selectedPlan.duration_days} Days
+                  {rupees(selectedPlan.price_paise)} • {selectedPlan.duration_days} Days
                 </Badge>
               )}
             </div>
@@ -343,7 +343,7 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-xs text-foreground">{p.name}</span>
-                      <span className="text-xs font-bold text-primary">{formatRupees(p.price_paise)}</span>
+                      <span className="text-xs font-bold text-primary">{rupees(p.price_paise)}</span>
                     </div>
                     <div className="flex items-center gap-2 mt-1 text-[11px] text-muted-foreground">
                       <span>{p.duration_days} days</span>
@@ -376,10 +376,12 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
                   Custom days per location
                 </button>
                 <Badge
-                  variant={selectedScreenIds.length > maxAllowedScreens ? 'danger' : 'outline'}
+                  variant={maxAllowedScreens !== null && selectedScreenIds.length > maxAllowedScreens ? 'danger' : 'outline'}
                   className="text-[11px] font-semibold"
                 >
-                  {selectedScreenIds.length} of {maxAllowedScreens} screens assigned
+                  {maxAllowedScreens !== null
+                    ? `${selectedScreenIds.length} of ${maxAllowedScreens} screens assigned`
+                    : `${selectedScreenIds.length} screen${selectedScreenIds.length === 1 ? '' : 's'} assigned`}
                 </Badge>
               </div>
             </div>
@@ -479,7 +481,8 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
             disabled={
               !clientName.trim()
               || updateMutation.isPending
-              || selectedScreenIds.length > maxAllowedScreens
+              || (maxAllowedScreens !== null && selectedScreenIds.length > maxAllowedScreens)
+              || (customDurations && selectedScreenIds.some((id) => !screenDays[id]))
             }
             onClick={() => updateMutation.mutate()}
             className="font-semibold shadow-md"

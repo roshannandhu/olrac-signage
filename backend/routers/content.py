@@ -103,6 +103,30 @@ def generate_video_thumbnail(video_path: str, stem: str, prefix: str) -> str | N
         return None
 
 
+# Everything serialize_content walks below Content, in one batched query each.
+#
+# Content.ad_placements is already lazy="selectin", but that only batches the placements
+# themselves -- the client, the plan, the targets and each target's screen underneath them
+# are all default-lazy, and serialize_content reads every one of them for every row. So the
+# library listing cost 3 queries per ad-carrying asset plus one per target: a 100-advert
+# account with three screens each was roughly 600 round trips, and at ~114 ms to the
+# database's region that is over a minute for one page.
+#
+# This is the same defect the note on Content.playlist_items describes, one level deeper --
+# it came back when the 1:1 ad/client enrichment was added to serialize_content. Requested
+# at the call site rather than on the relationships because only the routes that actually
+# serialise Content pay for it; /sync embeds ContentResponse without ever reading the
+# placement block.
+CONTENT_LOADERS = (
+    selectinload(models.Content.playlist_items),
+    selectinload(models.Content.ad_placements).selectinload(models.AdPlacement.client),
+    selectinload(models.Content.ad_placements).selectinload(models.AdPlacement.plan),
+    selectinload(models.Content.ad_placements)
+    .selectinload(models.AdPlacement.targets)
+    .selectinload(models.AdPlacementTarget.screen),
+)
+
+
 def serialize_content(content: models.Content) -> schemas.ContentResponse:
     # ContentResponse.absolutise_urls already resolved file_url and thumbnail; doing it
     # again here was a no-op that made it look like there were two places media URLs got
@@ -128,7 +152,7 @@ def serialize_content(content: models.Content) -> schemas.ContentResponse:
 
         payload.placement_price_paise = latest.price_paise
         payload.placement_starts_at = latest.starts_at
-        payload.placement_ends_at = latest.effective_ends_at if hasattr(latest, "effective_ends_at") else latest.ends_at
+        payload.placement_ends_at = latest.effective_ends_at
         payload.placement_notes = latest.notes
 
         target_screens = []
@@ -328,11 +352,11 @@ def get_all_content(
     limit: int = Query(500, ge=1, le=2000),
     scope: TenantScope = Depends(get_tenant_scope),
 ):
-    # expires_at walks playlist_items, so without this the library page pays one extra
-    # query per row. Requested here rather than on the relationship because eager-loading
-    # it globally closes a cycle with PlaylistItem.content and slows the playlist editor
-    # instead -- see the note on the model.
-    query = scope.query(models.Content).options(selectinload(models.Content.playlist_items))
+    # expires_at walks playlist_items and the ad block walks the placement's client, plan
+    # and targets. Requested here rather than on the relationships because eager-loading
+    # playlist_items globally closes a cycle with PlaylistItem.content and slows the
+    # playlist editor instead -- see the note on the model, and CONTENT_LOADERS above.
+    query = scope.query(models.Content).options(*CONTENT_LOADERS)
     if search:
         query = query.filter(models.Content.name.ilike(f"%{search}%"))
     if tag:
@@ -374,6 +398,11 @@ def update_content_client_ad(
     if payload.name and payload.name.strip():
         content.name = payload.name.strip()
 
+    # Stripped once, here, because the create and update branches below had drifted: one
+    # stored the note as typed and the other trimmed it, so the same text round-tripped
+    # differently depending on whether the booking already existed.
+    notes = payload.notes.strip() if payload.notes else None
+
     # Find or create Client
     client_name = payload.client_name.strip()
     client = scope.db.query(models.Client).filter(
@@ -381,6 +410,11 @@ def update_content_client_ad(
         models.Client.name.ilike(client_name)
     ).first()
 
+    # `notes` is deliberately NOT written to the client on either branch. The field it
+    # comes from is labelled "Campaign Notes / Reference" in the editor and belongs to this
+    # booking; writing it here as well meant a per-campaign reference typed against one
+    # advert silently replaced the client's permanent note -- the one /dashboard/clients
+    # shows -- and then leaked into every later booking through the editor's prefill.
     if not client:
         import re, random
         base_code = re.sub(r'[^A-Za-z0-9]', '', client_name.upper())[:6] or "CLNT"
@@ -391,7 +425,6 @@ def update_content_client_ad(
             client_code=f"{base_code}{rand_suffix}",
             email=payload.client_email.strip() if payload.client_email else None,
             phone=payload.client_phone.strip() if payload.client_phone else None,
-            notes=payload.notes.strip() if payload.notes else None,
         )
         scope.db.add(client)
         scope.db.flush()
@@ -400,11 +433,22 @@ def update_content_client_ad(
             client.email = payload.client_email.strip() if payload.client_email else None
         if payload.client_phone is not None:
             client.phone = payload.client_phone.strip() if payload.client_phone else None
-        if payload.notes is not None:
-            client.notes = payload.notes.strip() if payload.notes else None
 
-    # Find existing placement or create new
-    from .placements import _place, _unplace, ensure_plan_locations
+    # Find existing placement or create new.
+    #
+    # Everything about a booking below this point is delegated to routers/placements. This
+    # used to be a second implementation of it, and every guard that surrounds _place and
+    # _unplace everywhere else had been missed here: the ad-slot quota, the plan's location
+    # cap counted properly, and above all the push of a changed window onto the playlist
+    # item the player actually reads.
+    from .placements import (
+        _place,
+        _screens_for_refs,
+        _unplace,
+        ensure_ad_slot_quota,
+        ensure_plan_locations,
+        sync_placement_window,
+    )
     from datetime import timedelta
     placement = scope.db.query(models.AdPlacement).filter(
         models.AdPlacement.organization_id == scope.organization_id,
@@ -414,6 +458,9 @@ def update_content_client_ad(
     plan = scope.get(models.TenantPlan, payload.plan_id) if payload.plan_id else None
 
     if not placement:
+        # The organisation's ad-slot limit binds on this path too. create_placement has
+        # always checked it; selling through this editor instead was the way round it.
+        ensure_ad_slot_quota(scope)
         now = models.utcnow()
         duration_days = plan.duration_days if plan else 30
         price_paise = plan.price_paise if plan else 0
@@ -426,15 +473,18 @@ def update_content_client_ad(
             price_paise=price_paise,
             starts_at=now,
             ends_at=now + timedelta(days=duration_days),
-            notes=payload.notes,
+            notes=notes,
         )
         scope.db.add(placement)
         scope.db.flush()
     else:
         placement.client_id = client.id
         placement.advertiser = client.name
-        if plan:
-            placement.plan_id = plan.id
+        # Tested with `in model_fields_set` rather than `if plan:` so that an explicit null
+        # clears the plan. Testing the resolved object meant a booking put on the wrong
+        # plan could be moved to another one but never taken off one.
+        if "plan_id" in payload.model_fields_set:
+            placement.plan_id = plan.id if plan else None
             # Price is NOT copied again here. It is copied once, when the booking is
             # created, and then it is the agreed figure -- routers/placements.py says so
             # where it first copies it, and test_tenant_plans pins that repricing a plan
@@ -442,24 +492,29 @@ def update_content_client_ad(
             # broke that through this door: renaming a client, or correcting a phone
             # number, silently rebilled the booking at today's list price.
         if payload.notes is not None:
-            placement.notes = payload.notes.strip() if payload.notes else None
+            placement.notes = notes
 
     # Update assigned screens if provided
     if payload.screen_ids is not None:
         target_screen_ids = set(payload.screen_ids)
-        # The plan's screen count binds on this path too. This editor reaches _place and
-        # _unplace directly, so it was the one way to put a booking on more screens than
-        # the plan it is billed on -- enforced everywhere else and not here.
-        ensure_plan_locations(scope, plan or placement.plan, set(), target_screen_ids)
-        current_targets = list(placement.targets)
-        
+        # The plan's screen count binds on this path too, and `existing` has to carry the
+        # screens reached through GROUP targets, which this edit leaves untouched. Passing
+        # an empty set counted a ten-screen group as nothing and let the cap be walked past.
+        kept_group_screens = _screens_for_refs(
+            scope, [t for t in placement.targets if t.group_id]
+        )
+        ensure_plan_locations(scope, plan or placement.plan, kept_group_screens, target_screen_ids)
+
         # Remove targets not in target_screen_ids
-        for target in current_targets:
+        for target in list(placement.targets):
             if target.screen_id and target.screen_id not in target_screen_ids:
                 # _unplace already deletes the target row; a second delete here was
                 # redundant.
                 _unplace(scope, target)
-        
+        # Those deletes have to land before placement.targets is read again below, or the
+        # re-window loop writes dates onto rows that are already on their way out.
+        scope.db.flush()
+
         # Re-price the run length of places that are already on the booking. Handling only
         # new targets would mean an operator could add a location with 30 days but never
         # afterwards correct it to 10, and the modal would show a number the campaign was
@@ -469,7 +524,11 @@ def update_content_client_ad(
                 continue
             days = (payload.screen_days or {}).get(target.screen_id)
             if days:
-                base = target.starts_at or target.assigned_at or placement.starts_at
+                # effective_starts_at is max(own-or-booking, assigned_at) -- the same rule
+                # _place applies to a new target, read off the model so there is one copy
+                # of it. Using assigned_at bare let a backdated booking start a screen
+                # before it had been sold.
+                base = target.effective_starts_at
                 target.starts_at = base
                 target.ends_at = base + timedelta(days=days)
             elif payload.screen_days is not None:
@@ -486,6 +545,14 @@ def update_content_client_ad(
                     days=(payload.screen_days or {}).get(s_id),
                 )
                 _place(scope, placement, ref)
+
+        # The whole point of the loop above. Target rows are the record of what was sold;
+        # PlaylistItem.start_at/end_at is what the player enforces, and nothing here copied
+        # one onto the other -- so correcting a location from 30 days to 10 updated the
+        # dashboard and the invoice while the TV kept playing it for 30. It also bumps each
+        # affected playlist, without which sync answers 204 and the screen never hears
+        # about the change at all.
+        sync_placement_window(scope, placement)
 
     scope.db.commit()
     scope.db.refresh(content)
@@ -524,3 +591,29 @@ def delete_content(
     scope.db.delete(content)
     scope.db.commit()
     return {"status": "ok"}
+
+
+# Declared last on purpose: FastAPI matches routes in declaration order, so a bare
+# "/{content_id}" placed above "/{content_id}/retry" or "/{content_id}/client-ad" would
+# swallow them.
+@router.get("/{content_id}", response_model=schemas.ContentResponse)
+def get_content_item(
+    content_id: int,
+    scope: TenantScope = Depends(get_tenant_scope),
+):
+    """One asset, for the pages that show a single advert.
+
+    The detail page used to fetch the whole library and pick its row out in the browser,
+    which meant an asset older than the listing's 500-row cap simply rendered "not found"
+    -- and every link to one from Campaigns or Invoices dead-ended. It also paid for
+    serialising 499 rows nobody was going to look at.
+    """
+    content = (
+        scope.query(models.Content)
+        .options(*CONTENT_LOADERS)
+        .filter(models.Content.id == content_id)
+        .first()
+    )
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+    return serialize_content(content)

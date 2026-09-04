@@ -4,7 +4,7 @@
 DATABASE_URL. Each test script points that variable at its own temporary
 database, but a single pytest process imports every module together, so the
 first import wins and the rest end up querying a database that has already been
-torn down â€” every script passes alone and the suite fails as a whole.
+torn down — every script passes alone and the suite fails as a whole.
 
 Collecting these files as subprocesses fixes it at the root: one process per
 script, one engine per database, and no import-order coupling. It also keeps
@@ -88,6 +88,8 @@ ISOLATED_SCRIPTS = {
     "test_per_location_ad_window.py",
     # The dashboard and the player must resolve the same playlist for a screen.
     "test_playlist_resolution_parity.py",
+    # The client-ad editor obeys the same booking rules as the placements routes.
+    "test_client_ad_editor.py",
 }
 
 # Pure-logic tests: no database, no import-time engine, safe to run in-process.

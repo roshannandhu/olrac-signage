@@ -39,12 +39,51 @@ def _playlist_for_target(scope: TenantScope, target: schemas.PlacementTargetRef)
             playlist = scope.get(models.Playlist, screen.playlist_id)
             if playlist:
                 return playlist
+
+        # The screen has no playlist of its OWN, but it may still be playing one it
+        # inherits from a group. Two things must not happen here, and both used to:
+        #
+        #   - writing the advert into the inherited playlist would put it on every other
+        #     screen in that group, which is not what was sold. The booking would report
+        #     one location while ten TVs ran it.
+        #   - giving the screen a fresh empty playlist, as this did, silently takes the
+        #     group's loop away from it -- the screen goes from playing the venue's
+        #     content to playing one advert and nothing else.
+        #
+        # So it gets its own playlist seeded with what it was already playing, and the
+        # advert lands on top.
+        #
+        # ponytail: a fork, not a link. Later edits to the group's loop no longer reach
+        # this screen -- which is what "this screen is booked separately" has to mean --
+        # but it is a real divergence and the screen page's "inherited from group" notice
+        # correctly stops showing.
+        inherited_id = screen.resolve_playlist_id()
         playlist = models.Playlist(
             organization_id=scope.organization_id,
             name=f"{screen.name or f'Screen {screen.id}'} loop",
         )
         scope.db.add(playlist)
         scope.db.flush()
+        if inherited_id:
+            inherited_items = (
+                scope.db.query(models.PlaylistItem)
+                .filter(models.PlaylistItem.playlist_id == inherited_id)
+                .order_by(models.PlaylistItem.order)
+                .all()
+            )
+            for source in inherited_items:
+                scope.db.add(models.PlaylistItem(
+                    playlist_id=playlist.id,
+                    content_id=source.content_id,
+                    duration=source.duration,
+                    order=source.order,
+                    start_at=source.start_at,
+                    end_at=source.end_at,
+                    transition=source.transition,
+                    transition_ms=source.transition_ms,
+                    rotation=source.rotation,
+                ))
+            scope.db.flush()
         screen.playlist_id = playlist.id
         screen.assignment_updated_at = models.utcnow()
         return playlist

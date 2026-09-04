@@ -1,7 +1,6 @@
 import re
 from datetime import datetime, time
-from typing import List, Literal, Optional
-
+from typing import Annotated, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 from .media_urls import resolve_media_url
@@ -368,7 +367,6 @@ class ContentResponse(ContentBase):
     plan_id: Optional[int] = None
     plan_name: Optional[str] = None
     placement_id: Optional[int] = None
-    placement_status: Optional[str] = None
     placement_price_paise: Optional[int] = None
     placement_starts_at: Optional[datetime] = None
     placement_ends_at: Optional[datetime] = None
@@ -401,7 +399,15 @@ class ContentUpdate(ContentBase):
 
 class ContentClientAdUpdate(BaseModel):
     name: Optional[str] = None
-    client_name: str
+    # Stripped before the length check, so a name of nothing but spaces is rejected rather
+    # than creating a client called "" with a generated code that matches nothing. The
+    # frontend disables Save on a blank name; anything reaching the API directly did not.
+    client_name: Annotated[str, Field(min_length=1)]
+
+    @field_validator("client_name", mode="before")
+    @classmethod
+    def _strip_client_name(cls, value):
+        return value.strip() if isinstance(value, str) else value
     client_email: Optional[str] = None
     client_phone: Optional[str] = None
     plan_id: Optional[int] = None
@@ -413,7 +419,10 @@ class ContentClientAdUpdate(BaseModel):
     # Keyed by id rather than positional against screen_ids because the two lists would
     # drift the first time either was reordered, and silently mis-assigning a client's
     # paid duration to the wrong location is not a failure anyone would notice.
-    screen_days: Optional[dict[int, int]] = None
+    # Bounded exactly like PlacementTargetRef.days. Unbounded here, the same number was
+    # refused when it created a target and accepted when it corrected one -- in the same
+    # request.
+    screen_days: Optional[dict[int, Annotated[int, Field(ge=1, le=3650)]]] = None
     notes: Optional[str] = None
 
 
@@ -582,8 +591,8 @@ class RegisterRequest(BaseModel):
 class RegisterResponse(BaseModel):
     """
     Deliberately narrow: /screens/register is unauthenticated, so it must not reuse
-    ScreenResponse. That schema carries tenant configuration â€” including
-    maintenance_pin â€” and anyone who knows a device_id can call this route.
+    ScreenResponse. That schema carries tenant configuration — including
+    maintenance_pin — and anyone who knows a device_id can call this route.
     Only what the TV needs to finish pairing goes here.
     """
 
@@ -1055,7 +1064,7 @@ class PlacementTargetResponse(BaseModel):
     # still recorded, it just is not on air there any more.
     is_placed: bool
     # This location's own window, when it was sold one. Null means it follows the booking.
-    # Reported so the dashboard can show "Airport TV â€” 50 days" beside a 30-day campaign
+    # Reported so the dashboard can show "Airport TV — 50 days" beside a 30-day campaign
     # rather than making the operator infer it from dates.
     starts_at: Optional[datetime] = None
     ends_at: Optional[datetime] = None

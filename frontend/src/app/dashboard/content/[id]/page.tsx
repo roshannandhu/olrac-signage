@@ -1,12 +1,13 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import {
   ArrowLeft,
+  BarChart3,
   Building2,
   CalendarRange,
   CheckCircle2,
@@ -29,7 +30,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsIndicator, TabsList, TabsPanel, TabsTrigger } from '@/components/ui/tabs'
 import { api } from '@/lib/api'
 import {
   asDate,
@@ -41,8 +41,81 @@ import {
   rupees,
 } from '@/lib/format'
 import { canEditTenantContent } from '@/lib/roles'
+import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store'
 import type { MediaPeriodStats, Playlist, Screen } from '@/lib/types'
+
+const SECTIONS = [
+  { id: 'booking', label: 'Booking' },
+  { id: 'locations', label: 'Locations' },
+  { id: 'performance', label: 'Performance' },
+  { id: 'technical', label: 'Technical' },
+] as const
+
+/**
+ * Jump links for the sections below, pinned under the app header.
+ *
+ * This page used to be four tabs. On a phone that was worse than no navigation at all:
+ * "Booking & billing" wrapped onto two lines and "Where it plays" onto three, so the strip
+ * became a ragged block of uneven labels -- and three quarters of the page was a click
+ * away. Everything is on one page now, and this only scrolls to it.
+ *
+ * `overflow-x-auto` with `whitespace-nowrap` rather than wrapping, because wrapping is the
+ * exact failure being fixed. The negative gutters let the bar span the full width of the
+ * page shell the way the app header above it does, and the background is opaque for the
+ * same reason that header's is -- content scrolling under a translucent bar is the one
+ * thing a section nav must never make hard to read.
+ */
+function SectionNav() {
+  const [active, setActive] = useState<string>(SECTIONS[0].id)
+
+  useEffect(() => {
+    const elements = SECTIONS
+      .map((section) => document.getElementById(section.id))
+      .filter((element): element is HTMLElement => element !== null)
+    if (!elements.length) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const onScreen = entries
+          .filter((entry) => entry.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+        if (onScreen[0]) setActive(onScreen[0].target.id)
+      },
+      // A band just below the two sticky bars. Without the large bottom inset the last
+      // section counts as current the moment any sliver of it appears, and the highlight
+      // jumps ahead of what is actually being read.
+      { rootMargin: '-140px 0px -55% 0px', threshold: 0 },
+    )
+    elements.forEach((element) => observer.observe(element))
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <nav
+      aria-label="Sections"
+      className="border-hairline bg-background sticky top-16 z-30 -mx-4 mb-6 border-b px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+    >
+      <div className="flex gap-1 overflow-x-auto py-2">
+        {SECTIONS.map((section) => (
+          <a
+            key={section.id}
+            href={`#${section.id}`}
+            aria-current={active === section.id ? 'location' : undefined}
+            className={cn(
+              'shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors',
+              active === section.id
+                ? 'bg-primary/10 text-primary dark:text-brand'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {section.label}
+          </a>
+        ))}
+      </div>
+    </nav>
+  )
+}
 
 function StatTile({ label, stats }: { label: string; stats: MediaPeriodStats }) {
   return (
@@ -183,7 +256,8 @@ export default function AdDetailPage() {
           value: String(booking.screens_used),
           note: booking.plan_max_locations > 0
             ? `of ${booking.plan_max_locations} on the ${booking.plan?.name || 'plan'}`
-            : 'No location cap on this plan',
+            // "on this plan" reads as nonsense on a booking sold without one.
+            : booking.plan ? 'No location cap on this plan' : 'Sold without a package',
         },
         {
           label: 'Plays',
@@ -233,7 +307,11 @@ export default function AdDetailPage() {
               <Badge variant="outline">
                 <Building2 className="size-3" aria-hidden="true" /> {item.client_name || 'Direct advertiser'}
               </Badge>
-              {item.plan_name && <Badge variant="secondary">{item.plan_name}</Badge>}
+              {item.plan_name
+                ? <Badge variant="secondary">{item.plan_name}</Badge>
+                // Sold on a negotiated price rather than a package. Rendering nothing
+                // here made a custom sale look identical to an advert nobody has bought.
+                : booking && <Badge variant="outline">Custom — no package</Badge>}
               {state && <Badge variant={state.tone}>{state.label}</Badge>}
               {item.status === 'ready' && <Badge variant="success"><CheckCircle2 className="size-3" aria-hidden="true" /> Ready to play</Badge>}
               {item.status === 'processing' && <Badge variant="warning">Still processing</Badge>}
@@ -272,21 +350,21 @@ export default function AdDetailPage() {
       </header>
 
       {booking ? (
-        <section aria-label="Booking summary" className="stagger mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <section aria-label="Booking summary" className="stagger mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
           {kpis.map(({ label, value, icon: Icon, note }, index) => (
             <Card
               key={label}
               style={{ '--i': index } as React.CSSProperties}
               className="lift ring-hairline bg-card border-0 py-0 shadow-[0_1px_2px_rgba(15,23,42,.04)] ring-1"
             >
-              <CardContent className="p-5">
+              <CardContent className="p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-muted-foreground text-sm font-medium">{label}</p>
-                  <span className="bg-primary/10 text-primary dark:text-brand grid size-9 shrink-0 place-items-center rounded-xl">
+                  <span className="bg-primary/10 text-primary dark:text-brand grid size-8 shrink-0 place-items-center rounded-lg sm:size-9 sm:rounded-xl">
                     <Icon className="size-4" aria-hidden="true" />
                   </span>
                 </div>
-                <p className="text-foreground mt-5 text-3xl font-semibold tracking-[-0.04em] tabular-nums">{value}</p>
+                <p className="text-foreground mt-4 text-2xl font-semibold tracking-[-0.04em] tabular-nums sm:mt-5 sm:text-3xl">{value}</p>
                 <p className="text-muted-foreground/70 mt-1 text-xs">{note}</p>
               </CardContent>
             </Card>
@@ -318,289 +396,289 @@ export default function AdDetailPage() {
         </div>
       )}
 
-      {/* Booking first: this is a sales product, and money is the first question. */}
-      <Tabs defaultValue="booking">
-        <TabsList>
-          <TabsTrigger value="booking">Booking &amp; billing</TabsTrigger>
-          <TabsTrigger value="performance">Performance</TabsTrigger>
-          <TabsTrigger value="places">Where it plays</TabsTrigger>
-          <TabsTrigger value="technical">Technical</TabsTrigger>
-          <TabsIndicator />
-        </TabsList>
+      <SectionNav />
 
-        <TabsPanel value="booking">
-          <AdBookings contentId={contentId} />
-        </TabsPanel>
+      <section id="booking" aria-labelledby="booking-title" className="mb-8 scroll-mt-32">
+        <h2 id="booking-title" className="text-foreground mb-4 flex items-center gap-2 text-lg font-semibold">
+          <Receipt className="text-primary dark:text-brand size-5" aria-hidden="true" /> Booking &amp; billing
+        </h2>
+        <AdBookings contentId={contentId} />
+      </section>
 
-        <TabsPanel value="performance">
-          {reportQuery.isError ? (
-            <ErrorState message="The playback report could not be loaded." onRetry={() => reportQuery.refetch()} />
-          ) : reportQuery.isLoading ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-24 rounded-xl" />)}</div>
-          ) : !report ? (
-            <ErrorState message="The playback report could not be loaded." onRetry={() => reportQuery.refetch()} />
-          ) : (
-            <div className="space-y-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-muted-foreground text-xs">Proof-of-play metrics auto-update in real time as screens report in.</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => reportQuery.refetch()}
-                  disabled={reportQuery.isFetching}
-                  className="bg-card h-8 text-xs"
-                >
-                  <RefreshCw data-icon="inline-start" className={reportQuery.isFetching ? 'animate-spin' : undefined} />
-                  Refresh
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <StatTile label="Today" stats={report.today} />
-                <StatTile label="This week" stats={report.week} />
-                <StatTile label="This month" stats={report.month} />
-                <StatTile label="Lifetime" stats={report.lifetime} />
-              </div>
-
-              <Card className="ring-hairline bg-card border-0 ring-1">
-                <CardContent className="p-5">
-                  <h2 className="text-foreground mb-4 font-semibold">Plays over the last 30 days</h2>
-                  {report.daily.length === 0 ? (
-                    <p className="text-muted-foreground py-10 text-center text-sm">
-                      No plays recorded yet. Figures appear once a screen reports playback.
-                    </p>
-                  ) : (
-                    <div className="h-64">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={report.daily}>
-                          <defs>
-                            <linearGradient id="plays" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.35} />
-                              <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                          <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="var(--color-muted-foreground)" />
-                          <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke="var(--color-muted-foreground)" />
-                          <Tooltip
-                            contentStyle={{
-                              background: 'var(--color-card)',
-                              border: '1px solid var(--color-border)',
-                              borderRadius: 12,
-                              color: 'var(--color-foreground)',
-                            }}
-                          />
-                          <Area type="monotone" dataKey="total_plays" name="Plays" stroke="var(--color-primary)" fill="url(#plays)" strokeWidth={2} />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </TabsPanel>
-
-        <TabsPanel value="places">
-          <div className="space-y-6">
-            {/* What each location was actually sold. The API has always returned a target's
-                own window; nothing read it, so a booking sold as "airport 50 days, mall 30"
-                was indistinguishable from a uniform one anywhere on this page. */}
-            <Card className="ring-hairline bg-card border-0 ring-1">
-              <CardContent className="p-5">
-                <h2 className="text-foreground mb-4 flex items-center gap-2 font-semibold">
-                  <CalendarRange className="text-primary dark:text-brand size-4" aria-hidden="true" /> Sold schedule per location
-                </h2>
-                {!booking?.targets.length ? (
-                  <p className="text-muted-foreground text-sm">
-                    This advert is not booked into any location yet.
-                  </p>
-                ) : (
-                  <div className="divide-hairline divide-y">
-                    {booking.targets.map((target) => (
-                      <div key={target.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                          <span className="bg-primary/10 text-primary dark:text-brand grid size-8 shrink-0 place-items-center rounded-lg">
-                            {target.kind === 'group'
-                              ? <Layers3 className="size-4" aria-hidden="true" />
-                              : <MonitorPlay className="size-4" aria-hidden="true" />}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-foreground truncate text-sm font-medium">{target.name}</p>
-                            <p className="text-muted-foreground text-xs">
-                              {target.starts_at && target.ends_at
-                                ? `${asDate(target.starts_at)} → ${asDate(target.ends_at)}`
-                                : 'Follows the booking window'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-2">
-                          {target.days != null && <Badge variant="secondary">{target.days} days</Badge>}
-                          {!target.is_placed && <Badge variant="warning">Removed by hand</Badge>}
+      <section id="locations" aria-labelledby="locations-title" className="mb-8 scroll-mt-32">
+        <h2 id="locations-title" className="text-foreground mb-4 flex items-center gap-2 text-lg font-semibold">
+          <MapPin className="text-primary dark:text-brand size-5" aria-hidden="true" /> Where it plays
+        </h2>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Card className="ring-hairline bg-card border-0 ring-1">
+            <CardContent className="p-5">
+              <h3 className="text-foreground mb-4 flex items-center gap-2 font-semibold">
+                <CalendarRange className="text-primary dark:text-brand size-4" aria-hidden="true" /> Sold schedule per location
+              </h3>
+              {!booking?.targets.length ? (
+                <p className="text-muted-foreground text-sm">
+                  This advert is not booked into any location yet.
+                </p>
+              ) : (
+                <div className="divide-hairline divide-y">
+                  {booking.targets.map((target) => (
+                    <div key={target.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                      <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                        <span className="bg-primary/10 text-primary dark:text-brand grid size-8 shrink-0 place-items-center rounded-lg">
+                          {target.kind === 'group'
+                            ? <Layers3 className="size-4" aria-hidden="true" />
+                            : <MonitorPlay className="size-4" aria-hidden="true" />}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-foreground truncate text-sm font-medium">{target.name}</p>
+                          <p className="text-muted-foreground text-xs">
+                            {target.starts_at && target.ends_at
+                              ? `${asDate(target.starts_at)} → ${asDate(target.ends_at)}`
+                              : 'Follows the booking window'}
+                          </p>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="ring-hairline bg-card border-0 ring-1">
-              <CardContent className="p-5">
-                <h2 className="text-foreground mb-4 flex items-center gap-2 font-semibold">
-                  <MapPin className="text-primary dark:text-brand size-4" aria-hidden="true" /> Where this ad is on screen
-                </h2>
-                <ScreenMap points={scheduledOn.map((screen) => {
-                  const played = report?.per_screen.find((row) => row.screen_id === screen.id)
-                  return {
-                    id: screen.id,
-                    name: screen.name || `Screen ${screen.id}`,
-                    location: screen.location,
-                    latitude: screen.latitude,
-                    longitude: screen.longitude,
-                    online: screen.status === 'online',
-                    detail: `${(played?.total_plays ?? 0).toLocaleString()} plays`,
-                  }
-                })} />
-              </CardContent>
-            </Card>
-
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <Card className="ring-hairline bg-card border-0 ring-1">
-                <CardContent className="p-5">
-                  <h2 className="text-foreground mb-4 flex items-center gap-2 font-semibold">
-                    <MapPin className="text-primary dark:text-brand size-4" aria-hidden="true" /> Plays by location
-                  </h2>
-                  {!report?.per_location.length ? (
-                    <p className="text-muted-foreground text-sm">
-                      No plays reported yet. Put screens into groups so results roll up per venue.
-                    </p>
-                  ) : (
-                    <div className="divide-hairline divide-y">
-                      {report.per_location.map((place) => (
-                        <div key={place.location} className="flex items-center justify-between gap-4 py-3">
-                          <div className="min-w-0">
-                            <p className="text-foreground truncate text-sm font-medium">{place.location}</p>
-                            <p className="text-muted-foreground text-xs">{place.screens} screen{place.screens === 1 ? '' : 's'}</p>
-                          </div>
-                          <span className="text-foreground shrink-0 font-mono text-sm tabular-nums">{place.total_plays.toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="ring-hairline bg-card border-0 ring-1">
-                <CardContent className="p-5">
-                  <h2 className="text-foreground mb-4 flex items-center gap-2 font-semibold">
-                    <MonitorPlay className="text-primary dark:text-brand size-4" aria-hidden="true" /> Screens running this ad
-                  </h2>
-                  {placementUnknown ? (
-                    <ErrorState
-                      message="The list of screens could not be loaded."
-                      onRetry={() => { playlistsQuery.refetch(); screensQuery.refetch() }}
-                    />
-                  ) : scheduledOn.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">
-                      Not scheduled anywhere. Add it to a playlist from a screen or group page.
-                    </p>
-                  ) : (
-                    <div className="divide-hairline divide-y">
-                      {scheduledOn.map((screen) => {
-                        const played = report?.per_screen.find((row) => row.screen_id === screen.id)
-                        return (
-                          <Link
-                            key={screen.id}
-                            href={`/dashboard/screens/${screen.id}`}
-                            className="hover:bg-muted/50 -mx-2 flex items-center justify-between gap-4 rounded-lg px-2 py-3"
-                          >
-                            <div className="min-w-0">
-                              <p className="text-foreground truncate text-sm font-medium">{screen.name || `Screen ${screen.id}`}</p>
-                              <p className="text-muted-foreground text-xs">
-                                {groupName(screen.group_id) || 'Not in a group'}
-                                {played?.last_played && ` • last played ${relativeTime(played.last_played)}`}
-                              </p>
-                            </div>
-                            <div className="flex shrink-0 items-center gap-3">
-                              <span className="text-foreground font-mono text-sm tabular-nums">
-                                {(played?.total_plays ?? 0).toLocaleString()}
-                              </span>
-                              <Badge variant={screen.status === 'online' ? 'success' : 'outline'}>
-                                {screen.status === 'online' ? 'Online' : 'Offline'}
-                              </Badge>
-                            </div>
-                          </Link>
-                        )
-                      })}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </TabsPanel>
-
-        <TabsPanel value="technical">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <Card className="ring-hairline bg-card border-0 ring-1">
-              <CardContent className="p-5">
-                <h2 className="text-foreground mb-4 font-semibold">Source file</h2>
-                <dl className="divide-hairline divide-y text-sm">
-                  {[
-                    ['Type', <span key="t" className="capitalize">{item.type}</span>],
-                    ['Duration', duration || '—'],
-                    ['Orientation', orientation || 'Unknown until transcoded'],
-                    ['File size', formatBytes(item.file_size_bytes)],
-                    ['Status', <span key="s" className="capitalize">{item.status}</span>],
-                    ['Uploaded', relativeTime(item.uploaded_at)],
-                  ].map(([label, value]) => (
-                    <div key={String(label)} className="flex justify-between gap-4 py-2.5">
-                      <dt className="text-muted-foreground">{label}</dt>
-                      <dd className="text-foreground font-medium">{value}</dd>
+                      <div className="flex shrink-0 items-center gap-2">
+                        {target.days != null && <Badge variant="secondary">{target.days} days</Badge>}
+                        {!target.is_placed && <Badge variant="warning">Removed by hand</Badge>}
+                      </div>
                     </div>
                   ))}
-                </dl>
-              </CardContent>
-            </Card>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="ring-hairline bg-card border-0 ring-1">
+            <CardContent className="p-5">
+              <h3 className="text-foreground mb-4 flex items-center gap-2 font-semibold">
+                <MonitorPlay className="text-primary dark:text-brand size-4" aria-hidden="true" /> Screens running this ad
+              </h3>
+              {placementUnknown ? (
+                <ErrorState
+                  message="The list of screens could not be loaded."
+                  onRetry={() => { playlistsQuery.refetch(); screensQuery.refetch() }}
+                />
+              ) : scheduledOn.length === 0 ? (
+                <p className="text-muted-foreground text-sm">
+                  Not scheduled anywhere. Add it to a playlist from a screen or group page.
+                </p>
+              ) : (
+                <div className="divide-hairline divide-y">
+                  {scheduledOn.map((screen) => {
+                    const played = report?.per_screen.find((row) => row.screen_id === screen.id)
+                    return (
+                      <Link
+                        key={screen.id}
+                        href={`/dashboard/screens/${screen.id}`}
+                        className="hover:bg-muted/50 -mx-2 flex items-center justify-between gap-4 rounded-lg px-2 py-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-foreground truncate text-sm font-medium">{screen.name || `Screen ${screen.id}`}</p>
+                          <p className="text-muted-foreground text-xs">
+                            {groupName(screen.group_id) || 'Not in a group'}
+                            {played?.last_played && ` • last played ${relativeTime(played.last_played)}`}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-3">
+                          <span className="text-foreground font-mono text-sm tabular-nums">
+                            {(played?.total_plays ?? 0).toLocaleString()}
+                          </span>
+                          <Badge variant={screen.status === 'online' ? 'success' : 'outline'}>
+                            {screen.status === 'online' ? 'Online' : 'Offline'}
+                          </Badge>
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+        <div className="mt-6">
+        <Card className="ring-hairline bg-card border-0 ring-1">
+          <CardContent className="p-5">
+            <h3 className="text-foreground mb-4 flex items-center gap-2 font-semibold">
+              <MapPin className="text-primary dark:text-brand size-4" aria-hidden="true" /> Where this ad is on screen
+            </h3>
+            <ScreenMap points={scheduledOn.map((screen) => {
+              const played = report?.per_screen.find((row) => row.screen_id === screen.id)
+              return {
+                id: screen.id,
+                name: screen.name || `Screen ${screen.id}`,
+                location: screen.location,
+                latitude: screen.latitude,
+                longitude: screen.longitude,
+                online: screen.status === 'online',
+                detail: `${(played?.total_plays ?? 0).toLocaleString()} plays`,
+              }
+            })} height={260} />
+          </CardContent>
+        </Card>
+        </div>
+      </section>
+
+      <section id="performance" aria-labelledby="performance-title" className="mb-8 scroll-mt-32">
+        <h2 id="performance-title" className="text-foreground mb-4 flex items-center gap-2 text-lg font-semibold">
+          <BarChart3 className="text-primary dark:text-brand size-5" aria-hidden="true" /> Performance
+        </h2>
+        {reportQuery.isError ? (
+          <ErrorState message="The playback report could not be loaded." onRetry={() => reportQuery.refetch()} />
+        ) : reportQuery.isLoading ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">{Array.from({ length: 4 }).map((_, index) => <Skeleton key={index} className="h-24 rounded-xl" />)}</div>
+        ) : !report ? (
+          <ErrorState message="The playback report could not be loaded." onRetry={() => reportQuery.refetch()} />
+        ) : (
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-muted-foreground text-xs">Proof-of-play metrics auto-update in real time as screens report in.</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => reportQuery.refetch()}
+                disabled={reportQuery.isFetching}
+                className="bg-card h-8 text-xs"
+              >
+                <RefreshCw data-icon="inline-start" className={reportQuery.isFetching ? 'animate-spin' : undefined} />
+                Refresh
+              </Button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+              <StatTile label="Today" stats={report.today} />
+              <StatTile label="This week" stats={report.week} />
+              <StatTile label="This month" stats={report.month} />
+              <StatTile label="Lifetime" stats={report.lifetime} />
+            </div>
 
             <Card className="ring-hairline bg-card border-0 ring-1">
               <CardContent className="p-5">
-                <h2 className="text-foreground mb-4 font-semibold">Transcoded renditions</h2>
-                {!item.renditions?.length ? (
-                  <p className="text-muted-foreground text-sm">
-                    {item.type === 'image'
-                      ? 'Images are sent to screens as uploaded — no transcoding needed.'
-                      : 'No renditions yet. They are produced when processing completes.'}
+                <h3 className="text-foreground mb-4 font-semibold">Plays over the last 30 days</h3>
+                {report.daily.length === 0 ? (
+                  <p className="text-muted-foreground py-10 text-center text-sm">
+                    No plays recorded yet. Figures appear once a screen reports playback.
                   </p>
                 ) : (
-                  <div className="divide-hairline divide-y text-sm">
-                    {[...item.renditions]
-                      .sort((a, b) => b.width * b.height - a.width * a.height)
-                      .map((rendition) => (
-                        <div key={rendition.id} className="flex items-center justify-between gap-4 py-2.5">
-                          <div className="min-w-0">
-                            <p className="text-foreground font-medium">{rendition.resolution}</p>
-                            <p className="text-muted-foreground text-xs">
-                              {rendition.width}×{rendition.height}
-                              {rendition.codec && ` • ${rendition.codec}`}
-                            </p>
-                          </div>
-                          <span className="text-muted-foreground shrink-0 font-mono text-xs tabular-nums">
-                            {formatBytes(rendition.file_size_bytes)}
-                          </span>
-                        </div>
-                      ))}
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={report.daily}>
+                        <defs>
+                          <linearGradient id="plays" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.35} />
+                            <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                        <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="var(--color-muted-foreground)" />
+                        <YAxis allowDecimals={false} tick={{ fontSize: 12 }} stroke="var(--color-muted-foreground)" />
+                        <Tooltip
+                          contentStyle={{
+                            background: 'var(--color-card)',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: 12,
+                            color: 'var(--color-foreground)',
+                          }}
+                        />
+                        <Area type="monotone" dataKey="total_plays" name="Plays" stroke="var(--color-primary)" fill="url(#plays)" strokeWidth={2} />
+                      </AreaChart>
+                    </ResponsiveContainer>
                   </div>
                 )}
-                <p className="text-muted-foreground/70 mt-4 text-xs">
-                  Each screen is sent the largest rendition its decoder, memory and panel can handle.
-                </p>
               </CardContent>
             </Card>
           </div>
-        </TabsPanel>
-      </Tabs>
+        )}
+        <div className="mt-6">
+        <Card className="ring-hairline bg-card border-0 ring-1">
+          <CardContent className="p-5">
+            <h3 className="text-foreground mb-4 flex items-center gap-2 font-semibold">
+              <MapPin className="text-primary dark:text-brand size-4" aria-hidden="true" /> Plays by location
+            </h3>
+            {!report?.per_location.length ? (
+              <p className="text-muted-foreground text-sm">
+                No plays reported yet. Put screens into groups so results roll up per venue.
+              </p>
+            ) : (
+              <div className="divide-hairline divide-y">
+                {report.per_location.map((place) => (
+                  <div key={place.location} className="flex items-center justify-between gap-4 py-3">
+                    <div className="min-w-0">
+                      <p className="text-foreground truncate text-sm font-medium">{place.location}</p>
+                      <p className="text-muted-foreground text-xs">{place.screens} screen{place.screens === 1 ? '' : 's'}</p>
+                    </div>
+                    <span className="text-foreground shrink-0 font-mono text-sm tabular-nums">{place.total_plays.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+        </div>
+      </section>
+
+      <section id="technical" aria-labelledby="technical-title" className="mb-8 scroll-mt-32">
+        <h2 id="technical-title" className="text-foreground mb-4 flex items-center gap-2 text-lg font-semibold">
+          <Film className="text-primary dark:text-brand size-5" aria-hidden="true" /> Technical
+        </h2>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Card className="ring-hairline bg-card border-0 ring-1">
+            <CardContent className="p-5">
+              <h3 className="text-foreground mb-4 font-semibold">Source file</h3>
+              <dl className="divide-hairline divide-y text-sm">
+                {[
+                  ['Type', <span key="t" className="capitalize">{item.type}</span>],
+                  ['Duration', duration || '—'],
+                  ['Orientation', orientation || 'Unknown until transcoded'],
+                  ['File size', formatBytes(item.file_size_bytes)],
+                  ['Status', <span key="s" className="capitalize">{item.status}</span>],
+                  ['Uploaded', relativeTime(item.uploaded_at)],
+                ].map(([label, value]) => (
+                  <div key={String(label)} className="flex justify-between gap-4 py-2.5">
+                    <dt className="text-muted-foreground">{label}</dt>
+                    <dd className="text-foreground font-medium">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </CardContent>
+          </Card>
+
+          <Card className="ring-hairline bg-card border-0 ring-1">
+            <CardContent className="p-5">
+              <h3 className="text-foreground mb-4 font-semibold">Transcoded renditions</h3>
+              {!item.renditions?.length ? (
+                <p className="text-muted-foreground text-sm">
+                  {item.type === 'image'
+                    ? 'Images are sent to screens as uploaded — no transcoding needed.'
+                    : 'No renditions yet. They are produced when processing completes.'}
+                </p>
+              ) : (
+                <div className="divide-hairline divide-y text-sm">
+                  {[...item.renditions]
+                    .sort((a, b) => b.width * b.height - a.width * a.height)
+                    .map((rendition) => (
+                      <div key={rendition.id} className="flex items-center justify-between gap-4 py-2.5">
+                        <div className="min-w-0">
+                          <p className="text-foreground font-medium">{rendition.resolution}</p>
+                          <p className="text-muted-foreground text-xs">
+                            {rendition.width}×{rendition.height}
+                            {rendition.codec && ` • ${rendition.codec}`}
+                          </p>
+                        </div>
+                        <span className="text-muted-foreground shrink-0 font-mono text-xs tabular-nums">
+                          {formatBytes(rendition.file_size_bytes)}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              )}
+              <p className="text-muted-foreground/70 mt-4 text-xs">
+                Each screen is sent the largest rendition its decoder, memory and panel can handle.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </section>
 
       {canEdit && (
         <EditClientAdModal open={editModalOpen} onOpenChange={setEditModalOpen} contentItem={item} />

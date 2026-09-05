@@ -522,6 +522,145 @@ def run() -> None:
         db.close()
         ok("a booking taken off a plan is no longer bound by that plan's location cap")
 
+        # 9. A custom sale states its own LENGTH, not just its own price. The editor had a
+        # price box and no duration box, so `duration_days = plan.duration_days if plan
+        # else 30` decided it: every custom booking was 30 days whatever was agreed, and the
+        # only way to say otherwise was to give each screen its own window one at a time --
+        # which is why the form ended up with two different "custom" controls.
+        db = database.SessionLocal()
+        length_content = models.Content(
+            organization_id=org_id, name="Ninety Day Deal", type="image",
+            file_url="s3://x/ninety.png", status="ready",
+        )
+        db.add(length_content)
+        db.commit()
+        length_id = length_content.id
+        db.close()
+
+        sold_long = client.put(f"/api/content/{length_id}/client-ad", headers=headers, json={
+            "client_name": "Ninety Days Ltd",
+            "price_paise": 9_000_000,
+            "duration_days": 90,
+            "screen_ids": [screens["airport"]],
+        })
+        check(sold_long.status_code == 200, f"custom-length sale failed: {sold_long.text}")
+
+        db = database.SessionLocal()
+        long_booking = db.query(models.AdPlacement).filter(
+            models.AdPlacement.content_id == length_id).order_by(
+            models.AdPlacement.id.desc()).first()
+        sold_days = days_between(long_booking.starts_at, long_booking.ends_at)
+        check(sold_days == 90,
+              f"a 90-day custom sale was booked for {sold_days} days")
+        # And the TV has to be told, or the booking says 90 while the screen stops at 30.
+        airport_item = db.query(models.PlaylistItem).filter(
+            models.PlaylistItem.id == next(
+                t.playlist_item_id for t in long_booking.targets
+                if t.screen_id == screens["airport"])).one()
+        played = days_between(airport_item.start_at, airport_item.end_at)
+        check(played == 90,
+              f"the TV would play for {played} days on a 90-day booking")
+        db.close()
+        ok("a custom sale is booked and played for the length the operator set")
+
+        # Correcting the length alone, with no screen change, still has to reach the player.
+        # sync_placement_window used to run only inside the screen_ids branch, so this exact
+        # edit moved the invoice and left every TV on the old date.
+        client.put(f"/api/content/{length_id}/client-ad", headers=headers, json={
+            "client_name": "Ninety Days Ltd",
+            "duration_days": 45,
+        })
+        db = database.SessionLocal()
+        shortened = db.query(models.AdPlacement).filter(
+            models.AdPlacement.content_id == length_id).order_by(
+            models.AdPlacement.id.desc()).first()
+        item = db.query(models.PlaylistItem).filter(
+            models.PlaylistItem.id == next(
+                t.playlist_item_id for t in shortened.targets
+                if t.screen_id == screens["airport"])).one()
+        check(days_between(shortened.starts_at, shortened.ends_at) == 45,
+              "shortening the run did not move the booking")
+        check(days_between(item.start_at, item.end_at) == 45,
+              f"the TV still plays for {days_between(item.start_at, item.end_at)} days "
+              "after the run was cut to 45 -- the window never reached the player")
+        db.close()
+        ok("changing only the run length reaches the player, not just the record")
+
+        # A plan sale sends no duration, and must still take the plan's.
+        client.put(f"/api/content/{length_id}/client-ad", headers=headers, json={
+            "client_name": "Ninety Days Ltd",
+            "plan_id": plan_id,
+            "screen_ids": [screens["airport"]],
+        })
+        db = database.SessionLocal()
+        on_plan_now = db.query(models.AdPlacement).filter(
+            models.AdPlacement.content_id == length_id).order_by(
+            models.AdPlacement.id.desc()).first()
+        check(days_between(on_plan_now.starts_at, on_plan_now.ends_at) == 45,
+              "moving onto a plan silently restated the run length that was already sold")
+        db.close()
+        ok("a plan sale that sends no length leaves the sold one alone")
+
+        # 10. The editor no longer offers per-location lengths on a PLAN booking -- they
+        # belong to a custom sale now. Bookings sold before that change still have them, and
+        # a client paid for them. Saving such a booking must not flatten its schedule just
+        # because the control that set it is gone from the form.
+        #
+        # This is the same defect clear_screen_days was added to prevent, arriving by a new
+        # route: the modal sends clear_screen_days only on a custom sale, so a plan booking
+        # sends neither it nor screen_days and the windows are left untouched.
+        db = database.SessionLocal()
+        legacy_content = models.Content(
+            organization_id=org_id, name="Sold Before The Change", type="image",
+            file_url="s3://x/legacy.png", status="ready",
+        )
+        db.add(legacy_content)
+        db.commit()
+        legacy_id = legacy_content.id
+        db.close()
+
+        # Sold on a plan WITH a per-location window, the way the old editor allowed.
+        client.put(f"/api/content/{legacy_id}/client-ad", headers=headers, json={
+            "client_name": "Legacy Buyer",
+            "plan_id": plan_id,
+            "screen_ids": [screens["mall"], screens["airport"]],
+            "screen_days": {str(screens["airport"]): 50},
+        })
+        db = database.SessionLocal()
+        legacy = db.query(models.AdPlacement).filter(
+            models.AdPlacement.content_id == legacy_id).order_by(
+            models.AdPlacement.id.desc()).first()
+        airport_before = next(
+            t for t in legacy.targets if t.screen_id == screens["airport"])
+        check(airport_before.ends_at is not None
+              and days_between(airport_before.starts_at, airport_before.ends_at) == 50,
+              "the 50-day airport window was not recorded in the first place")
+        db.close()
+
+        # Now the edit the NEW modal sends for a plan booking: no screen_days, and
+        # clear_screen_days false because this is not a custom sale.
+        kept = client.put(f"/api/content/{legacy_id}/client-ad", headers=headers, json={
+            "client_name": "Legacy Buyer Pvt Ltd",
+            "plan_id": plan_id,
+            "screen_ids": [screens["mall"], screens["airport"]],
+            "clear_screen_days": False,
+        })
+        check(kept.status_code == 200, f"saving a legacy booking failed: {kept.text}")
+
+        db = database.SessionLocal()
+        legacy = db.query(models.AdPlacement).filter(
+            models.AdPlacement.content_id == legacy_id).order_by(
+            models.AdPlacement.id.desc()).first()
+        airport_after = next(
+            t for t in legacy.targets if t.screen_id == screens["airport"])
+        check(airport_after.ends_at is not None,
+              "the airport's paid 50-day window was wiped by an ordinary save")
+        if airport_after.ends_at is not None:
+            still = days_between(airport_after.starts_at, airport_after.ends_at)
+            check(still == 50, f"the airport window is now {still} days, was sold as 50")
+        db.close()
+        ok("a plan booking sold with per-location windows keeps them when it is saved")
+
     finally:
         client.__exit__(None, None, None)
 

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Building2, Check, IndianRupee, Mail, Phone, Tag, X } from 'lucide-react'
+import { Building2, CalendarRange, Check, IndianRupee, Mail, Phone, Tag, X } from 'lucide-react'
 import { api } from '@/lib/api'
 import { rupees } from '@/lib/format'
 import { invalidateBookingViews } from '@/lib/query-keys'
@@ -46,13 +46,17 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
   const [price, setPrice] = useState('')
   const [selectedScreenIds, setSelectedScreenIds] = useState<number[]>([])
   const [notes, setNotes] = useState('')
-  // Per-location run lengths, keyed by screen id.
+  // How long the booking itself runs. Only meaningful on a custom sale -- a plan states
+  // its own duration and that is the whole point of buying one.
+  const [durationDays, setDurationDays] = useState('')
+  // Per-location overrides, keyed by screen id: 30 days in a mall, 10 in a shop, 50 at an
+  // airport, as ONE booking rather than three.
   //
-  // Off by default: most sales are one length everywhere, and the plan already says what
-  // that is. Turned on, a client can buy 30 days in a mall, 10 in a shop and 50 at an
-  // airport as ONE booking -- previously only expressible as three, which meant three
-  // invoice lines and three extensions for one deal.
-  const [customDurations, setCustomDurations] = useState(false)
+  // No toggle in front of this any more. It used to be a mode of its own, which left the
+  // editor with TWO "custom" controls that meant different things -- and it was the only
+  // way to express a run length other than the hardcoded 30 days, because a custom sale
+  // had no duration field at all. With one, these boxes go back to being what they say
+  // they are: an exception to the booking's length, blank when there is none.
   const [screenDays, setScreenDays] = useState<Record<number, number>>({})
   const [showClientSuggestions, setShowClientSuggestions] = useState(false)
 
@@ -96,11 +100,16 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
       // Existing targets win; the default only fills an empty selection.
       const existing = contentItem.screen_ids || []
       setSelectedScreenIds(existing.length ? existing : (defaultScreenIds || []))
-      const soldDays = contentItem.screen_days || {}
-      setScreenDays(soldDays)
-      // Opened already on, so an operator editing a bespoke booking sees the lengths it
-      // was actually sold rather than a collapsed panel implying one uniform run.
-      setCustomDurations(Object.keys(soldDays).length > 0)
+      setScreenDays(contentItem.screen_days || {})
+      // The booking's OWN length, which is not the gap between its start and its effective
+      // end -- one location sold 50 days on a 30-day campaign pushes the latter out, and
+      // seeding from it would stretch the sale a little further every time the modal was
+      // opened and saved.
+      setDurationDays(
+        contentItem.placement_duration_days != null
+          ? String(contentItem.placement_duration_days)
+          : '',
+      )
       setNotes(contentItem.placement_notes || '')
     }
     // Deliberately narrower than the values used. `contentItem` is a fresh object after
@@ -115,6 +124,16 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
   const selectedPlan = useMemo(() => {
     return plans.find((p) => p.id === planId) || null
   }, [plans, planId])
+
+  // The one "custom" in this form. Price, run length and per-location overrides are all
+  // the operator's on a custom sale and all the package's on a plan -- there is no third
+  // state, and no second toggle that can disagree with this one.
+  const isCustom = planId === null
+
+  // Per-location windows sold before this editor stopped offering them on a plan. Shown,
+  // not editable: the booking is real and a client paid for it, so hiding the lengths would
+  // leave an operator looking at a campaign whose schedule the page will not admit exists.
+  const legacyPlanWindows = !isCustom && Object.keys(screenDays).length > 0
 
   // Null means "no cap", which is not the same as "capped at however many screens exist".
   // A booking on a RETIRED plan also lands here, because getTenantPlans returns active
@@ -143,15 +162,18 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
         // edit to a phone number cannot restate what a client owes.
         price_paise: price.trim() === '' ? undefined : Math.round(Number(price) * 100),
         screen_ids: selectedScreenIds,
-    // Only the selected screens, and only when the operator asked for per-location
-    // lengths. Turning the toggle off is a deliberate "make this one uniform window",
-    // sent as its own flag -- an empty map would be indistinguishable from a client that
-    // does not know the field exists, and the API refuses to destroy a paid schedule on
-    // that basis.
-    screen_days: customDurations
-      ? Object.fromEntries(selectedScreenIds.filter((id) => screenDays[id]).map((id) => [id, screenDays[id]]))
-      : undefined,
-    clear_screen_days: !customDurations,
+        // The run length is the custom sale's to state. On a plan it is the plan's, and
+        // sending one would let this editor quietly stretch a package past what it sells.
+        duration_days: isCustom && durationDays.trim() !== '' ? Number(durationDays) : undefined,
+        // Per-location lengths, and the instruction to drop the ones left blank, are sent
+        // together and ONLY on a custom sale. On a plan neither is sent, so a booking that
+        // already carries per-location windows keeps them: this editor no longer offers to
+        // set them there, and flattening a paid schedule because a control disappeared from
+        // the UI is the exact defect clear_screen_days was added to prevent.
+        screen_days: isCustom
+          ? Object.fromEntries(selectedScreenIds.filter((id) => screenDays[id]).map((id) => [id, screenDays[id]]))
+          : undefined,
+        clear_screen_days: isCustom,
         notes: notes.trim() || undefined,
       })
     },
@@ -400,32 +422,57 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
               })}
             </div>
 
-            {/* The figure the client is actually billed, whichever tile is selected. A plan
-                fills it in as a starting point; it stays editable because a negotiated
-                price and a discount are both ordinary, and neither was expressible. */}
-            <div className="space-y-1.5 pt-1">
-              <Label htmlFor="ad-price" className="text-xs font-medium">
-                Contract price (₹) {planId === null && <span className="text-rose-500">*</span>}
-              </Label>
-              <div className="relative">
-                <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-                <Input
-                  id="ad-price"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  placeholder={selectedPlan ? String(selectedPlan.price_paise / 100) : '25000'}
-                  className="pl-9 text-sm bg-background"
-                />
+            {/* What the client is billed and for how long -- the two halves of the deal,
+                side by side. A plan states both; Custom leaves both to the operator, which
+                is the whole of what "Custom" now means. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              <div className="space-y-1.5">
+                <Label htmlFor="ad-price" className="text-xs font-medium">
+                  Contract price (₹) {isCustom && <span className="text-rose-500">*</span>}
+                </Label>
+                <div className="relative">
+                  <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                  <Input
+                    id="ad-price"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    placeholder={selectedPlan ? String(selectedPlan.price_paise / 100) : '25000'}
+                    className="pl-9 text-sm bg-background"
+                  />
+                </div>
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                {planId === null
-                  ? 'No package selected, so this is the whole of what the client is billed.'
-                  : `Pre-filled from ${selectedPlan?.name || 'the plan'}. Change it to bill something else.`}
-              </p>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="ad-days" className="text-xs font-medium">
+                  Run length (days) {isCustom && <span className="text-rose-500">*</span>}
+                </Label>
+                {/* Read-only on a plan, because the duration IS the package. Editable on a
+                    custom sale, which previously had no duration field at all and silently
+                    became a 30-day booking whatever the operator had agreed. */}
+                <div className="relative">
+                  <CalendarRange className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                  <Input
+                    id="ad-days"
+                    type="number"
+                    min={1}
+                    max={3650}
+                    value={isCustom ? durationDays : String(selectedPlan?.duration_days ?? '')}
+                    onChange={(e) => setDurationDays(e.target.value)}
+                    disabled={!isCustom}
+                    placeholder="30"
+                    className="pl-9 text-sm bg-background disabled:opacity-70"
+                  />
+                </div>
+              </div>
             </div>
+            <p className="text-[11px] text-muted-foreground">
+              {isCustom
+                ? 'No package, so the price and the length are both yours to set. Give a screen its own length below only where it differs.'
+                : `From ${selectedPlan?.name || 'the plan'}. The price stays editable for a discount; the length is what the package sells.`}
+            </p>
           </div>
 
           {/* Section: Screen Allocation */}
@@ -435,18 +482,6 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
                 Assigned Screens
               </Label>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setCustomDurations((on) => !on)}
-                  aria-pressed={customDurations}
-                  className={`rounded-lg border px-2 py-1 text-[11px] font-semibold transition-colors ${
-                    customDurations
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border/60 text-muted-foreground hover:bg-muted/40'
-                  }`}
-                >
-                  Custom days per location
-                </button>
                 <Badge
                   variant={maxAllowedScreens !== null && selectedScreenIds.length > maxAllowedScreens ? 'danger' : 'outline'}
                   className="text-[11px] font-semibold"
@@ -490,7 +525,12 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
                       </div>
                       {/* Rendered inside the row but OUTSIDE the click target's effect:
                           stopPropagation, or typing a duration would untick the screen. */}
-                      {customDurations && isChecked && (
+                      {legacyPlanWindows && isChecked && screenDays[screen.id] && (
+                        <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
+                          {screenDays[screen.id]}d sold
+                        </span>
+                      )}
+                      {isCustom && isChecked && (
                         <span
                           className="flex shrink-0 items-center gap-1"
                           onClick={(event) => event.stopPropagation()}
@@ -501,7 +541,7 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
                             max={3650}
                             aria-label={`Days for ${screen.name || `Screen #${screen.id}`}`}
                             value={screenDays[screen.id] ?? ''}
-                            placeholder={String(selectedPlan?.duration_days ?? '')}
+                            placeholder={durationDays || '30'}
                             onChange={(event) => {
                               const value = Number(event.target.value)
                               setScreenDays((current) => {
@@ -554,9 +594,11 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
               !clientName.trim()
               || updateMutation.isPending
               || (maxAllowedScreens !== null && selectedScreenIds.length > maxAllowedScreens)
-              || (customDurations && selectedScreenIds.some((id) => !screenDays[id]))
-              // No package AND no figure is exactly how a sale ended up recorded as free.
-              || (planId === null && price.trim() === '')
+              // A custom sale states its own price and its own length. Blank either and
+              // the booking falls back to a figure nobody agreed -- Rs.0, or 30 days.
+              // Per-location boxes stay optional: blank means "as long as the booking",
+              // which is the ordinary case and the reason they are exceptions now.
+              || (isCustom && (price.trim() === '' || durationDays.trim() === ''))
             }
             onClick={() => updateMutation.mutate()}
             className="font-semibold shadow-md"

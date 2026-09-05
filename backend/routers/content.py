@@ -153,6 +153,10 @@ def serialize_content(content: models.Content) -> schemas.ContentResponse:
         payload.placement_price_paise = latest.price_paise
         payload.placement_starts_at = latest.starts_at
         payload.placement_ends_at = latest.effective_ends_at
+        # From the SOLD window, never the effective one -- see the field's note.
+        payload.placement_duration_days = max(
+            1, round((latest.ends_at - latest.starts_at).total_seconds() / 86400)
+        )
         payload.placement_notes = latest.notes
 
         target_screens = []
@@ -462,7 +466,9 @@ def update_content_client_ad(
         # always checked it; selling through this editor instead was the way round it.
         ensure_ad_slot_quota(scope)
         now = models.utcnow()
-        duration_days = plan.duration_days if plan else 30
+        # The operator's length first, the plan's behind it, and 30 days only when there is
+        # neither. A custom sale used to land on that 30 with no way to say otherwise.
+        duration_days = payload.duration_days or (plan.duration_days if plan else 30)
         # The operator's figure first, the plan's as the default. A booking sold on no plan
         # used to be created at zero with no way to say otherwise, so every custom sale --
         # the client who wants a negotiated price rather than a package -- was recorded as
@@ -503,6 +509,11 @@ def update_content_client_ad(
         # edit still cannot touch it.
         if payload.price_paise is not None:
             placement.price_paise = payload.price_paise
+        # Re-cut from the booking's own start, so correcting a run to 45 days means 45 days
+        # of campaign and not 45 days from today. starts_at is the date it was SOLD on and
+        # is left alone.
+        if payload.duration_days is not None:
+            placement.ends_at = placement.starts_at + timedelta(days=payload.duration_days)
         if payload.notes is not None:
             placement.notes = notes
 
@@ -566,12 +577,16 @@ def update_content_client_ad(
                 )
                 _place(scope, placement, ref)
 
-        # The whole point of the loop above. Target rows are the record of what was sold;
-        # PlaylistItem.start_at/end_at is what the player enforces, and nothing here copied
-        # one onto the other -- so correcting a location from 30 days to 10 updated the
-        # dashboard and the invoice while the TV kept playing it for 30. It also bumps each
-        # affected playlist, without which sync answers 204 and the screen never hears
-        # about the change at all.
+    # Target rows are the record of what was sold; PlaylistItem.start_at/end_at is what the
+    # player enforces, and nothing copies one onto the other by itself -- so correcting a
+    # location from 30 days to 10 updated the dashboard and the invoice while the TV kept
+    # playing it for 30. This also bumps each affected playlist, without which sync answers
+    # 204 and the screen never hears about the change at all.
+    #
+    # Outside the screens branch on purpose. While it sat inside `if screen_ids`, changing
+    # only the run length moved the booking and left every TV playing to the old date. It
+    # still runs after the targets are placed, so new items are synced in the same pass.
+    if payload.screen_ids is not None or payload.duration_days is not None:
         sync_placement_window(scope, placement)
 
     scope.db.commit()

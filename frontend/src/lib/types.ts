@@ -46,6 +46,9 @@ export interface ContentItem {
   plan_name?: string | null
   placement_id?: number | null
   placement_price_paise?: number | null
+  // The booking's OWN length, not the gap to its effective end -- a location sold longer
+  // than the campaign pushes that out, and the editor must not seed its box from it.
+  placement_duration_days?: number | null
   placement_starts_at?: string | null
   placement_ends_at?: string | null
   placement_notes?: string | null

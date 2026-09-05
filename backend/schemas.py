@@ -370,6 +370,13 @@ class ContentResponse(ContentBase):
     placement_price_paise: Optional[int] = None
     placement_starts_at: Optional[datetime] = None
     placement_ends_at: Optional[datetime] = None
+    # The booking's OWN run length in days. Not derivable from the two fields above:
+    # placement_ends_at is the EFFECTIVE end, which a longer per-location window or an
+    # extension pushes out, so subtracting them reports a 30-day sale as 50 whenever one
+    # airport screen was sold 50. The editor seeds its duration box from this, and seeding
+    # it from the effective end would have made simply opening and saving a booking stretch
+    # it to its longest location.
+    placement_duration_days: Optional[int] = None
     placement_notes: Optional[str] = None
     screen_ids: List[int] = []
     screen_names: List[str] = []
@@ -420,6 +427,15 @@ class ContentClientAdUpdate(BaseModel):
     # agreed a figure" was the one sale the editor could not record. Selecting a plan is a
     # convenience, not the only way to have a price.
     price_paise: Optional[int] = Field(default=None, ge=0)
+    # How long the booking itself runs. Null leaves it alone; on creation the plan's own
+    # duration fills in behind it.
+    #
+    # Without this the length of a booking sold on NO plan was the hardcoded 30 days in
+    # update_content_client_ad and nothing could change it -- so an operator could name the
+    # price of a custom sale but not its length, and the only way to express any other run
+    # was to give every screen its own window one at a time. That is why the editor grew a
+    # second "custom" control beside the first.
+    duration_days: Optional[int] = Field(default=None, ge=1, le=3650)
     screen_ids: Optional[List[int]] = None
     # Per-location run lengths, keyed by screen id: {"12": 30, "13": 10, "14": 50}.
     # A screen absent from this map runs for the booking's own window, so the ordinary

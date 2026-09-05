@@ -268,6 +268,8 @@ export const api = {
       // Omitted leaves the agreed price alone; sent, it IS the agreed price. A booking on
       // no plan has no other source for one.
       price_paise?: number
+      // The booking's own run length. Omitted on a plan sale -- the package states it.
+      duration_days?: number
       screen_ids?: number[]
       // Keyed by screen id. {} clears a bespoke booking back to one uniform window;
       // omitting it leaves the existing lengths alone.

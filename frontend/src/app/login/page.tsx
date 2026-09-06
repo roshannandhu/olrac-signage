@@ -59,12 +59,18 @@ export default function LoginPage() {
       .catch(() => setGoogleEnabled(true))
   }, [])
 
-  // Google OAuth redirect handler
+  // Google OAuth redirect handler.
+  //
+  // Stays an effect: it reads window.location, which does not exist while this route is
+  // prerendered on the server, and it rewrites browser history -- a side effect that must
+  // not run during render, where React may call the body more than once. Mount-only, so
+  // the cascading-render the rule guards against cannot happen here.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const code = params.get('code')
     const denied = params.get('error')
     if (denied) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reads window + rewrites history; see above
       setError('Google authentication was cancelled.')
       window.history.replaceState({}, '', window.location.pathname)
       return

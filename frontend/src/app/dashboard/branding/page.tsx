@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import Image from 'next/image'
 import { ImageIcon, Palette, Trash2, Upload } from 'lucide-react'
@@ -37,13 +37,20 @@ export default function BrandingPage() {
   const [brandName, setBrandName] = useState('')
   const [brandColor, setBrandColor] = useState('#0b1437')
 
-  // Seeded from the server once it answers, not on every render: typing must not be
-  // overwritten each time the query refetches in the background.
-  useEffect(() => {
-    if (!brandingQuery.data) return
+  // Seeded from the server ONCE, when it first answers.
+  //
+  // The intent was always this -- "typing must not be overwritten each time the query
+  // refetches" -- but keying the effect on `brandingQuery.data` did the opposite of what
+  // it said: React Query hands back a fresh object on every background refetch, so the
+  // identity changed, the effect re-ran, and a refetch triggered by tabbing away and back
+  // replaced whatever the operator was halfway through typing with the saved value.
+  // A once-only flag is what "once it answers" actually needs.
+  const [seeded, setSeeded] = useState(false)
+  if (brandingQuery.data && !seeded) {
+    setSeeded(true)
     setBrandName(brandingQuery.data.brand_name || '')
     setBrandColor(brandingQuery.data.brand_color || '#0b1437')
-  }, [brandingQuery.data])
+  }
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ['branding'] })
   const fail = (error: Error) => toast.error(error.message)

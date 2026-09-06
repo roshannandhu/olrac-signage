@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Save, UploadCloud } from 'lucide-react'
 import { Feedback, PageHeader } from '@/components/admin/admin-ui'
@@ -22,9 +22,13 @@ export default function AdminDemoVideoPage() {
 
   const { data, isLoading } = useQuery({ queryKey: ['admin', 'demo-video'], queryFn: adminApi.getDemoVideo })
 
-  useEffect(() => {
-    if (data?.url) setUrl(data.url)
-  }, [data?.url])
+  // Seeded once, when the server first answers -- not on every change of the fetched URL,
+  // which would overwrite an address being typed the moment a refetch landed.
+  const [seeded, setSeeded] = useState(false)
+  if (data?.url && !seeded) {
+    setSeeded(true)
+    setUrl(data.url)
+  }
 
   const done = (text: string) => {
     setError('')

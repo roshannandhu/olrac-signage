@@ -146,7 +146,12 @@ export default function AlertsPage() {
   const [search, setSearch] = useState('')
   const [mutedAlerts, setMutedAlerts] = useState<Record<string, number>>({})
 
-  // Load muted alerts from localStorage
+  // Load muted alerts from localStorage.
+  //
+  // This one stays an effect. Seeding it in a useState initializer would read localStorage
+  // during render, and render also happens on the server for this route -- where the
+  // symbol does not exist and the page would fail to prerender. Mount-only deps, so it
+  // runs exactly once and none of the cascading-render the rule is aimed at applies.
   useEffect(() => {
     try {
       const stored = localStorage.getItem('olrac_muted_alerts')
@@ -160,12 +165,27 @@ export default function AlertsPage() {
             activeMutes[key] = ts
           }
         }
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- browser-only store; see above
         setMutedAlerts(activeMutes)
       }
     } catch {
       // Ignore localStorage read errors
     }
   }, [])
+
+  // Declared BEFORE the handlers that read them. `acknowledgeAll` used `alerts` while it
+  // was still a const further down the body -- fine at runtime, because a click happens
+  // long after render, but the React Compiler could not prove that and gave up on the
+  // component: it reported the useMemo below as "existing memoization could not be
+  // preserved" and then read the handlers as render-phase code, which is why two ordinary
+  // Date.now() calls in click handlers were flagged as impure renders.
+  const alerts = useMemo(
+    () => buildAlerts(screensQuery.data || [], contentQuery.data || []),
+    [screensQuery.data, contentQuery.data],
+  )
+
+  const activeAlerts = useMemo(() => alerts.filter((a) => !mutedAlerts[a.id]), [alerts, mutedAlerts])
+  const mutedCount = useMemo(() => alerts.filter((a) => Boolean(mutedAlerts[a.id])).length, [alerts, mutedAlerts])
 
   const saveMutes = (mutes: Record<string, number>) => {
     setMutedAlerts(mutes)
@@ -179,6 +199,9 @@ export default function AlertsPage() {
   const muteAlert = (id: string, e?: React.MouseEvent) => {
     e?.preventDefault()
     e?.stopPropagation()
+    // Reading the clock is the whole point: the mute expires 24 hours from the CLICK, so
+    // it has to be the time of the click. This runs from onClick, never during render.
+    // eslint-disable-next-line react-hooks/purity -- event handler, not render
     const next = { ...mutedAlerts, [id]: Date.now() }
     saveMutes(next)
     toast.success('Alert acknowledged and snoozed for 24h.')
@@ -202,14 +225,6 @@ export default function AlertsPage() {
     saveMutes(next)
     toast.success('All current alerts acknowledged and snoozed.')
   }
-
-  const alerts = useMemo(
-    () => buildAlerts(screensQuery.data || [], contentQuery.data || []),
-    [screensQuery.data, contentQuery.data],
-  )
-
-  const activeAlerts = useMemo(() => alerts.filter((a) => !mutedAlerts[a.id]), [alerts, mutedAlerts])
-  const mutedCount = useMemo(() => alerts.filter((a) => Boolean(mutedAlerts[a.id])).length, [alerts, mutedAlerts])
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()

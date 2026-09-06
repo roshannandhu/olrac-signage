@@ -39,7 +39,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   // Off-canvas nav for phones. Closed on every navigation, or the drawer stays over the
   // page the operator just asked for.
   const [navOpen, setNavOpen] = useState(false)
-  useEffect(() => { setNavOpen(false) }, [pathname])
+  // Reset on the route CHANGE, during render, rather than in an effect that fires after
+  // the new page has already painted with the drawer still over it.
+  const [navPath, setNavPath] = useState(pathname)
+  if (navPath !== pathname) {
+    setNavPath(pathname)
+    setNavOpen(false)
+  }
 
   const meQuery = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: hydrated && Boolean(token) })
   const account = meQuery.data ?? user

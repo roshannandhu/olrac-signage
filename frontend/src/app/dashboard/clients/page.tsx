@@ -38,6 +38,23 @@ export default function ClientsPage() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
+  // Up here with the other hooks, NOT below the `isError` early return further down.
+  // Sitting after it, these two ran on a good render and were skipped the moment the
+  // query failed -- fewer hooks than the render before, which is the one thing React
+  // cannot survive: it throws "Rendered fewer hooks than expected" and takes the whole
+  // page down with it. The trigger is a failing clients request, so the error state that
+  // was meant to handle a flaky API was itself what crashed on one.
+  const [search, setSearch] = useState('')
+  const clients = useMemo(() => clientsQuery.data || [], [clientsQuery.data])
+  const filteredClients = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    if (!term) return clients
+    return clients.filter((c) =>
+      c.name.toLowerCase().includes(term) ||
+      (c.client_code && c.client_code.toLowerCase().includes(term)) ||
+      (c.email && c.email.toLowerCase().includes(term))
+    )
+  }, [clients, search])
 
   const reset = () => { setEditing(null); setName(''); setEmail(''); setPhone('') }
   const refresh = () => {
@@ -72,18 +89,6 @@ export default function ClientsPage() {
   if (clientsQuery.isError) {
     return <ErrorState message="Clients could not be loaded." onRetry={() => clientsQuery.refetch()} />
   }
-  const clients = clientsQuery.data || []
-
-  const [search, setSearch] = useState('')
-  const filteredClients = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    if (!term) return clients
-    return clients.filter((c) =>
-      c.name.toLowerCase().includes(term) ||
-      (c.client_code && c.client_code.toLowerCase().includes(term)) ||
-      (c.email && c.email.toLowerCase().includes(term))
-    )
-  }, [clients, search])
 
   const openFor = (client: Client | null) => {
     if (client) {

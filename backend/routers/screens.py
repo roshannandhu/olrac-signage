@@ -60,251 +60,21 @@ def public_base_url(request: Request | None = None) -> str:
     return "https://olrac-signage-32lh.onrender.com"
 
 
-def generate_pair_code() -> str:
-    return "".join(random.choices(string.digits, k=6))
+from ..services import (
+    generate_pair_code,
+    as_aware_utc,
+    current_app_version,
+    player_sync_interval_seconds,
+    screen_offline_after_seconds,
+    queue_device_command,
+    pop_device_command,
+    park_device_secret,
+    collect_device_secret,
+    legacy_device_auth_allowed,
+    verify_device_auth,
+    issue_device_secret,
+)
 
-
-def as_aware_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-
-
-def _release_response(release: models.AppRelease) -> schemas.AppVersionResponse:
-    # sha256 belongs in this payload. Without it the device has nothing to verify the
-    # downloaded APK against, so UpdateManager's integrity check silently no-ops and a
-    # device-owner TV installs whatever bytes arrived. It was omitted here while being
-    # stored on the row, which made the whole checksum path dead code.
-    return schemas.AppVersionResponse(
-        version_code=release.version_code,
-        version_name=release.version_name,
-        apk_url=release.apk_url,
-        sha256=release.sha256,
-        mandatory=release.mandatory,
-    )
-
-
-def current_app_version(db: Session, target_version_code: int = None) -> schemas.AppVersionResponse:
-    if target_version_code:
-        release = db.query(models.AppRelease).filter(models.AppRelease.version_code == target_version_code).first()
-        if release:
-            return _release_response(release)
-
-    # Fallback to the latest *promoted* release. A draft or canary build is deliberately
-    # invisible here -- it reaches a screen only through an explicit target_version_code,
-    # which is what keeps a 5-TV ring from being the whole fleet.
-    release = (
-        rollout.eligible_for_fallback(db.query(models.AppRelease))
-        .order_by(models.AppRelease.version_code.desc())
-        .first()
-    )
-    if release:
-        return _release_response(release)
-
-    return schemas.AppVersionResponse(
-        version_code=int(os.getenv("PLAYER_VERSION_CODE", "1")),
-        version_name=os.getenv("PLAYER_VERSION_NAME", "1.0"),
-        apk_url=os.getenv("PLAYER_APK_URL") or None,
-        sha256=os.getenv("PLAYER_APK_SHA256") or None,
-        mandatory=os.getenv("PLAYER_UPDATE_MANDATORY", "false").lower() == "true",
-    )
-
-
-def player_sync_interval_seconds() -> int:
-    try:
-        configured = int(os.getenv("PLAYER_SYNC_INTERVAL_SECONDS", "60"))
-    except ValueError:
-        configured = 60
-    return max(15, min(configured, 3600))
-
-
-def screen_offline_after_seconds() -> int:
-    try:
-        configured = int(os.getenv("SCREEN_OFFLINE_AFTER_SECONDS", "90"))
-    except ValueError:
-        configured = 90
-    return max(60, min(configured, 3600))
-
-
-# One-shot commands for a screen, held in Redis until the device's next sync or heartbeat.
-#
-# This was a module-level dict. A dict lives in one process, and the API runs behind more
-# than one: docker-compose scales it, Render restarts it, and uvicorn can be given
-# workers. A command queued on worker A was invisible to worker B, so "Bring to front"
-# reached the TV roughly one time in N and looked like a flaky device. The dict was also
-# never pruned, so entries for deleted screens survived for the life of the process.
-#
-# Redis is already a hard dependency of this system (uploads, live push and every cron job
-# stop without it), and both readers below already consulted this same key as a second
-# source -- so this deletes a code path rather than adding one. SETEX gives the TTL for
-# free, which is what makes an undelivered command expire instead of accumulating.
-def _command_key(device_id: str) -> str:
-    return f"screen_cmd:{device_id}"
-
-
-_IN_MEMORY_COMMANDS: dict[str, tuple[str, float]] = {}
-
-
-async def queue_device_command(device_id: str, command: str, ttl_seconds: int = 300) -> bool:
-    """Queue a one-shot command. Returns whether it was actually stored."""
-    if not device_id:
-        return False
-    import time
-    _IN_MEMORY_COMMANDS[device_id] = (command, time.time() + ttl_seconds)
-    try:
-        await database.get_redis().setex(_command_key(device_id), ttl_seconds, command)
-        return True
-    except Exception as exc:  # noqa: BLE001 - Redis down must not fail the operator's request
-        logger.warning("Could not queue command %r in Redis for device %s: %s (using in-memory fallback)", command, device_id, exc)
-        return True
-
-
-async def pop_device_command(device_id: str) -> str | None:
-    """Take the pending command for this device, if any. Reading it consumes it."""
-    if not device_id:
-        return None
-    import time
-    now = time.time()
-    in_memory_val = None
-    in_memory = _IN_MEMORY_COMMANDS.pop(device_id, None)
-    if in_memory and in_memory[1] > now:
-        in_memory_val = in_memory[0]
-
-    redis_val = None
-    try:
-        redis = database.get_redis()
-        value = await redis.get(_command_key(device_id))
-        if value is not None:
-            await redis.delete(_command_key(device_id))
-            redis_val = value.decode("utf-8") if isinstance(value, bytes) else str(value)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Could not read pending command from Redis for device %s: %s", device_id, exc)
-
-    return in_memory_val or redis_val
-
-
-# A freshly paired screen has to be told its own credential, and the pair-code flow gives
-# it no other chance: /pair is called by an operator at the DASHBOARD, so its response
-# never reaches the TV. The device polls /register while it waits to be claimed, so the
-# secret is parked here and handed over on the first poll after pairing.
-#
-# Redis rather than a column, for the same reason the row only ever stores a hash: this is
-# short-lived plaintext. The key is deleted as it is read, so a second caller racing for
-# the same device_id gets nothing, and the TTL matches the pairing code's own five minutes.
-def _pending_secret_key(device_id: str) -> str:
-    return f"screen_pending_secret:{device_id}"
-
-
-async def park_device_secret(device_id: str, secret: str, ttl_seconds: int = 300) -> None:
-    if not device_id:
-        return
-    try:
-        await database.get_redis().setex(_pending_secret_key(device_id), ttl_seconds, secret)
-    except Exception as exc:  # noqa: BLE001 - the screen falls back to the legacy path
-        logger.warning("Could not park device secret for %s: %s", device_id, exc)
-
-
-async def collect_device_secret(device_id: str) -> str | None:
-    """Take the credential waiting for this device, if any. Reading it consumes it."""
-    if not device_id:
-        return None
-    try:
-        redis = database.get_redis()
-        value = await redis.get(_pending_secret_key(device_id))
-        if value is None:
-            return None
-        await redis.delete(_pending_secret_key(device_id))
-        return value.decode("utf-8") if isinstance(value, bytes) else str(value)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Could not read pending device secret for %s: %s", device_id, exc)
-        return None
-
-
-def legacy_device_auth_allowed() -> bool:
-    """Whether a screen holding no device secret may still call the device endpoints.
-
-    Device authentication was effectively optional: this function only demanded a token
-    when `device_secret_hash` was set, and only /enroll ever set it. Every screen
-    provisioned by pair code or TV sign-in therefore authenticated with nothing but its
-    device id -- which is guessable, is echoed back by /register, and grants heartbeat,
-    the full playlist, the maintenance pin and play-log injection.
-
-    Closing it outright would brick every screen already in the field, so /pair and
-    /sign-in now issue a secret like /enroll always has, and this flag keeps the old path
-    open while the fleet rotates. Flip it to false once no screen is logging the warning
-    below.
-    """
-    return os.getenv("ALLOW_LEGACY_DEVICE_AUTH", "true").strip().lower() in {"1", "true", "yes"}
-
-
-def verify_device_auth(device_id: str, credentials: HTTPAuthorizationCredentials | None, db: Session) -> models.Screen:
-    # deleted_at is checked here, not only in the dashboard's scope: this is the single
-    # door every device endpoint comes through, so an archived screen loses sync,
-    # heartbeat, play-log upload and its playlist in one place. The 404 is what the
-    # player reads as "you were removed" and resets on.
-    screen = (
-        db.query(models.Screen)
-        .filter(models.Screen.device_id == device_id, models.Screen.deleted_at.is_(None))
-        .first()
-    )
-    if not screen:
-        raise HTTPException(status_code=404, detail="Screen not found")
-
-    if not credentials:
-        # The staging gate, and it has to key off "no credential was presented" rather than
-        # "this screen has no secret". /pair and /sign-in now issue a secret, but a player
-        # built before this release neither stores nor sends one -- so keying off the hash
-        # would lock out every TV already in the field the moment it re-paired, which is
-        # the one failure mode this staging exists to avoid.
-        if not legacy_device_auth_allowed():
-            raise HTTPException(status_code=401, detail="Authentication required")
-        # Logged on every call on purpose: this is the metric that says whether the fleet
-        # has finished rotating and ALLOW_LEGACY_DEVICE_AUTH can be turned off.
-        logger.warning(
-            "Screen %s (device %s) authenticated with no credential (legacy path)",
-            screen.id, device_id,
-        )
-        # Transient marker, not a column. Callers use it to decide what this request is
-        # allowed to see -- see maintenance_pin in sync_tv.
-        screen.authenticated = False
-        return screen
-
-    # A credential WAS presented, so it is verified strictly whether or not this screen is
-    # known to have one. A bad token is always an error, never a silent downgrade.
-    try:
-        from .auth import ALGORITHM, get_secret_key
-        from jose import jwt, JWTError
-        payload = jwt.decode(credentials.credentials, get_secret_key(), algorithms=[ALGORITHM])
-        sub = payload.get("sub")
-        if sub != f"device:{device_id}":
-            raise HTTPException(status_code=401, detail="Token device mismatch")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-    # Revocation was a no-op without this. DELETE /{screen_id}/device-secret clears the
-    # hash, which stops /auth issuing NEW tokens -- but a token already in an attacker's
-    # hands stayed valid for its full hour, because nothing here ever looked at the
-    # database. An owner revoking a stolen credential got no answer for an hour.
-    if screen.device_secret_hash is None:
-        raise HTTPException(status_code=401, detail="Device credential has been revoked")
-
-    screen.authenticated = True
-    return screen
-
-
-def issue_device_secret(screen: models.Screen) -> str:
-    """Give this screen a credential of its own and return the plaintext once.
-
-    /pair and /sign-in used to bind a screen and hand it nothing, which is what left
-    device authentication optional for most of the fleet. Only the hash is stored, so the
-    caller has exactly one chance to pass the secret to the device.
-    """
-    import secrets as _secrets
-    from .auth import get_password_hash
-
-    device_secret = _secrets.token_hex(32)
-    screen.device_secret_hash = get_password_hash(device_secret)
-    return device_secret
 
 
 @router.get("/auth-methods")
@@ -1791,69 +1561,12 @@ def player_version(db: Session = Depends(database.get_db)):
     return current_app_version(db)
 
 
-# A group tree deeper than this is a mistake or a cycle, either way not worth walking.
-MAX_GROUP_DEPTH = models.MAX_GROUP_DEPTH
+from ..services import (
+    MAX_GROUP_DEPTH,
+    groups_by_id,
+    resolve_screen_playlist,
+)
 
-
-def groups_by_id(db: Session, organization_ids) -> dict[int, models.ScreenGroup]:
-    """Every group in the given organizations, keyed by id, in one query.
-
-    Resolving a playlist walks a screen's group ancestry and then scans dynamic groups.
-    Left to the relationships that is a query per ancestor hop plus one for the dynamic
-    groups, for every screen. The set is small and one round trip serves the whole
-    request.
-    """
-    ids = {organization_id for organization_id in organization_ids if organization_id is not None}
-    if not ids:
-        return {}
-    return {
-        group.id: group
-        for group in db.query(models.ScreenGroup)
-        .filter(models.ScreenGroup.organization_id.in_(ids))
-        .all()
-    }
-
-
-def resolve_screen_playlist(screen: models.Screen, db: Session) -> int | None:
-    """What this screen should be playing right now.
-
-    An active emergency broadcast takes over; otherwise it is whatever the screen is
-    configured to play, resolved by models.Screen.resolve_playlist_id -- the same call
-    the dashboard serializes. That shared call is the point: this used to resolve the
-    configuration itself, and its copy drifted from the model's, so a screen inheriting
-    from an ancestor group or matched by a dynamic group played correctly here while the
-    dashboard reported it had nothing scheduled and offered to assign a playlist.
-    """
-    groups = groups_by_id(db, [screen.organization_id])
-
-    active_broadcasts = db.query(models.EmergencyBroadcast).filter(
-        models.EmergencyBroadcast.organization_id == screen.organization_id,
-        models.EmergencyBroadcast.is_active == True
-    ).all()
-
-    # Priority: screen > group > org (all)
-    for broadcast in active_broadcasts:
-        if broadcast.target_type == "screen" and broadcast.target_id == screen.id:
-            return broadcast.playlist_id
-
-    # A group broadcast reaches every screen beneath it, so collect the ancestry.
-    screen_group_ids = []
-    group = groups.get(screen.group_id)
-    for _ in range(MAX_GROUP_DEPTH):
-        if group is None:
-            break
-        screen_group_ids.append(group.id)
-        group = groups.get(group.parent_id)
-
-    for broadcast in active_broadcasts:
-        if broadcast.target_type == "group" and broadcast.target_id in screen_group_ids:
-            return broadcast.playlist_id
-
-    for broadcast in active_broadcasts:
-        if broadcast.target_type == "all":
-            return broadcast.playlist_id
-
-    return screen.resolve_playlist_id(groups)
 
 
 @router.get(

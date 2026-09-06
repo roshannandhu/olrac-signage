@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Building2, Mail, Phone, Tag, X } from 'lucide-react'
@@ -45,16 +45,22 @@ export function EditClientAdModal({ open, onOpenChange, contentItem }: EditClien
     enabled: open,
   })
 
-  // Pre-fill fields when modal opens with contentItem
-  useEffect(() => {
-    if (contentItem && open) {
-      setName(contentItem.name || '')
-      setClientName(contentItem.client_name || '')
-      setClientEmail(contentItem.client_email || '')
-      setClientPhone(contentItem.client_phone || '')
-      setNotes(contentItem.placement_notes || '')
-    }
-  }, [open, contentItem?.id])
+  // Pre-fill from the advert once per opening, during render rather than in an effect --
+  // the same reasoning as create-booking-modal. Keyed on the advert's id so opening it on
+  // a different ad re-reads that one, and never re-run while open, so a refetch landing
+  // mid-edit cannot wipe a half-typed correction.
+  const [seededFor, setSeededFor] = useState<number | null>(null)
+  if (!open && seededFor !== null) {
+    setSeededFor(null)
+  }
+  if (open && contentItem && seededFor !== contentItem.id) {
+    setSeededFor(contentItem.id)
+    setName(contentItem.name || '')
+    setClientName(contentItem.client_name || '')
+    setClientEmail(contentItem.client_email || '')
+    setClientPhone(contentItem.client_phone || '')
+    setNotes(contentItem.placement_notes || '')
+  }
 
   // Filter client suggestions
   const filteredClients = useMemo(() => {

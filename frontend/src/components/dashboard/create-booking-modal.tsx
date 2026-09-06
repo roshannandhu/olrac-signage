@@ -1,0 +1,618 @@
+'use client'
+
+import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import {
+  Building2,
+  CalendarRange,
+  Check,
+  IndianRupee,
+  Layers3,
+  MonitorPlay,
+  Receipt,
+  Search,
+  Sparkles,
+} from 'lucide-react'
+import { api } from '@/lib/api'
+import { addDays, dateInput, rupees } from '@/lib/format'
+import { invalidateBookingViews } from '@/lib/query-keys'
+import type { Client, Screen, ScreenGroup, TenantPlan } from '@/lib/types'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+
+interface CreateBookingModalProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  contentId: number
+  contentTitle?: string
+  /** Pre-selected screen IDs (e.g. passed from Playlist Builder) */
+  defaultScreenIds?: number[]
+  /** Initial client ID if known */
+  initialClientId?: number | null
+  /** Initial advertiser name if known */
+  initialAdvertiser?: string
+}
+
+export function CreateBookingModal({
+  open,
+  onOpenChange,
+  contentId,
+  contentTitle,
+  defaultScreenIds,
+  initialClientId,
+  initialAdvertiser,
+}: CreateBookingModalProps) {
+  const queryClient = useQueryClient()
+
+  const [clientId, setClientId] = useState<string>(initialClientId ? String(initialClientId) : '')
+  const [advertiser, setAdvertiser] = useState<string>(initialAdvertiser || '')
+  const [planId, setPlanId] = useState<number | null>(null)
+  const [price, setPrice] = useState<string>('')
+  const [startsAt, setStartsAt] = useState<string>(() => dateInput(new Date()))
+  const [endsAt, setEndsAt] = useState<string>(() => dateInput(Date.now() + 30 * 864e5))
+  const [notes, setNotes] = useState<string>('')
+  const [picked, setPicked] = useState<string[]>([])
+  const [placeFilter, setPlaceFilter] = useState<string>('')
+
+  // Load clients
+  const { data: clients = [] } = useQuery<Client[]>({
+    queryKey: ['clients'],
+    queryFn: () => api.getClients(),
+    enabled: open,
+  })
+
+  // Load active plans
+  const { data: plans = [] } = useQuery<TenantPlan[]>({
+    queryKey: ['tenant-plans'],
+    queryFn: () => api.getTenantPlans(),
+    enabled: open,
+  })
+
+  // Load screens
+  const { data: screens = [] } = useQuery<Screen[]>({
+    queryKey: ['screens'],
+    queryFn: () => api.getScreens(),
+    enabled: open,
+  })
+
+  // Load groups
+  const { data: groups = [] } = useQuery<ScreenGroup[]>({
+    queryKey: ['groups'],
+    queryFn: () => api.getGroups(),
+    enabled: open,
+  })
+
+  // Pre-seed targets and client when modal opens
+  useEffect(() => {
+    if (open) {
+      if (initialClientId) {
+        setClientId(String(initialClientId))
+      }
+      if (initialAdvertiser) {
+        setAdvertiser(initialAdvertiser)
+      }
+      if (defaultScreenIds && defaultScreenIds.length > 0) {
+        setPicked((prev) => {
+          const combined = new Set([...prev, ...defaultScreenIds.map((id) => `s${id}`)])
+          return Array.from(combined)
+        })
+      }
+    }
+  }, [open, defaultScreenIds, initialClientId, initialAdvertiser])
+
+  const selectedPlan = useMemo(
+    () => (planId != null ? plans.find((p) => p.id === planId) || null : null),
+    [plans, planId],
+  )
+
+  const selectedClient = useMemo(
+    () => (clientId ? clients.find((c) => String(c.id) === clientId) || null : null),
+    [clients, clientId],
+  )
+
+  // Calculate covered screens count
+  const coveredScreenIds = useMemo(() => {
+    const directScreenIds = picked
+      .filter((k) => k.startsWith('s'))
+      .map((k) => Number(k.slice(1)))
+    const bookedGroupIds = new Set(
+      picked.filter((k) => k.startsWith('g')).map((k) => Number(k.slice(1))),
+    )
+    const groupScreenIds = screens
+      .filter((s) => s.group_id && bookedGroupIds.has(s.group_id))
+      .map((s) => s.id)
+    return new Set([...directScreenIds, ...groupScreenIds])
+  }, [picked, screens])
+
+  const coveredCount = coveredScreenIds.size
+  const maxAllowedScreens = selectedPlan && selectedPlan.max_locations > 0 ? selectedPlan.max_locations : null
+  const isOverCap = maxAllowedScreens !== null && coveredCount > maxAllowedScreens
+
+  // Handle plan selection
+  const handleSelectPlan = (plan: TenantPlan | null) => {
+    if (plan === null) {
+      setPlanId(null)
+      return
+    }
+    const previousPlan = selectedPlan
+    setPlanId(plan.id)
+
+    // Prefill price if currently empty or if it matched previous plan's list price
+    const currentPriceMatchesPrev = previousPlan && price === String(previousPlan.price_paise / 100)
+    if (!price.trim() || currentPriceMatchesPrev) {
+      setPrice(String(plan.price_paise / 100))
+    }
+
+    // Auto calculate endsAt based on plan duration
+    if (plan.duration_days > 0) {
+      setEndsAt(addDays(startsAt, plan.duration_days))
+    }
+  }
+
+  // Handle start date modification
+  const handleStartDateChange = (newStart: string) => {
+    setStartsAt(newStart)
+    if (selectedPlan && selectedPlan.duration_days > 0) {
+      setEndsAt(addDays(newStart, selectedPlan.duration_days))
+    }
+  }
+
+  // Calculate run duration in days
+  const runDurationDays = useMemo(() => {
+    if (!startsAt || !endsAt) return 0
+    const start = new Date(`${startsAt}T00:00:00`).getTime()
+    const end = new Date(`${endsAt}T00:00:00`).getTime()
+    const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24))
+    return diffDays > 0 ? diffDays : 0
+  }, [startsAt, endsAt])
+
+  const toggleTarget = (key: string) => {
+    setPicked((prev) =>
+      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key],
+    )
+  }
+
+  // Filter place options
+  const filteredGroups = useMemo(() => {
+    if (!placeFilter.trim()) return groups
+    const q = placeFilter.toLowerCase()
+    return groups.filter((g) => g.name.toLowerCase().includes(q))
+  }, [groups, placeFilter])
+
+  const filteredScreens = useMemo(() => {
+    if (!placeFilter.trim()) return screens
+    const q = placeFilter.toLowerCase()
+    return screens.filter(
+      (s) =>
+        (s.name || '').toLowerCase().includes(q) ||
+        (s.location || '').toLowerCase().includes(q),
+    )
+  }, [screens, placeFilter])
+
+  // Mutation to create booking
+  const createMutation = useMutation({
+    mutationFn: () => {
+      const targets = picked.map((key) =>
+        key.startsWith('s')
+          ? { screen_id: Number(key.slice(1)) }
+          : { group_id: Number(key.slice(1)) },
+      )
+      return api.createPlacement({
+        content_id: contentId,
+        client_id: clientId ? Number(clientId) : undefined,
+        advertiser: clientId ? undefined : advertiser.trim(),
+        plan_id: planId,
+        price_paise: Math.round(Number(price || 0) * 100),
+        is_paid: false,
+        starts_at: new Date(`${startsAt}T00:00:00`).toISOString(),
+        ends_at: new Date(`${endsAt}T23:59:59`).toISOString(),
+        notes: notes.trim() || null,
+        targets,
+      })
+    },
+    onSuccess: () => {
+      invalidateBookingViews(queryClient)
+      toast.success('Booking created and scheduled successfully')
+      onOpenChange(false)
+      // Reset form
+      setClientId('')
+      setAdvertiser('')
+      setPlanId(null)
+      setPrice('')
+      setNotes('')
+      setPicked([])
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to create booking')
+    },
+  })
+
+  const isValid =
+    (Boolean(clientId) || Boolean(advertiser.trim())) &&
+    picked.length > 0 &&
+    endsAt > startsAt &&
+    !isOverCap
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto p-6 sm:p-7">
+        <DialogHeader>
+          <div className="flex items-center gap-2.5">
+            <div className="size-9 rounded-xl bg-primary/10 text-primary grid place-items-center">
+              <Receipt className="size-5" />
+            </div>
+            <div>
+              <DialogTitle className="text-xl">Create New Booking</DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                {contentTitle ? (
+                  <>Selling <strong className="text-foreground">{contentTitle}</strong> to a client.</>
+                ) : (
+                  'Record commercial agreement, pricing plan, and target screens for this ad.'
+                )}
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-6 py-2">
+          {/* Section: Client Selection */}
+          <div className="rounded-2xl border border-primary/20 bg-primary/[0.02] p-4 sm:p-5 space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Building2 className="size-4 text-primary" />
+                <Label htmlFor="booking-client" className="text-xs font-bold uppercase tracking-wider text-primary">
+                  Client / Advertiser <span className="text-rose-500">*</span>
+                </Label>
+              </div>
+              {selectedClient && (
+                <Badge variant="outline" className="text-[10px] font-medium border-primary/30 text-primary">
+                  {selectedClient.client_code}
+                </Badge>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <select
+                id="booking-client"
+                className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                value={clientId}
+                onChange={(e) => {
+                  setClientId(e.target.value)
+                  if (e.target.value) setAdvertiser('')
+                }}
+              >
+                <option value="">— Select registered client or enter brand name below —</option>
+                {clients.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.name} ({c.client_code}){c.email ? ` • ${c.email}` : ''}
+                  </option>
+                ))}
+              </select>
+
+              {!clientId && (
+                <div className="pt-1">
+                  <Input
+                    placeholder="Or type brand / advertiser name (e.g. Moolans Grand Store)"
+                    value={advertiser}
+                    onChange={(e) => setAdvertiser(e.target.value)}
+                    className="text-sm bg-background"
+                  />
+                </div>
+              )}
+
+              {selectedClient && (selectedClient.email || selectedClient.phone) && (
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Contact: {[selectedClient.email, selectedClient.phone].filter(Boolean).join(' • ')}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Section: Pricing Plan & Package (Visual Cards) */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
+                <Sparkles className="size-3.5 text-primary" />
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Pricing Plan &amp; Package
+                </Label>
+              </div>
+              {selectedPlan ? (
+                <Badge variant="outline" className="text-[11px] font-semibold text-emerald-500 border-emerald-500/30">
+                  {rupees(selectedPlan.price_paise)} • {selectedPlan.duration_days} Days
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-[11px] font-semibold text-primary border-primary/30">
+                  Custom Terms
+                </Badge>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Custom Package Card */}
+              <button
+                type="button"
+                onClick={() => handleSelectPlan(null)}
+                className={`text-left p-3.5 rounded-xl border transition-all ${
+                  planId === null
+                    ? 'border-primary bg-primary/10 shadow-sm ring-1 ring-primary/30'
+                    : 'border-border/60 hover:border-border hover:bg-muted/30'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-xs text-foreground">Custom — no package</span>
+                  <Badge variant="secondary" className="text-[10px] font-semibold">
+                    You set price
+                  </Badge>
+                </div>
+                <p className="mt-1.5 text-[11px] text-muted-foreground leading-snug">
+                  Negotiated deal without a package. Custom price, custom duration, and no screen cap.
+                </p>
+              </button>
+
+              {/* Active Plans Cards */}
+              {plans.map((p) => {
+                const isSelected = planId === p.id
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => handleSelectPlan(p)}
+                    className={`text-left p-3.5 rounded-xl border transition-all ${
+                      isSelected
+                        ? 'border-primary bg-primary/10 shadow-sm ring-1 ring-primary/30'
+                        : 'border-border/60 hover:border-border hover:bg-muted/30'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-xs text-foreground truncate">{p.name}</span>
+                      <span className="text-xs font-bold text-primary shrink-0">{rupees(p.price_paise)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1.5 text-[11px] text-muted-foreground">
+                      <span>{p.duration_days} days</span>
+                      <span>•</span>
+                      <span>Max {p.max_locations} screen{p.max_locations > 1 ? 's' : ''}</span>
+                      {!p.is_active && <Badge variant="warning" className="text-[9px]">retired</Badge>}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Section: Price & Booking Schedule */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="booking-price" className="text-xs font-medium">
+                Agreed Price (₹)
+              </Label>
+              <div className="relative">
+                <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                <Input
+                  id="booking-price"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder={selectedPlan ? String(selectedPlan.price_paise / 100) : '25000'}
+                  className="pl-9 text-sm bg-background"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="booking-from" className="text-xs font-medium">
+                Starts From
+              </Label>
+              <div className="relative">
+                <CalendarRange className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                <Input
+                  id="booking-from"
+                  type="date"
+                  value={startsAt}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
+                  className="pl-9 text-sm bg-background"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="booking-until" className="text-xs font-medium">
+                  Runs Until
+                </Label>
+                {runDurationDays > 0 && (
+                  <span className="text-[10px] font-semibold text-muted-foreground">
+                    {runDurationDays} days
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <CalendarRange className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                <Input
+                  id="booking-until"
+                  type="date"
+                  value={endsAt}
+                  onChange={(e) => setEndsAt(e.target.value)}
+                  className="pl-9 text-sm bg-background"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Where it plays (Screens & Groups) */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Where it plays (Locations) <span className="text-rose-500">*</span>
+              </Label>
+              <Badge
+                variant={isOverCap ? 'danger' : 'outline'}
+                className="text-[11px] font-semibold"
+              >
+                {maxAllowedScreens !== null
+                  ? `${coveredCount} of ${maxAllowedScreens} screens covered`
+                  : `${coveredCount} screen${coveredCount === 1 ? '' : 's'} selected`}
+              </Badge>
+            </div>
+
+            {isOverCap && (
+              <div className="p-2.5 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-xs">
+                Your selected plan ({selectedPlan?.name}) allows a maximum of {maxAllowedScreens} screen(s), but your current selection covers {coveredCount} screens. Please adjust your target screens/groups or switch to Custom.
+              </div>
+            )}
+
+            {/* Filter Search */}
+            {(screens.length > 6 || groups.length > 2) && (
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Filter screens or groups…"
+                  value={placeFilter}
+                  onChange={(e) => setPlaceFilter(e.target.value)}
+                  className="pl-8 text-xs bg-background h-8"
+                />
+              </div>
+            )}
+
+            {screens.length === 0 && groups.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border/70 p-4 text-center text-xs text-muted-foreground">
+                No active screens or groups available in this workspace.
+              </div>
+            ) : (
+              <div className="max-h-52 overflow-y-auto space-y-1.5 rounded-xl border border-border/60 bg-muted/20 p-2.5">
+                {/* Groups */}
+                {filteredGroups.length > 0 && (
+                  <div className="space-y-1 pb-1">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">
+                      Venue Groups
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {filteredGroups.map((group) => {
+                        const key = `g${group.id}`
+                        const isChecked = picked.includes(key)
+                        const groupScreenCount = screens.filter((s) => s.group_id === group.id).length
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => toggleTarget(key)}
+                            className={`flex items-center gap-2 p-2 rounded-lg border text-left transition-all ${
+                              isChecked
+                                ? 'border-primary bg-primary/10 text-foreground'
+                                : 'border-border/50 hover:bg-muted/40 text-muted-foreground'
+                            }`}
+                          >
+                            <div
+                              className={`size-4 rounded border grid place-items-center shrink-0 transition-colors ${
+                                isChecked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'
+                              }`}
+                            >
+                              {isChecked && <Check className="size-3" />}
+                            </div>
+                            <Layers3 className="size-3.5 text-primary shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium truncate text-foreground">{group.name}</p>
+                              <p className="text-[10px] text-muted-foreground truncate">
+                                {groupScreenCount} screen{groupScreenCount === 1 ? '' : 's'}
+                              </p>
+                            </div>
+                            <Badge variant="secondary" className="text-[9px] shrink-0">Group</Badge>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Individual Screens */}
+                {filteredScreens.length > 0 && (
+                  <div className="space-y-1 pt-1">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">
+                      Individual Screens
+                    </p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {filteredScreens.map((screen) => {
+                        const key = `s${screen.id}`
+                        const isChecked = picked.includes(key)
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => toggleTarget(key)}
+                            className={`flex items-center gap-2 p-2 rounded-lg border text-left transition-all ${
+                              isChecked
+                                ? 'border-primary bg-primary/10 text-foreground'
+                                : 'border-border/50 hover:bg-muted/40 text-muted-foreground'
+                            }`}
+                          >
+                            <div
+                              className={`size-4 rounded border grid place-items-center shrink-0 transition-colors ${
+                                isChecked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'
+                              }`}
+                            >
+                              {isChecked && <Check className="size-3" />}
+                            </div>
+                            <MonitorPlay className="size-3.5 text-muted-foreground shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium truncate text-foreground">
+                                {screen.name || `Screen #${screen.id}`}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground truncate">
+                                {screen.location || 'Default Location'}
+                              </p>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Section: Notes */}
+          <div className="space-y-1.5">
+            <Label htmlFor="booking-notes" className="text-xs font-medium text-muted-foreground">
+              Campaign Notes / PO Reference (Optional)
+            </Label>
+            <Input
+              id="booking-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. Diwali festive campaign, contract ref #982"
+              className="text-xs bg-background"
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0 mt-4">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            disabled={!isValid || createMutation.isPending}
+            onClick={() => createMutation.mutate()}
+            className="font-semibold shadow-md"
+          >
+            {createMutation.isPending ? 'Creating Booking…' : 'Create Booking'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}

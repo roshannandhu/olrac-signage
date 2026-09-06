@@ -3,14 +3,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Building2, CalendarRange, Check, IndianRupee, Mail, Phone, Tag, X } from 'lucide-react'
+import { Building2, Mail, Phone, Tag, X } from 'lucide-react'
 import { api } from '@/lib/api'
-import { asDate, money, rupees } from '@/lib/format'
 import { invalidateBookingViews } from '@/lib/query-keys'
-import type { Client, ContentItem, Screen, TenantPlan } from '@/lib/types'
+import type { Client, ContentItem } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
@@ -18,46 +24,18 @@ interface EditClientAdModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   contentItem: ContentItem | null
-  /**
-   * Screens to tick by default for an advert that has none yet.
-   *
-   * Passed by the playlist builder, where the "+" sits beside a loop the operator is
-   * already looking at. Without it the modal opened with nothing selected, the operator
-   * booked the advert, and it went to no screen at all -- the loop was unchanged and
-   * nothing reached the TV, which read as "adding content does nothing".
-   *
-   * Only a default. An advert that already has screens keeps them, so re-opening the
-   * modal from a different playlist cannot quietly re-target a live booking.
-   */
+  /** Optional backwards-compatibility prop */
   defaultScreenIds?: number[]
 }
 
-export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScreenIds }: EditClientAdModalProps) {
+export function EditClientAdModal({ open, onOpenChange, contentItem }: EditClientAdModalProps) {
   const queryClient = useQueryClient()
 
   const [name, setName] = useState('')
   const [clientName, setClientName] = useState('')
   const [clientEmail, setClientEmail] = useState('')
   const [clientPhone, setClientPhone] = useState('')
-  const [planId, setPlanId] = useState<number | null>(null)
-  // Rupees as typed, converted to paise on the wire. A string rather than a number so the
-  // box can be EMPTY -- which is not the same as zero, and zero is a real price a booking
-  // can legitimately carry (a make-good, a bonus run).
-  const [price, setPrice] = useState('')
-  const [selectedScreenIds, setSelectedScreenIds] = useState<number[]>([])
   const [notes, setNotes] = useState('')
-  // How long the booking itself runs. Only meaningful on a custom sale -- a plan states
-  // its own duration and that is the whole point of buying one.
-  const [durationDays, setDurationDays] = useState('')
-  // Per-location overrides, keyed by screen id: 30 days in a mall, 10 in a shop, 50 at an
-  // airport, as ONE booking rather than three.
-  //
-  // No toggle in front of this any more. It used to be a mode of its own, which left the
-  // editor with TWO "custom" controls that meant different things -- and it was the only
-  // way to express a run length other than the hardcoded 30 days, because a custom sale
-  // had no duration field at all. With one, these boxes go back to being what they say
-  // they are: an exception to the booking's length, blank when there is none.
-  const [screenDays, setScreenDays] = useState<Record<number, number>>({})
   const [showClientSuggestions, setShowClientSuggestions] = useState(false)
 
   // Load available clients for auto-complete
@@ -67,40 +45,6 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
     enabled: open,
   })
 
-  // Load tenant pricing plans
-  const { data: plans = [] } = useQuery<TenantPlan[]>({
-    queryKey: ['tenant-plans'],
-    queryFn: () => api.getTenantPlans(),
-    enabled: open,
-  })
-
-  // Load active screens
-  const { data: screens = [] } = useQuery<Screen[]>({
-    queryKey: ['screens'],
-    queryFn: () => api.getScreens(),
-    enabled: open,
-  })
-
-  // The booking itself, on the same query key the Booking & billing section uses -- so
-  // opening this costs no extra request on the ad page, and the two stop being two views
-  // of a booking that disagree about it.
-  //
-  // This editor used to work entirely from the flattened summary on the content row, which
-  // carries the sold price and the SCREEN targets and nothing else. Everything the section
-  // below deals in -- group targets, extensions, what the client has actually paid -- was
-  // therefore invisible here, and a booking sold on a whole group opened this modal reading
-  // "0 screens assigned" over ten TVs that were running the advert.
-  const { data: placements = [] } = useQuery({
-    queryKey: ['placements', contentItem?.id],
-    queryFn: () => api.getPlacements(contentItem!.id),
-    enabled: open && Boolean(contentItem?.id),
-  })
-  // Highest id, matching what serialize_content reports as this asset's booking.
-  const booking = useMemo(
-    () => (placements.length ? [...placements].sort((a, b) => b.id - a.id)[0] : null),
-    [placements],
-  )
-
   // Pre-fill fields when modal opens with contentItem
   useEffect(() => {
     if (contentItem && open) {
@@ -108,88 +52,9 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
       setClientName(contentItem.client_name || '')
       setClientEmail(contentItem.client_email || '')
       setClientPhone(contentItem.client_phone || '')
-      setPlanId(contentItem.plan_id || null)
-      // What this booking is actually billed, which for a custom sale is the only place
-      // the figure exists. Blank on an advert with no booking yet, so picking a plan can
-      // fill it without overwriting anything.
-      setPrice(
-        contentItem.placement_price_paise != null
-          ? String(contentItem.placement_price_paise / 100)
-          : '',
-      )
-      // Existing targets win; the default only fills an empty selection.
-      const existing = contentItem.screen_ids || []
-      setSelectedScreenIds(existing.length ? existing : (defaultScreenIds || []))
-      setScreenDays(contentItem.screen_days || {})
-      // The booking's OWN length, which is not the gap between its start and its effective
-      // end -- one location sold 50 days on a 30-day campaign pushes the latter out, and
-      // seeding from it would stretch the sale a little further every time the modal was
-      // opened and saved.
-      setDurationDays(
-        contentItem.placement_duration_days != null
-          ? String(contentItem.placement_duration_days)
-          : '',
-      )
       setNotes(contentItem.placement_notes || '')
     }
-    // Deliberately narrower than the values used. `contentItem` is a fresh object after
-    // every ['content'] refetch and `defaultScreenIds` a fresh array after every ['screens']
-    // one, so depending on them by identity re-seeded this form -- wiping whatever the
-    // operator was halfway through typing -- any time something else invalidated a query.
-    // Seeding is keyed on which asset is open, which is what actually decides it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, contentItem?.id, (defaultScreenIds || []).join(',')])
-
-  // Every plan that can be shown here: the ones still on sale, plus -- when the booking is
-  // on one -- the package it was actually sold on, even after the tenant retired it.
-  // getTenantPlans returns active plans only, so a campaign on a retired package rendered
-  // no selected tile at all: not its plan, which was missing, and not Custom, because
-  // planId was not null. Nothing was highlighted and nothing said why.
-  const selectablePlans = useMemo(() => {
-    const current = booking?.plan
-    if (!current || plans.some((plan) => plan.id === current.id)) return plans
-    return [...plans, current]
-  }, [plans, booking])
-
-  // Selected plan metadata
-  const selectedPlan = useMemo(() => {
-    return selectablePlans.find((p) => p.id === planId) || null
-  }, [selectablePlans, planId])
-
-  // Screens this booking reaches through a GROUP target. Not editable here -- adding and
-  // removing groups is the bookings section's job -- but they are screens the client is
-  // being given, so the plan's cap has to count them exactly as the server does. Leaving
-  // them out let this form fill a five-screen plan that a ten-screen group had already
-  // used up, and the save then came back as a 409 the operator had no way to anticipate.
-  const groupTargets = useMemo(
-    () => (booking?.targets || []).filter((target) => target.kind === 'group'),
-    [booking],
-  )
-  const groupScreenIds = useMemo(() => {
-    const bookedGroups = new Set(groupTargets.map((target) => target.group_id))
-    return screens.filter((screen) => screen.group_id && bookedGroups.has(screen.group_id)).map((s) => s.id)
-  }, [groupTargets, screens])
-  // The count the cap is measured against: individually assigned screens plus the ones
-  // arriving through a group, de-duplicated the way the server de-duplicates them.
-  const coveredScreenCount = useMemo(
-    () => new Set([...groupScreenIds, ...selectedScreenIds]).size,
-    [groupScreenIds, selectedScreenIds],
-  )
-
-  // The one "custom" in this form. Price, run length and per-location overrides are all
-  // the operator's on a custom sale and all the package's on a plan -- there is no third
-  // state, and no second toggle that can disagree with this one.
-  const isCustom = planId === null
-
-  // Per-location windows sold before this editor stopped offering them on a plan. Shown,
-  // not editable: the booking is real and a client paid for it, so hiding the lengths would
-  // leave an operator looking at a campaign whose schedule the page will not admit exists.
-  const legacyPlanWindows = !isCustom && Object.keys(screenDays).length > 0
-
-  // Null means "no cap", which is not the same as "capped at however many screens exist".
-  const maxAllowedScreens = selectedPlan && selectedPlan.max_locations > 0
-    ? selectedPlan.max_locations
-    : null
+  }, [open, contentItem?.id])
 
   // Filter client suggestions
   const filteredClients = useMemo(() => {
@@ -206,23 +71,6 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
         client_name: clientName.trim(),
         client_email: clientEmail.trim() || undefined,
         client_phone: clientPhone.trim() || undefined,
-        plan_id: planId,
-        // Only when a figure was typed. Sending null leaves the agreed price alone, so an
-        // edit to a phone number cannot restate what a client owes.
-        price_paise: price.trim() === '' ? undefined : Math.round(Number(price) * 100),
-        screen_ids: selectedScreenIds,
-        // The run length is the custom sale's to state. On a plan it is the plan's, and
-        // sending one would let this editor quietly stretch a package past what it sells.
-        duration_days: isCustom && durationDays.trim() !== '' ? Number(durationDays) : undefined,
-        // Per-location lengths, and the instruction to drop the ones left blank, are sent
-        // together and ONLY on a custom sale. On a plan neither is sent, so a booking that
-        // already carries per-location windows keeps them: this editor no longer offers to
-        // set them there, and flattening a paid schedule because a control disappeared from
-        // the UI is the exact defect clear_screen_days was added to prevent.
-        screen_days: isCustom
-          ? Object.fromEntries(selectedScreenIds.filter((id) => screenDays[id]).map((id) => [id, screenDays[id]]))
-          : undefined,
-        clear_screen_days: isCustom,
         notes: notes.trim() || undefined,
       })
     },
@@ -235,26 +83,6 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
       toast.error(err.message || 'Failed to update client & ad details')
     },
   })
-
-  const toggleScreen = (screenId: number) => {
-    setSelectedScreenIds((prev) => {
-      if (prev.includes(screenId)) {
-        return prev.filter((id) => id !== screenId)
-      }
-      // Against the same count the server enforces -- group members included. Counting
-      // only the ticked boxes let the form offer screens the save would then refuse.
-      const covered = new Set([...groupScreenIds, ...prev])
-      if (maxAllowedScreens !== null && !covered.has(screenId) && covered.size >= maxAllowedScreens) {
-        toast.error(
-          groupTargets.length
-            ? `${selectedPlan?.name || 'This plan'} covers ${maxAllowedScreens} screens, and the booked groups already use ${covered.size}.`
-            : `Your plan (${selectedPlan?.name || 'Selected'}) is capped at ${maxAllowedScreens} screen(s).`,
-        )
-        return prev
-      }
-      return [...prev, screenId]
-    })
-  }
 
   /** Close the suggestion list when focus leaves the name field and the list together. */
   const closeSuggestionsOnBlur = (event: React.FocusEvent<HTMLDivElement>) => {
@@ -274,22 +102,22 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-6 sm:p-7">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-6 sm:p-7">
         <DialogHeader>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <div className="size-9 rounded-xl bg-primary/10 text-primary grid place-items-center">
               <Building2 className="size-5" />
             </div>
             <div>
-              <DialogTitle className="text-xl">Edit Client & Ad Details</DialogTitle>
+              <DialogTitle className="text-xl">Edit Client &amp; Ad Details</DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                Update advertiser information, commercial package, and screen allocation for this ad.
+                Update advertiser contact information and creative title.
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="space-y-6 py-2">
+        <div className="space-y-5 py-2">
           {/* Ad Title */}
           <div className="space-y-1.5">
             <Label htmlFor="ad-name" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -312,10 +140,10 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Building2 className="size-4 text-primary" />
-                <span className="text-xs font-bold uppercase tracking-wider text-primary">Client & Advertiser (Required)</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-primary">Client &amp; Advertiser</span>
               </div>
               <Badge variant="outline" className="text-[10px] font-medium border-primary/30 text-primary">
-                1:1 Ad Booking
+                Contact Info
               </Badge>
             </div>
 
@@ -410,296 +238,7 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
             </div>
           </div>
 
-          {/* Section: Pricing Plan */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Pricing Plan & Package
-              </Label>
-              {selectedPlan && (
-                <Badge variant="outline" className="text-[11px] font-semibold text-emerald-500 border-emerald-500/30">
-                  {rupees(selectedPlan.price_paise)} • {selectedPlan.duration_days} Days
-                </Badge>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {/* Not every client buys a package. Without this tile a plan could be picked
-                  but never un-picked, so a booking sold on an agreed figure had no way to
-                  be recorded as one -- and a new advert left on no plan was created at zero
-                  with no field anywhere to say otherwise. */}
-              <button
-                type="button"
-                onClick={() => setPlanId(null)}
-                className={`text-left p-3 rounded-xl border transition-all ${
-                  planId === null
-                    ? 'border-primary bg-primary/10 shadow-sm'
-                    : 'border-border/60 hover:border-border hover:bg-muted/30'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-xs text-foreground">Custom — no package</span>
-                  <span className="text-xs font-bold text-primary">You set the price</span>
-                </div>
-                <div className="mt-1 text-[11px] text-muted-foreground">
-                  No location cap · set the run length per screen below
-                </div>
-              </button>
-              {selectablePlans.map((p) => {
-                const isSelected = planId === p.id
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => {
-                      setPlanId(p.id)
-                      // Fills the price only when nothing is there. Overwriting would
-                      // restate a figure already agreed with the client -- the same
-                      // silent rebill the API refuses to do when a plan is repriced.
-                      setPrice((current) => (current.trim() === '' ? String(p.price_paise / 100) : current))
-                    }}
-                    className={`text-left p-3 rounded-xl border transition-all ${
-                      isSelected
-                        ? 'border-primary bg-primary/10 shadow-sm'
-                        : 'border-border/60 hover:border-border hover:bg-muted/30'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold text-xs text-foreground">{p.name}</span>
-                      <span className="text-xs font-bold text-primary">{rupees(p.price_paise)}</span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-1 text-[11px] text-muted-foreground">
-                      <span>{p.duration_days} days</span>
-                      <span>•</span>
-                      <span>Max {p.max_locations} screen{p.max_locations > 1 ? 's' : ''}</span>
-                      {/* Listed only because this booking is on it. Said out loud, or the
-                          operator is looking at a package that is no longer on the Plans
-                          page and cannot tell why. */}
-                      {!p.is_active && <Badge variant="warning" className="text-[10px]">no longer sold</Badge>}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* What the client is billed and for how long -- the two halves of the deal,
-                side by side. A plan states both; Custom leaves both to the operator, which
-                is the whole of what "Custom" now means. */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              <div className="space-y-1.5">
-                {/* "Sold price", not "contract price": everywhere else on this page the
-                    contract value is the total INCLUDING extensions, and this box is the
-                    originally sold figure alone. Two names for two numbers, so the panel
-                    above and this field stop looking like the same one disagreeing. */}
-                <Label htmlFor="ad-price" className="text-xs font-medium">
-                  Sold price (₹) {isCustom && <span className="text-rose-500">*</span>}
-                </Label>
-                <div className="relative">
-                  <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-                  <Input
-                    id="ad-price"
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    placeholder={selectedPlan ? String(selectedPlan.price_paise / 100) : '25000'}
-                    className="pl-9 text-sm bg-background"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="ad-days" className="text-xs font-medium">
-                  Run length (days) {isCustom && <span className="text-rose-500">*</span>}
-                </Label>
-                {/* Read-only on a plan, because the duration IS the package. Editable on a
-                    custom sale, which previously had no duration field at all and silently
-                    became a 30-day booking whatever the operator had agreed. */}
-                <div className="relative">
-                  <CalendarRange className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
-                  <Input
-                    id="ad-days"
-                    type="number"
-                    min={1}
-                    max={3650}
-                    value={isCustom ? durationDays : String(selectedPlan?.duration_days ?? '')}
-                    onChange={(e) => setDurationDays(e.target.value)}
-                    disabled={!isCustom}
-                    placeholder="30"
-                    className="pl-9 text-sm bg-background disabled:opacity-70"
-                  />
-                </div>
-              </div>
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              {isCustom
-                ? 'No package, so the price and the length are both yours to set. Give a screen its own length below only where it differs.'
-                : `From ${selectedPlan?.name || 'the plan'}. The price stays editable for a discount; the length is what the package sells.`}
-            </p>
-
-            {/* What the booking is actually worth and what the client has paid.
-                "Contract price" above is the figure this form OWNS -- the originally sold
-                price. Extensions and payments belong to the booking, are edited in Booking
-                & billing, and were absent here entirely: an operator opened this on a
-                campaign extended twice and part paid, saw one number that matched none of
-                it, and reasonably concluded the two screens were separate systems. */}
-            {booking && (() => {
-              const bill = money(booking)
-              const extended = bill.total - booking.price_paise
-              return (
-                <div className="rounded-xl border border-border/60 bg-muted/30 p-3 space-y-1.5">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      This booking
-                    </span>
-                    <Badge variant={bill.tone === 'outline' ? 'warning' : bill.tone} className="text-[10px]">
-                      {bill.label}
-                    </Badge>
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-muted-foreground sm:grid-cols-3">
-                    <span>
-                      Total billed{' '}
-                      <span className="font-semibold text-foreground tabular-nums">{rupees(bill.total)}</span>
-                      {extended > 0 && ` (incl. ${rupees(extended)} extended)`}
-                    </span>
-                    <span>
-                      Received{' '}
-                      <span className="font-semibold text-foreground tabular-nums">{rupees(bill.paid)}</span>
-                    </span>
-                    <span>
-                      Runs to{' '}
-                      <span className="font-semibold text-foreground">
-                        {asDate(booking.effective_ends_at || booking.ends_at)}
-                      </span>
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    Payments, extensions and whole-group placements are edited in
-                    &ldquo;Booking &amp; billing&rdquo; on this page. Editing the price here
-                    changes what is owed; it never touches what has been received.
-                  </p>
-                </div>
-              )
-            })()}
-          </div>
-
-          {/* Section: Screen Allocation */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Assigned Screens
-              </Label>
-              <div className="flex items-center gap-2">
-                {/* Counted the way the server counts it: group members included. The badge
-                    used to report only the ticked boxes, so a booking sold on a ten-screen
-                    group read "0 of 5 screens assigned" while delivering ten. */}
-                <Badge
-                  variant={maxAllowedScreens !== null && coveredScreenCount > maxAllowedScreens ? 'danger' : 'outline'}
-                  className="text-[11px] font-semibold"
-                >
-                  {maxAllowedScreens !== null
-                    ? `${coveredScreenCount} of ${maxAllowedScreens} screens covered`
-                    : `${coveredScreenCount} screen${coveredScreenCount === 1 ? '' : 's'} covered`}
-                </Badge>
-              </div>
-            </div>
-
-            {/* Whole groups this booking runs on. Shown, never edited: adding or removing
-                a group is the bookings section's job, and this list existing at all is the
-                difference between "this ad plays nowhere" and "this ad plays on a venue". */}
-            {groupTargets.length > 0 && (
-              <div className="rounded-xl border border-border/60 bg-muted/30 p-3 space-y-1">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Also booked on whole groups
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {groupTargets.map((target) => (
-                    <Badge key={target.id} variant="secondary" className="text-[11px]">
-                      {target.name}
-                    </Badge>
-                  ))}
-                </div>
-                <p className="text-[11px] text-muted-foreground">
-                  {groupScreenIds.length} screen{groupScreenIds.length === 1 ? '' : 's'} through these
-                  groups, counted against the plan. Change them in &ldquo;Booking &amp; billing&rdquo;.
-                </p>
-              </div>
-            )}
-
-            {screens.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border/70 p-4 text-center text-xs text-muted-foreground">
-                No active screens available in this workspace.
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
-                {screens.map((screen) => {
-                  const isChecked = selectedScreenIds.includes(screen.id)
-                  return (
-                    <button
-                      key={screen.id}
-                      type="button"
-                      onClick={() => toggleScreen(screen.id)}
-                      className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-left transition-all ${
-                        isChecked
-                          ? 'border-primary/80 bg-primary/10 text-foreground'
-                          : 'border-border/50 hover:bg-muted/40 text-muted-foreground'
-                      }`}
-                    >
-                      <div
-                        className={`size-4 rounded border grid place-items-center shrink-0 transition-colors ${
-                          isChecked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'
-                        }`}
-                      >
-                        {isChecked && <Check className="size-3" />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium truncate text-foreground">{screen.name || `Screen #${screen.id}`}</p>
-                        <p className="text-[10px] text-muted-foreground truncate">{screen.location || 'Default Location'}</p>
-                      </div>
-                      {/* Rendered inside the row but OUTSIDE the click target's effect:
-                          stopPropagation, or typing a duration would untick the screen. */}
-                      {legacyPlanWindows && isChecked && screenDays[screen.id] && (
-                        <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
-                          {screenDays[screen.id]}d sold
-                        </span>
-                      )}
-                      {isCustom && isChecked && (
-                        <span
-                          className="flex shrink-0 items-center gap-1"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          <input
-                            type="number"
-                            min={1}
-                            max={3650}
-                            aria-label={`Days for ${screen.name || `Screen #${screen.id}`}`}
-                            value={screenDays[screen.id] ?? ''}
-                            placeholder={durationDays || '30'}
-                            onChange={(event) => {
-                              const value = Number(event.target.value)
-                              setScreenDays((current) => {
-                                const next = { ...current }
-                                // Cleared means "follow the booking", so the key is removed
-                                // rather than stored as 0 -- which would be a zero-day run.
-                                if (!value || value < 1) delete next[screen.id]
-                                else next[screen.id] = value
-                                return next
-                              })
-                            }}
-                            className="w-14 rounded-lg border border-border/60 bg-background px-1.5 py-1 text-center text-[11px] text-foreground outline-none focus:border-primary"
-                          />
-                          <span className="text-[10px] text-muted-foreground">days</span>
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Notes */}
+          {/* Campaign Notes */}
           <div className="space-y-1.5">
             <Label htmlFor="notes" className="text-xs font-medium text-muted-foreground">
               Campaign Notes / Reference
@@ -712,28 +251,19 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
               className="text-xs"
             />
           </div>
+
+          <p className="text-[11px] text-muted-foreground">
+            Commercial plans, pricing, dates, and screen allocations are managed in the <strong>Booking &amp; billing</strong> section.
+          </p>
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0 mt-4">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          {/* Save is blocked when over the cap, not merely coloured red. Switching to a
-              smaller plan left the earlier selection in place, so the badge turned danger
-              and Save stayed enabled -- and the API then refused the whole edit with a 409
-              that read as a failure rather than as the choice it was. */}
           <Button
             type="button"
-            disabled={
-              !clientName.trim()
-              || updateMutation.isPending
-              || (maxAllowedScreens !== null && coveredScreenCount > maxAllowedScreens)
-              // A custom sale states its own price and its own length. Blank either and
-              // the booking falls back to a figure nobody agreed -- Rs.0, or 30 days.
-              // Per-location boxes stay optional: blank means "as long as the booking",
-              // which is the ordinary case and the reason they are exceptions now.
-              || (isCustom && (price.trim() === '' || durationDays.trim() === ''))
-            }
+            disabled={!clientName.trim() || updateMutation.isPending}
             onClick={() => updateMutation.mutate()}
             className="font-semibold shadow-md"
           >

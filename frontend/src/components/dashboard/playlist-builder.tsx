@@ -9,7 +9,7 @@ import { CalendarClock, Check, ChevronDown, Clock3, GripVertical, ListVideo, Plu
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { ErrorState } from '@/components/dashboard/error-state'
-import { EditClientAdModal } from '@/components/dashboard/edit-client-ad-modal'
+import { CreateBookingModal } from '@/components/dashboard/create-booking-modal'
 import { MediaThumbnail } from '@/components/dashboard/media-thumbnail'
 import { PageHeader } from '@/components/dashboard/page-header'
 import { Badge } from '@/components/ui/badge'
@@ -413,14 +413,16 @@ export function PlaylistBuilder({ playlistId, showHeader = true }: { playlistId:
         </aside>
       </div>
 
-      {/* One booking modal, shared with the content page. A second form that also creates
-          bookings would drift from this one the first time either changed. */}
-      <EditClientAdModal
-        open={Boolean(bookingFor)}
-        onOpenChange={(next) => { if (!next) setBookingFor(null) }}
-        contentItem={bookingFor}
-        defaultScreenIds={screensOnThisPlaylist}
-      />
+      {/* Booking modal with pre-selected screens for this playlist loop */}
+      {bookingFor && (
+        <CreateBookingModal
+          open={Boolean(bookingFor)}
+          onOpenChange={(next) => { if (!next) setBookingFor(null) }}
+          contentId={bookingFor.id}
+          contentTitle={bookingFor.name}
+          defaultScreenIds={screensOnThisPlaylist}
+        />
+      )}
     </div>
   )
 }

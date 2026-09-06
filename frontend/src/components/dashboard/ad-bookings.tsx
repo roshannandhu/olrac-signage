@@ -7,6 +7,7 @@ import { ArrowUpCircle, CalendarRange, FileDown, IndianRupee, Layers3, Mail, Mon
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { ErrorState } from '@/components/dashboard/error-state'
 import { EmailReportModal } from '@/components/dashboard/email-report-modal'
+import { CreateBookingModal } from '@/components/dashboard/create-booking-modal'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -82,15 +83,6 @@ export function AdBookings({ contentId }: { contentId: number }) {
 
   const [createOpen, setCreateOpen] = useState(false)
   const [emailPlacement, setEmailPlacement] = useState<Placement | null>(null)
-  const [advertiser, setAdvertiser] = useState('')
-  const [clientId, setClientId] = useState('')
-  const [planId, setPlanId] = useState('')
-  const [price, setPrice] = useState('')
-  // Lazy initialisers: reading the clock during render is impure and would drift on
-  // every re-render.
-  const [startsAt, setStartsAt] = useState(() => dateInput(new Date()))
-  const [endsAt, setEndsAt] = useState(() => dateInput(Date.now() + 30 * 864e5))
-  const [picked, setPicked] = useState<string[]>([])
 
   const [addTo, setAddTo] = useState<Placement | null>(null)
   const [splitting, setSplitting] = useState<{ placement: Placement; target: PlacementTarget } | null>(null)
@@ -215,26 +207,7 @@ export function AdBookings({ contentId }: { contentId: number }) {
     onError: fail,
   })
 
-  const create = useMutation({
-    mutationFn: () => api.createPlacement({
-      content_id: contentId,
-      // The API takes one or the other; sending an empty string would fail its min_length.
-      client_id: clientId ? Number(clientId) : undefined,
-      advertiser: clientId ? undefined : advertiser.trim(),
-      plan_id: planId ? Number(planId) : undefined,
-      // Rupees in the box, paise on the wire — money never rides on a float.
-      price_paise: Math.round(Number(price || 0) * 100),
-      is_paid: false,
-      starts_at: new Date(`${startsAt}T00:00:00`).toISOString(),
-      ends_at: new Date(`${endsAt}T23:59:59`).toISOString(),
-      targets: picked.map((key) => key.startsWith('s') ? { screen_id: Number(key.slice(1)) } : { group_id: Number(key.slice(1)) }),
-    }),
-    onSuccess: () => {
-      refresh(); toast.success('Booking created and placed')
-      setCreateOpen(false); setAdvertiser(''); setPrice(''); setPicked([]); setClientId(''); setPlanId('')
-    },
-    onError: fail,
-  })
+
 
   const removeTarget = useMutation({
     mutationFn: ({ id, targetId }: { id: number; targetId: number }) => api.removePlacementTarget(id, targetId),
@@ -506,123 +479,12 @@ export function AdBookings({ contentId }: { contentId: number }) {
         )
       })}
 
-      {/* New booking */}
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>New booking</DialogTitle>
-            <DialogDescription>Record who is paying for this advert and where it should run.</DialogDescription>
-          </DialogHeader>
-          <div className="max-h-[55vh] space-y-4 overflow-y-auto px-1 pt-2">
-            <div className="space-y-2">
-              <Label htmlFor="client">Client</Label>
-              {/* A saved client carries the contact details the report is addressed to and
-                  emailed with. Typing a name still works for a one-off, which is what
-                  every existing booking did. */}
-              <select
-                id="client"
-                className="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm"
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                autoFocus
-              >
-                <option value="">— Type a name instead —</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={String(client.id)}>{client.name} ({client.client_code})</option>
-                ))}
-              </select>
-              {!clientId && (
-                <Input value={advertiser} onChange={(e) => setAdvertiser(e.target.value)} placeholder="Pittappillil Agencies" aria-label="Advertiser name" />
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="plan">Plan</Label>
-              {/* Choosing one fills price and the end date from its duration. Copied on the
-                  server, so repricing the plan later leaves this booking alone. */}
-              <select
-                id="plan"
-                className="border-input bg-background h-10 w-full rounded-lg border px-3 text-sm"
-                value={planId}
-                onChange={(e) => {
-                  const previous = plans.find((candidate) => String(candidate.id) === planId)
-                  setPlanId(e.target.value)
-                  const plan = plans.find((candidate) => String(candidate.id) === e.target.value)
-                  if (plan) {
-                    // Only overwrite a price the operator has not set themselves. Picking a
-                    // plan to fill in the dates used to silently discard a negotiated figure
-                    // typed moments earlier.
-                    const untouched = !price.trim() || (previous && price === String(previous.price_paise / 100))
-                    if (untouched) setPrice(String(plan.price_paise / 100))
-                    setEndsAt(addDays(startsAt, plan.duration_days))
-                  }
-                }}
-              >
-                <option value="">— No plan —</option>
-                {plans.map((plan) => (
-                  <option key={plan.id} value={String(plan.id)}>
-                    {plan.name} — ₹{(plan.price_paise / 100).toLocaleString('en-IN')} / {plan.duration_days} days
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="price">Price (₹)</Label>
-                <Input id="price" type="number" min={0} value={price} onChange={(e) => setPrice(e.target.value)} placeholder="50000" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="from">From</Label>
-                <Input
-                  id="from"
-                  type="date"
-                  value={startsAt}
-                  onChange={(e) => {
-                    setStartsAt(e.target.value)
-                    // The end date was derived from the old start. Leaving it put meant
-                    // picking a 30-day plan and then moving the start sold whatever was
-                    // left of the original window.
-                    const plan = plans.find((candidate) => String(candidate.id) === planId)
-                    if (plan) setEndsAt(addDays(e.target.value, plan.duration_days))
-                  }}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="to">Until</Label>
-                <Input id="to" type="date" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Where it plays</Label>
-              <div className="border-hairline max-h-52 space-y-1 overflow-y-auto rounded-xl border p-2">
-                {placeOptions.map((option) => (
-                  <label key={option.key} className="hover:bg-muted flex cursor-pointer items-center gap-3 rounded-lg p-2 text-sm">
-                    <input
-                      type="checkbox"
-                      className="accent-primary size-4"
-                      checked={picked.includes(option.key)}
-                      onChange={(e) => setPicked((cur) => e.target.checked ? [...cur, option.key] : cur.filter((k) => k !== option.key))}
-                    />
-                    {option.kind === 'group' ? <Layers3 className="size-3.5" /> : <MonitorPlay className="size-3.5" />}
-                    <span className="flex-1">{option.label}</span>
-                    {option.kind === 'group' && <Badge variant="secondary">group</Badge>}
-                  </label>
-                ))}
-                {!placeOptions.length && <p className="text-muted-foreground p-2 text-sm">No screens or groups yet.</p>}
-              </div>
-              <p className="text-muted-foreground text-xs">Choosing a group runs the advert on every screen in it.</p>
-            </div>
-          </div>
-          <DialogFooter showCloseButton>
-            {/* A saved client OR a typed name -- the mutation already sends whichever is
-                set. Requiring the typed name regardless meant picking a client from the
-                dropdown left this button permanently disabled, so the saved-client path
-                could never actually be used. */}
-            <Button disabled={(!clientId && !advertiser.trim()) || !picked.length || endsAt <= startsAt || create.isPending} onClick={() => create.mutate()}>
-              {create.isPending ? 'Creating…' : 'Create booking'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* New booking with visual Plan & Custom package selection */}
+      <CreateBookingModal
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        contentId={contentId}
+      />
 
       {/* Sell more time on an existing booking */}
       <Dialog open={Boolean(extending)} onOpenChange={(open) => !open && setExtending(null)}>

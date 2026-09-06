@@ -41,6 +41,9 @@ export function AdBookings({ contentId }: { contentId: number }) {
   const canEdit = canEditTenantContent(user)
 
   const placementsQuery = useQuery({ queryKey: ['placements', contentId], queryFn: () => api.getPlacements(contentId) })
+  // The ad's own client, so a new booking does not ask for it again. Same query key the
+  // ad detail page already uses, so mounting this costs no extra request.
+  const contentQuery = useQuery({ queryKey: ['content', contentId], queryFn: () => api.getContentItem(contentId) })
   const screensQuery = useQuery({ queryKey: ['screens'], queryFn: api.getScreens })
   const groupsQuery = useQuery({ queryKey: ['groups'], queryFn: api.getGroups })
   const clientsQuery = useQuery({ queryKey: ['clients'], queryFn: api.getClients })
@@ -479,11 +482,21 @@ export function AdBookings({ contentId }: { contentId: number }) {
         )
       })}
 
-      {/* New booking with visual Plan & Custom package selection */}
+      {/* New booking with visual Plan & Custom package selection.
+          The client is carried in from the ad rather than asked for again: this advert
+          already belongs to somebody -- it was entered when the ad was set up, and edited
+          since through "Edit client & ad details". Making an operator find the same name
+          in a dropdown to sell that client a second booking was a step with one right
+          answer, and the modal has always accepted it. It stays editable, because selling
+          one creative to a different advertiser is rare but real.
+          Falls back to the most recent booking's client for an ad whose content row never
+          carried one. */}
       <CreateBookingModal
         open={createOpen}
         onOpenChange={setCreateOpen}
         contentId={contentId}
+        initialClientId={contentQuery.data?.client_id ?? placements[0]?.client?.id ?? null}
+        initialAdvertiser={contentQuery.data?.client_name ?? placements[0]?.advertiser ?? ''}
       />
 
       {/* Sell more time on an existing booking */}

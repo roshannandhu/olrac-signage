@@ -269,6 +269,26 @@ def run() -> None:
                     f"correcting an existing location's length did not take: {again}",
                 )
 
+        # 6. Commercial report and invoice generation for multi-location schedules
+        report_res = client.get(f"/api/placements/{placement_id}/report", headers=headers)
+        check(report_res.status_code == 200, f"report fetch failed: {report_res.text}")
+        if report_res.status_code == 200:
+            rep_data = report_res.json()
+            sched = rep_data.get("target_schedule") or []
+            check(len(sched) == 3, f"expected 3 targets in schedule, got {len(sched)}")
+            mall_sched = next((s for s in sched if "mall" in s["name"].lower() or s["days"] == 30), None)
+            check(mall_sched is not None and mall_sched["days"] == 30, f"mall schedule mismatch: {mall_sched}")
+            shop_sched = next((s for s in sched if "shop" in s["name"].lower() or s["days"] == 10), None)
+            check(shop_sched is not None and shop_sched["days"] == 10, f"shop schedule mismatch: {shop_sched}")
+
+        inv_pdf = client.get(f"/api/placements/{placement_id}/invoice.pdf", headers=headers)
+        check(inv_pdf.status_code == 200, f"invoice PDF failed: {inv_pdf.status_code}")
+        check(len(inv_pdf.content) > 1000, f"invoice PDF content suspiciously small: {len(inv_pdf.content)}")
+
+        rep_pdf = client.get(f"/api/placements/{placement_id}/report.pdf", headers=headers)
+        check(rep_pdf.status_code == 200, f"report PDF failed: {rep_pdf.status_code}")
+        check(len(rep_pdf.content) > 1000, f"report PDF content suspiciously small: {len(rep_pdf.content)}")
+
     finally:
         client.__exit__(None, None, None)
 

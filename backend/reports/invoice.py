@@ -165,6 +165,34 @@ def build_pdf(report: dict) -> bytes:
         ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
     ]))
     story.append(line_items)
+
+    # --- Location Schedule Breakdown (for multi-location / custom day campaigns) --------
+    target_schedule = report.get("target_schedule") or []
+    if target_schedule:
+        story.append(Spacer(1, 4 * mm))
+        story.append(Paragraph("<b>LOCATION SCHEDULE BREAKDOWN</b>", style["label"]))
+        story.append(Spacer(1, 1.5 * mm))
+        sched_rows = [[
+            Paragraph("<b>LOCATION / VENUE</b>", style["label"]),
+            Paragraph('<para align="center"><b>ACTIVE DATES</b></para>', style["label"]),
+            Paragraph('<para align="right"><b>AIRTIME</b></para>', style["label"]),
+        ]]
+        for item in target_schedule:
+            sched_rows.append([
+                Paragraph(f"<b>{_safe(item['name'])}</b><br/><font size='6.5' color='#64748b'>{_safe(item['location'])}</font>", style["body"]),
+                Paragraph(f'<para align="center">{_date(item["starts_at"])} to {_date(item["ends_at"])}</para>', style["body"]),
+                Paragraph(f'<para align="right"><b>{item["days"]} day{"s" if item["days"] != 1 else ""}</b></para>', style["body"]),
+            ])
+        sched_table = Table(sched_rows, colWidths=[content_w - 80 * mm, 48 * mm, 32 * mm])
+        sched_table.setStyle(TableStyle([
+            ("GRID", (0, 0), (-1, -1), 0.3, HAIRLINE),
+            ("BACKGROUND", (0, 0), (-1, 0), TILE_BG),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 6), ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 3.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
+        ]))
+        story.append(sched_table)
+
     story.append(Spacer(1, 5 * mm))
 
     # --- What was paid ------------------------------------------------------------------

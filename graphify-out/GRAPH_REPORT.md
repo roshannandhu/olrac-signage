@@ -1,7 +1,7 @@
 # Graph Report - OLRAC SIGNAGE  (2026-09-06)
 
 ## Corpus Check
-- 365 files · ~399,739 words
+- 365 files · ~400,783 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -10,7 +10,7 @@
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `5b8042a6`
+- Built from commit: `63a7a8a9`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -33,7 +33,7 @@
 - components.json
 - OLRAC Signage — Work Order for Antigravity (Gemini Pro)
 - PlaybackTelemetry
-- screens/[id]/page.tsx
+- invoices/page.tsx
 - process_media_sync
 - main.py
 - booking_report.py
@@ -126,7 +126,7 @@
 - test_release_rollout.py
 - BaseRepository
 - test_screen_quota.py
-- campaigns/page.tsx
+- screens/[id]/page.tsx
 - test_rollout_policy.py
 - playlist-builder.tsx
 - MaintenanceGesture
@@ -266,8 +266,8 @@ Cohesion: 0.26
 Nodes (11): auth_header(), Screen pairing is instant: python tests/test_screen_approval.py This file used…, sign_in(), test_a_secret_does_not_authenticate_a_different_screen(), test_a_signed_in_screen_syncs_straight_away(), test_enrolment_token_admits_immediately(), test_pairing_admits_immediately(), test_re_signing_in_keeps_the_screen_admitted() (+3 more)
 
 ### Community 14 - "api.ts"
-Cohesion: 0.06
-Nodes (54): AdminReleasesPage(), Alert, AlertsPage(), buildAlerts(), hoursSince(), Severity, FileManagementPage(), FileSort (+46 more)
+Cohesion: 0.05
+Nodes (53): AdminReleasesPage(), looksLikeLink(), Place, PlaceSearch(), FIT_MODES, ORIENTATIONS, ScreenSettingsDialog(), splitTags() (+45 more)
 
 ### Community 15 - "components.json"
 Cohesion: 0.09
@@ -281,9 +281,9 @@ Nodes (23): 0. Ground rules, 1. Device knowledge — the most important section,
 Cohesion: 0.15
 Nodes (9): HeartbeatReporter, Context, PlaybackSnapshot, PlaybackTelemetry, enqueue(), Context, CoroutineWorker, Result (+1 more)
 
-### Community 18 - "screens/[id]/page.tsx"
-Cohesion: 0.15
-Nodes (14): orientationLabel(), ScreenDetailPage(), looksLikeLink(), Place, PlaceSearch(), ScreenMap(), FIT_MODES, ORIENTATIONS (+6 more)
+### Community 18 - "invoices/page.tsx"
+Cohesion: 0.26
+Nodes (15): Filter, METHOD_LABELS, BLANK, EmailReportModalProps, Badge(), badgeVariants, Dialog(), DialogContent() (+7 more)
 
 ### Community 19 - "process_media_sync"
 Cohesion: 0.18
@@ -350,8 +350,8 @@ Cohesion: 0.22
 Nodes (5): bringToFront(), AccessibilityEvent, AccessibilityService, Context, WatchdogAccessibilityService
 
 ### Community 35 - "content/page.tsx"
-Cohesion: 0.14
-Nodes (34): ContentPage(), isSupported(), QueuedUpload, stripExtension(), GroupsPage(), ScreensPage(), StatusFilter, useStoredView() (+26 more)
+Cohesion: 0.17
+Nodes (24): ContentPage(), isSupported(), QueuedUpload, stripExtension(), GroupsPage(), ScreensPage(), StatusFilter, useStoredView() (+16 more)
 
 ### Community 36 - "timedelta"
 Cohesion: 0.07
@@ -366,8 +366,8 @@ Cohesion: 0.22
 Nodes (8): Build, Checking a TV, How recovery actually works, Known issue in the player (not the watchdog), OLRAC Watchdog — build and TV setup, Provision a TV, Retargeting, The three things that silently break this
 
 ### Community 39 - "team/page.tsx"
-Cohesion: 0.09
-Nodes (38): BillingPage(), percent(), exportFormats, EmergencyPage(), targetLabels, asDate(), Filter, METHOD_LABELS (+30 more)
+Cohesion: 0.13
+Nodes (20): AccountPage(), BillingPage(), percent(), exportFormats, asTenantRole(), roleDescription, TeamPage(), TENANT_ROLES (+12 more)
 
 ### Community 40 - "BootReceiver"
 Cohesion: 0.33
@@ -446,8 +446,8 @@ Cohesion: 0.20
 Nodes (9): 1. Make the app a working Device Policy Controller, 2. Silent updates (finishes P7), 3. Generate the provisioning QR, 4. Auto-enrol on first boot, 5. Retire the accessibility watchdog on provisioned devices, Definition of done, Deployment paths, in order of preference, P9 — Zero-touch provisioning for 80+ TVs (no ADB) (+1 more)
 
 ### Community 89 - "ad-bookings.tsx"
-Cohesion: 0.17
-Nodes (25): AdDetailPage(), SECTIONS, InvoicesPage(), AdBookings(), METHOD_LABELS, CreateBookingModal(), CreateBookingModalProps, EditClientAdModal() (+17 more)
+Cohesion: 0.18
+Nodes (24): AdDetailPage(), SECTIONS, asDate(), InvoicesPage(), AdBookings(), METHOD_LABELS, CreateBookingModal(), CreateBookingModalProps (+16 more)
 
 ### Community 90 - "placement_service.py"
 Cohesion: 0.15
@@ -543,7 +543,7 @@ Nodes (18): Screen, Selects the most appropriate media rendition for a screen ba
 
 ### Community 128 - "useAuthStore"
 Cohesion: 0.12
-Nodes (27): AdminLayout(), navItems, AccountPage(), BrandingPage(), LOGO_TYPES, ClientsPage(), GroupDetailPage(), accountLinks (+19 more)
+Nodes (26): AdminLayout(), navItems, BrandingPage(), LOGO_TYPES, ClientsPage(), GroupDetailPage(), accountLinks, DashboardLayout() (+18 more)
 
 ### Community 130 - "users.py"
 Cohesion: 0.31
@@ -569,17 +569,17 @@ Nodes (18): BaseRepository, Any, Query, Session, Base Repository for Clean Archi
 Cohesion: 0.29
 Nodes (11): build_tenant(), check(), fill_to_cap(), The screen cap actually caps: python tests/test_screen_quota.py A tenant on a…, The derivation itself, before any endpoint uses it., The bypass: /register first, then /enroll finds the row and skips the check., A workspace capped at CAP screens, limited either by its package or by an…, CAP screens already claimed, so the next one is the one over the line. (+3 more)
 
-### Community 143 - "campaigns/page.tsx"
-Cohesion: 0.27
-Nodes (10): asDate(), CampaignsPage(), dateTime(), ScreenDetailsDrawer(), Tabs(), TabsIndicator(), TabsList(), TabsPanel() (+2 more)
+### Community 143 - "screens/[id]/page.tsx"
+Cohesion: 0.15
+Nodes (20): Alert, AlertsPage(), buildAlerts(), hoursSince(), Severity, asDate(), CampaignsPage(), orientationLabel() (+12 more)
 
 ### Community 144 - "test_rollout_policy.py"
 Cohesion: 0.18
 Nodes (18): apply_update_status(), eligible_for_fallback(), Staged player rollout: which build a screen is offered, and when to give up on…, Point a screen at a build, clearing any state from the previous attempt.…, Restrict an AppRelease query to builds that unpinned screens may be offered., Fold one device-reported update result into `screen`. Returns a short human-…, repin(), Staged-rollout decisions — pure logic, no database, no device. Run directly:… (+10 more)
 
 ### Community 145 - "playlist-builder.tsx"
-Cohesion: 0.16
-Nodes (16): dayLabels, dayNames, DefaultTransitionPanel(), ItemRow(), PlaylistBuilder(), previewStyle(), rotationLabel(), rotationOptions (+8 more)
+Cohesion: 0.10
+Nodes (23): FileManagementPage(), FileSort, SORTS, EditClientAdModalProps, SortOption, MediaThumbnail(), dayLabels, dayNames (+15 more)
 
 ### Community 147 - "resolve_rotation"
 Cohesion: 0.23
@@ -654,8 +654,8 @@ Cohesion: 0.39
 Nodes (7): BroadcastRequest, cancel_emergency_broadcast(), get_active_broadcasts(), BaseModel, get, Session, trigger_emergency_broadcast()
 
 ### Community 189 - "cn"
-Cohesion: 0.12
-Nodes (26): SectionNav(), ALL_DAY, MODES, ScreenHoursDialog(), Windows, withDefaults(), DialogOverlay(), SelectContent() (+18 more)
+Cohesion: 0.08
+Nodes (39): SectionNav(), EmergencyPage(), targetLabels, AssignPlaylistCard(), AssignTarget, ALL_DAY, MODES, ScreenHoursDialog() (+31 more)
 
 ### Community 190 - "test_google_signin.py"
 Cohesion: 0.24

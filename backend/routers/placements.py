@@ -959,6 +959,57 @@ def build_booking_report(scope: TenantScope, placement: models.AdPlacement) -> d
     verification_url = f"https://olrac-signage.abhinavsanthosh221.workers.dev/verify/pop?cert={certificate_id}&id={placement.id}"
 
     empty = {"total_plays": 0, "completed_plays": 0, "error_plays": 0, "success_percent": 0.0}
+    day = 86400
+    ends = effective_ends_at(placement)
+    commercials = _commercials(placement, generated_at)
+
+    screen_map = {
+        s.id: s for s in scope.db.query(models.Screen).filter(models.Screen.organization_id == placement.organization_id).all()
+    }
+    group_map = {
+        g.id: g for g in scope.db.query(models.ScreenGroup).filter(models.ScreenGroup.organization_id == placement.organization_id).all()
+    }
+
+    target_info: dict[int, dict] = {}
+    target_schedule = []
+    for target in placement.targets:
+        t_starts = target.effective_starts_at
+        t_ends = target.effective_ends_at or ends
+        t_days = max(1, round((t_ends - t_starts).total_seconds() / day)) if (t_ends and t_starts) else commercials["days_total"]
+
+        if target.screen_id and target.screen_id in screen_map:
+            sc = screen_map[target.screen_id]
+            s_name = sc.name or f"Screen {sc.id}"
+            s_loc = sc.location or "Location not set"
+        elif target.group_id and target.group_id in group_map:
+            gr = group_map[target.group_id]
+            s_name = gr.name or f"Group {gr.id}"
+            s_loc = "Venue Group"
+        else:
+            s_name = f"Target #{target.id}"
+            s_loc = "-"
+
+        target_schedule.append({
+            "name": s_name,
+            "location": s_loc,
+            "kind": "screen" if target.screen_id else "group",
+            "starts_at": t_starts,
+            "ends_at": t_ends,
+            "days": t_days,
+        })
+
+        info = {
+            "assigned_at": target.assigned_at,
+            "starts_at": t_starts,
+            "ends_at": t_ends,
+            "days": t_days,
+        }
+        if target.screen_id:
+            target_info[target.screen_id] = info
+        elif target.group_id:
+            for member in scope.query(models.Screen).filter(models.Screen.group_id == target.group_id).all():
+                target_info.setdefault(member.id, info)
+
     if not screen_ids:
         return {
             "placement_id": placement.id,
@@ -970,7 +1021,8 @@ def build_booking_report(scope: TenantScope, placement: models.AdPlacement) -> d
             "content_thumbnail": content_thumbnail,
             "certificate_id": certificate_id,
             "verification_url": verification_url,
-            **_commercials(placement, generated_at),
+            "target_schedule": target_schedule,
+            **commercials,
             "starts_at": placement.starts_at,
             "ends_at": placement.ends_at,
             "price_paise": placement.price_paise,
@@ -993,9 +1045,6 @@ def build_booking_report(scope: TenantScope, placement: models.AdPlacement) -> d
         # the report showed none of it.
         models.PlayLogHourlyRollup.date_hour <= effective_ends_at(placement),
     ]
-
-    commercials = _commercials(placement, generated_at)
-    ends = effective_ends_at(placement)
 
     totals_row = scope.db.query(
         func.coalesce(func.sum(models.PlayLogHourlyRollup.total_plays), 0),
@@ -1023,44 +1072,49 @@ def build_booking_report(scope: TenantScope, placement: models.AdPlacement) -> d
         ).filter(*window).group_by(models.PlayLogHourlyRollup.screen_id).all()
     )
 
-    # Every booked screen appears, including ones with no plays — a client is entitled to
-    # see that a screen they paid for delivered nothing.
-    # A screen reached through a GROUP inherits that group target's assignment date -- the
-    # group is what was sold, so every member started when the group was added.
-    assigned_at: dict[int, "datetime"] = {}
-    for target in placement.targets:
-        if target.screen_id:
-            assigned_at[target.screen_id] = target.assigned_at
-        elif target.group_id:
-            for member in scope.query(models.Screen).filter(models.Screen.group_id == target.group_id).all():
-                assigned_at.setdefault(member.id, target.assigned_at)
-
     screens = scope.query(models.Screen).filter(models.Screen.id.in_(screen_ids)).all()
     per_screen = []
     stale = []
     for screen in screens:
-        # A screen that has not reported since before the period ended may still be holding
-        # play counts locally, so its figure can only rise later.
-        #
-        # The cutoff needs a grace window, not just "before now": proof-of-play arrives in
-        # batches, so a screen reporting normally is always a little behind the clock and
-        # would otherwise be flagged on every report.
-        cutoff = min(effective_ends_at(placement), generated_at - REPORTING_GRACE)
+        t_meta = target_info.get(screen.id) or {
+            "assigned_at": placement.starts_at,
+            "starts_at": placement.starts_at,
+            "ends_at": ends,
+            "days": commercials["days_total"],
+        }
+        screen_starts = t_meta["starts_at"] or placement.starts_at
+        screen_ends = t_meta["ends_at"] or ends
+        screen_days = t_meta["days"]
+
+        if screen_starts > generated_at:
+            screen_status = "Scheduled"
+        elif screen_ends < generated_at:
+            screen_status = "Completed"
+        else:
+            screen_status = "Active"
+
+        elapsed_screen_days = max(1, round((min(generated_at, screen_ends) - max(screen_starts, placement.starts_at)).total_seconds() / day))
+        elapsed_screen_days = min(screen_days, elapsed_screen_days)
+
+        cutoff = min(screen_ends, generated_at - REPORTING_GRACE)
         is_stale = screen.last_seen is None or screen.last_seen < cutoff
         row = {
             "screen_id": screen.id,
             "screen_name": screen.name or f"Screen {screen.id}",
             "location": screen.location,
-            # When this screen joined the booking. A screen added mid-campaign has fewer
-            # days on air than the campaign has run, and dividing its plays by the campaign
-            # length would report it as the worst performer rather than the newest.
-            "assigned_at": assigned_at.get(screen.id) or placement.starts_at,
+            "assigned_at": t_meta["assigned_at"],
+            "starts_at": screen_starts,
+            "ends_at": screen_ends,
+            "days": screen_days,
+            "status": screen_status,
+            "days_elapsed": elapsed_screen_days,
             "latitude": screen.latitude,
             "longitude": screen.longitude,
             "online": screen.status == "online",
             "last_seen": screen.last_seen,
             "total_plays": counts.get(screen.id, 0),
             "completed_plays": completions.get(screen.id, 0),
+            "plays_per_day_avg": round(counts.get(screen.id, 0) / elapsed_screen_days, 1),
             "counts_may_be_incomplete": is_stale,
         }
         per_screen.append(row)
@@ -1109,6 +1163,7 @@ def build_booking_report(scope: TenantScope, placement: models.AdPlacement) -> d
         "content_thumbnail": content_thumbnail,
         "certificate_id": certificate_id,
         "verification_url": verification_url,
+        "target_schedule": target_schedule,
         **commercials,
         "starts_at": placement.starts_at,
         "ends_at": placement.ends_at,

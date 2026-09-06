@@ -945,8 +945,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/dashboard/content/[id]/page.tsx": {
-    "mtime": 1788700182.7923954,
-    "ast_hash": "2c1a66837983149b30c0aa085e02afd1",
+    "mtime": 1788709522.2934217,
+    "ast_hash": "7aad19c98d5ffdc71fd45c0014225d36",
     "semantic_hash": ""
   },
   "frontend/src/app/dashboard/files/page.tsx": {
@@ -1090,18 +1090,18 @@
     "semantic_hash": ""
   },
   "backend/reports/booking_report.py": {
-    "mtime": 1788359872.9672084,
-    "ast_hash": "5a4688df75c94a25f942bddaffb1a939",
+    "mtime": 1788710373.2459965,
+    "ast_hash": "d02a2843fac183cd87d7c64ce1a22dc7",
     "semantic_hash": ""
   },
   "backend/routers/placements.py": {
-    "mtime": 1788700182.785395,
-    "ast_hash": "1dbdbaf0cbbb18d14415c51667d3d041",
+    "mtime": 1788710351.8396628,
+    "ast_hash": "cb9ad07ad50d449e0be1bad3bac0f8ad",
     "semantic_hash": ""
   },
   "frontend/src/components/dashboard/ad-bookings.tsx": {
-    "mtime": 1788701844.8272393,
-    "ast_hash": "4facf3ceb5dadfdd2c2ca4fd260aa927",
+    "mtime": 1788709522.2934217,
+    "ast_hash": "e59be578b20bd7c55901ee8605c9583e",
     "semantic_hash": ""
   },
   "frontend/src/components/dashboard/bulk-action-bar.tsx": {
@@ -1685,8 +1685,8 @@
     "semantic_hash": ""
   },
   "frontend/src/components/dashboard/email-report-modal.tsx": {
-    "mtime": 1788273310.7283258,
-    "ast_hash": "3b5f3498180d51f9e7e27e7f9877179c",
+    "mtime": 1788709522.295417,
+    "ast_hash": "95c72f541f37f34297fb8d7704a6c36f",
     "semantic_hash": ""
   },
   "tests/test_tenant_plans.py": {
@@ -1700,8 +1700,8 @@
     "semantic_hash": ""
   },
   "frontend/src/components/dashboard/edit-client-ad-modal.tsx": {
-    "mtime": 1788701780.1473634,
-    "ast_hash": "1ee71855a3b017f625703946e911c32c",
+    "mtime": 1788709522.295417,
+    "ast_hash": "39e73cdde2e2500bbdc16d63ca336edc",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/network/R2Presigner.kt": {
@@ -1755,8 +1755,8 @@
     "semantic_hash": ""
   },
   "backend/reports/invoice.py": {
-    "mtime": 1788700182.7813997,
-    "ast_hash": "49e05a2007eb7f6a1abe17df1de4f441",
+    "mtime": 1788710362.2109165,
+    "ast_hash": "b901c1e021f13e35e197cb0a2438dcb6",
     "semantic_hash": ""
   },
   "frontend/src/app/dashboard/invoices/page.tsx": {
@@ -1770,8 +1770,8 @@
     "semantic_hash": ""
   },
   "tests/test_per_location_ad_window.py": {
-    "mtime": 1788357536.6163023,
-    "ast_hash": "a56e29eb629448081a4dbe9b1e39dd9f",
+    "mtime": 1788710847.4726856,
+    "ast_hash": "c8894c115fe6e1a6a74f292620e5a259",
     "semantic_hash": ""
   },
   "frontend/scripts/patch-opennext.js": {
@@ -1905,8 +1905,8 @@
     "semantic_hash": ""
   },
   "frontend/src/components/dashboard/create-booking-modal.tsx": {
-    "mtime": 1788701769.461349,
-    "ast_hash": "bf87d238497c45b71e4bd8dd2e597247",
+    "mtime": 1788710288.0294366,
+    "ast_hash": "f1559e003f8f12af98ec83060eb3073f",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/data/SignageClock.kt": {

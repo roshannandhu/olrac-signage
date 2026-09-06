@@ -63,6 +63,7 @@ export function CreateBookingModal({
   const [endsAt, setEndsAt] = useState<string>(() => dateInput(Date.now() + 30 * 864e5))
   const [notes, setNotes] = useState<string>('')
   const [picked, setPicked] = useState<string[]>([])
+  const [targetDays, setTargetDays] = useState<Record<string, number>>({})
   const [placeFilter, setPlaceFilter] = useState<string>('')
 
   // Load clients
@@ -93,23 +94,27 @@ export function CreateBookingModal({
     enabled: open,
   })
 
-  // Pre-seed targets and client when modal opens
-  useEffect(() => {
-    if (open) {
-      if (initialClientId) {
-        setClientId(String(initialClientId))
-      }
-      if (initialAdvertiser) {
-        setAdvertiser(initialAdvertiser)
-      }
-      if (defaultScreenIds && defaultScreenIds.length > 0) {
-        setPicked((prev) => {
-          const combined = new Set([...prev, ...defaultScreenIds.map((id) => `s${id}`)])
-          return Array.from(combined)
-        })
-      }
+  // Seed from the advert ONCE per opening, during render rather than in an effect.
+  //
+  // As an effect this re-ran every time the incoming client changed, which was harmless
+  // only while nothing passed one in. Now that the ad's client is fed in, the value
+  // arrives from the server a moment AFTER the dialog opens -- so the effect would fire
+  // again and overwrite a name the operator had already corrected by hand. Seeding on the
+  // first render that actually has something to seed with, and not again until the dialog
+  // is closed and reopened, is what stops a late response fighting the person typing.
+  const [seeded, setSeeded] = useState(false)
+  if (!open && seeded) {
+    // Forget it on close, so the next opening reads the advert afresh.
+    setSeeded(false)
+  }
+  if (open && !seeded && (initialClientId || initialAdvertiser || defaultScreenIds?.length)) {
+    setSeeded(true)
+    setClientId(initialClientId ? String(initialClientId) : '')
+    setAdvertiser(initialAdvertiser || '')
+    if (defaultScreenIds?.length) {
+      setPicked(defaultScreenIds.map((id) => `s${id}`))
     }
-  }, [open, defaultScreenIds, initialClientId, initialAdvertiser])
+  }
 
   const selectedPlan = useMemo(
     () => (planId != null ? plans.find((p) => p.id === planId) || null : null),
@@ -200,14 +205,30 @@ export function CreateBookingModal({
     )
   }, [screens, placeFilter])
 
+  // Calculate total screen-days across selected locations
+  const totalScreenDays = useMemo(() => {
+    if (picked.length === 0) return 0
+    if (planId !== null && selectedPlan) {
+      return coveredCount * (selectedPlan.duration_days || runDurationDays)
+    }
+    return picked.reduce((acc, key) => {
+      const d = targetDays[key] ?? runDurationDays
+      return acc + (d > 0 ? d : 0)
+    }, 0)
+  }, [picked, planId, selectedPlan, coveredCount, runDurationDays, targetDays])
+
   // Mutation to create booking
   const createMutation = useMutation({
     mutationFn: () => {
-      const targets = picked.map((key) =>
-        key.startsWith('s')
-          ? { screen_id: Number(key.slice(1)) }
-          : { group_id: Number(key.slice(1)) },
-      )
+      const targets = picked.map((key) => {
+        const isScreen = key.startsWith('s')
+        const id = Number(key.slice(1))
+        const customDays = planId === null ? targetDays[key] : undefined
+        return {
+          ...(isScreen ? { screen_id: id } : { group_id: id }),
+          ...(customDays && customDays > 0 ? { days: customDays } : {}),
+        }
+      })
       return api.createPlacement({
         content_id: contentId,
         client_id: clientId ? Number(clientId) : undefined,
@@ -232,6 +253,7 @@ export function CreateBookingModal({
       setPrice('')
       setNotes('')
       setPicked([])
+      setTargetDays({})
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to create booking')
@@ -246,7 +268,7 @@ export function CreateBookingModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto p-6 sm:p-7">
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl sm:p-7">
         <DialogHeader>
           <div className="flex items-center gap-2.5">
             <div className="size-9 rounded-xl bg-primary/10 text-primary grid place-items-center">
@@ -458,14 +480,22 @@ export function CreateBookingModal({
               <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Where it plays (Locations) <span className="text-rose-500">*</span>
               </Label>
-              <Badge
-                variant={isOverCap ? 'danger' : 'outline'}
-                className="text-[11px] font-semibold"
-              >
-                {maxAllowedScreens !== null
-                  ? `${coveredCount} of ${maxAllowedScreens} screens covered`
-                  : `${coveredCount} screen${coveredCount === 1 ? '' : 's'} selected`}
-              </Badge>
+              <div className="flex items-center gap-2">
+                {picked.length > 0 && planId === null && (
+                  <Badge variant="secondary" className="text-[10px] font-semibold bg-primary/10 text-primary border-primary/20">
+                    {totalScreenDays} screen-days
+                    {Number(price) > 0 && totalScreenDays > 0 ? ` • ~₹${Math.round(Number(price) / totalScreenDays)}/day` : ''}
+                  </Badge>
+                )}
+                <Badge
+                  variant={isOverCap ? 'danger' : 'outline'}
+                  className="text-[11px] font-semibold"
+                >
+                  {maxAllowedScreens !== null
+                    ? `${coveredCount} of ${maxAllowedScreens} screens covered`
+                    : `${coveredCount} screen${coveredCount === 1 ? '' : 's'} selected`}
+                </Badge>
+              </div>
             </div>
 
             {isOverCap && (
@@ -492,45 +522,82 @@ export function CreateBookingModal({
                 No active screens or groups available in this workspace.
               </div>
             ) : (
-              <div className="max-h-52 overflow-y-auto space-y-1.5 rounded-xl border border-border/60 bg-muted/20 p-2.5">
+              <div className="max-h-60 overflow-y-auto space-y-2 rounded-xl border border-border/60 bg-muted/20 p-2.5">
                 {/* Groups */}
                 {filteredGroups.length > 0 && (
-                  <div className="space-y-1 pb-1">
+                  <div className="space-y-1.5 pb-1">
                     <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">
                       Venue Groups
                     </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {filteredGroups.map((group) => {
                         const key = `g${group.id}`
                         const isChecked = picked.includes(key)
                         const groupScreenCount = screens.filter((s) => s.group_id === group.id).length
+                        const currentDays = targetDays[key] ?? runDurationDays
                         return (
-                          <button
+                          <div
                             key={key}
-                            type="button"
-                            onClick={() => toggleTarget(key)}
-                            className={`flex items-center gap-2 p-2 rounded-lg border text-left transition-all ${
+                            className={`p-2.5 rounded-xl border text-left transition-all ${
                               isChecked
-                                ? 'border-primary bg-primary/10 text-foreground'
+                                ? 'border-primary/60 bg-primary/[0.04] text-foreground shadow-sm'
                                 : 'border-border/50 hover:bg-muted/40 text-muted-foreground'
                             }`}
                           >
                             <div
-                              className={`size-4 rounded border grid place-items-center shrink-0 transition-colors ${
-                                isChecked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'
-                              }`}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => toggleTarget(key)}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleTarget(key) }}
+                              className="flex items-center gap-2 cursor-pointer select-none"
                             >
-                              {isChecked && <Check className="size-3" />}
+                              <div
+                                className={`size-4 rounded border grid place-items-center shrink-0 transition-colors ${
+                                  isChecked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'
+                                }`}
+                              >
+                                {isChecked && <Check className="size-3" />}
+                              </div>
+                              <Layers3 className="size-3.5 text-primary shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium truncate text-foreground">{group.name}</p>
+                                <p className="text-[10px] text-muted-foreground truncate">
+                                  {groupScreenCount} screen{groupScreenCount === 1 ? '' : 's'}
+                                </p>
+                              </div>
+                              <Badge variant="secondary" className="text-[9px] shrink-0">Group</Badge>
                             </div>
-                            <Layers3 className="size-3.5 text-primary shrink-0" />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-medium truncate text-foreground">{group.name}</p>
-                              <p className="text-[10px] text-muted-foreground truncate">
-                                {groupScreenCount} screen{groupScreenCount === 1 ? '' : 's'}
-                              </p>
-                            </div>
-                            <Badge variant="secondary" className="text-[9px] shrink-0">Group</Badge>
-                          </button>
+
+                            {/* Custom airtime days per venue group */}
+                            {isChecked && planId === null && (
+                              <div
+                                className="flex items-center justify-between gap-1.5 pt-2 mt-2 border-t border-primary/20 text-xs"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <span className="text-[11px] text-muted-foreground font-medium">Airtime:</span>
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={3650}
+                                    value={currentDays}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value, 10)
+                                      setTargetDays((prev) => ({
+                                        ...prev,
+                                        [key]: isNaN(val) ? 1 : Math.max(1, Math.min(3650, val)),
+                                      }))
+                                    }}
+                                    className="w-14 h-6 px-1 text-center text-xs font-bold rounded-lg border border-input bg-background text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                                  />
+                                  <span className="text-[11px] text-muted-foreground">days</span>
+                                  <span className="text-[10px] text-primary font-medium ml-1">
+                                    (until {addDays(startsAt, currentDays)})
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         )
                       })}
                     </div>
@@ -539,42 +606,79 @@ export function CreateBookingModal({
 
                 {/* Individual Screens */}
                 {filteredScreens.length > 0 && (
-                  <div className="space-y-1 pt-1">
+                  <div className="space-y-1.5 pt-1">
                     <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">
                       Individual Screens
                     </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {filteredScreens.map((screen) => {
                         const key = `s${screen.id}`
                         const isChecked = picked.includes(key)
+                        const currentDays = targetDays[key] ?? runDurationDays
                         return (
-                          <button
+                          <div
                             key={key}
-                            type="button"
-                            onClick={() => toggleTarget(key)}
-                            className={`flex items-center gap-2 p-2 rounded-lg border text-left transition-all ${
+                            className={`p-2.5 rounded-xl border text-left transition-all ${
                               isChecked
-                                ? 'border-primary bg-primary/10 text-foreground'
+                                ? 'border-primary/60 bg-primary/[0.04] text-foreground shadow-sm'
                                 : 'border-border/50 hover:bg-muted/40 text-muted-foreground'
                             }`}
                           >
                             <div
-                              className={`size-4 rounded border grid place-items-center shrink-0 transition-colors ${
-                                isChecked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'
-                              }`}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => toggleTarget(key)}
+                              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleTarget(key) }}
+                              className="flex items-center gap-2 cursor-pointer select-none"
                             >
-                              {isChecked && <Check className="size-3" />}
+                              <div
+                                className={`size-4 rounded border grid place-items-center shrink-0 transition-colors ${
+                                  isChecked ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/40'
+                                }`}
+                              >
+                                {isChecked && <Check className="size-3" />}
+                              </div>
+                              <MonitorPlay className="size-3.5 text-muted-foreground shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <p className="text-xs font-medium truncate text-foreground">
+                                  {screen.name || `Screen #${screen.id}`}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground truncate">
+                                  {screen.location || 'Default Location'}
+                                </p>
+                              </div>
                             </div>
-                            <MonitorPlay className="size-3.5 text-muted-foreground shrink-0" />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-medium truncate text-foreground">
-                                {screen.name || `Screen #${screen.id}`}
-                              </p>
-                              <p className="text-[10px] text-muted-foreground truncate">
-                                {screen.location || 'Default Location'}
-                              </p>
-                            </div>
-                          </button>
+
+                            {/* Custom airtime days per screen */}
+                            {isChecked && planId === null && (
+                              <div
+                                className="flex items-center justify-between gap-1.5 pt-2 mt-2 border-t border-primary/20 text-xs"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <span className="text-[11px] text-muted-foreground font-medium">Airtime:</span>
+                                <div className="flex items-center gap-1.5">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={3650}
+                                    value={currentDays}
+                                    onChange={(e) => {
+                                      const val = parseInt(e.target.value, 10)
+                                      setTargetDays((prev) => ({
+                                        ...prev,
+                                        [key]: isNaN(val) ? 1 : Math.max(1, Math.min(3650, val)),
+                                      }))
+                                    }}
+                                    className="w-14 h-6 px-1 text-center text-xs font-bold rounded-lg border border-input bg-background text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                                  />
+                                  <span className="text-[11px] text-muted-foreground">days</span>
+                                  <span className="text-[10px] text-primary font-medium ml-1">
+                                    (until {addDays(startsAt, currentDays)})
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         )
                       })}
                     </div>

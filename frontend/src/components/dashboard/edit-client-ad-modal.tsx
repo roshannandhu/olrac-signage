@@ -102,7 +102,7 @@ export function EditClientAdModal({ open, onOpenChange, contentItem }: EditClien
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto p-6 sm:p-7">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg sm:p-7">
         <DialogHeader>
           <div className="flex items-center gap-2.5">
             <div className="size-9 rounded-xl bg-primary/10 text-primary grid place-items-center">

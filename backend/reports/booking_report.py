@@ -668,16 +668,22 @@ def build_pdf(report: dict) -> bytes:
 
     # --- Screen-level delivery, measured dynamically to prevent awkward overflow ------
     if report["per_screen"]:
-        rows = [["SCREEN", "LOCATION", "PLAYS", "COMPLETED"]]
+        rows = [["SCREEN", "LOCATION", "AIRTIME", "PLAYS", "COMPLETED"]]
         for screen in report["per_screen"]:
+            status_badge = screen.get("status", "Active")
+            days_info = f"{screen.get('days', '-')}d ({status_badge})"
             rows.append([
                 _safe(screen["screen_name"]) + (" *" if screen["counts_may_be_incomplete"] else ""),
                 _safe(screen["location"]) or "-",
+                days_info,
                 f"{screen['total_plays']:,}",
                 f"{screen['completed_plays']:,}",
             ])
-        screen_table = _grid(rows, [56 * mm, 56 * mm, 35 * mm, content_w - 147 * mm])
-        screen_table.setStyle(TableStyle([("ALIGN", (2, 0), (-1, -1), "RIGHT")]))
+        screen_table = _grid(rows, [46 * mm, 46 * mm, 30 * mm, 25 * mm, content_w - 147 * mm])
+        screen_table.setStyle(TableStyle([
+            ("ALIGN", (2, 0), (2, -1), "CENTER"),
+            ("ALIGN", (3, 0), (-1, -1), "RIGHT"),
+        ]))
 
         used = sum(flowable.wrap(doc.width, doc.height)[1] for flowable in story[page_two_from:])
         heading = Paragraph("SCREEN-LEVEL DELIVERY", style["h2"])

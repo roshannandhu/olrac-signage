@@ -477,8 +477,13 @@ export default function AdDetailPage() {
                       >
                         <div className="min-w-0">
                           <p className="text-foreground truncate text-sm font-medium">{screen.name || `Screen ${screen.id}`}</p>
-                          <p className="text-muted-foreground text-xs">
-                            {groupName(screen.group_id) || 'Not in a group'}
+                          {/* The place, not just the grouping. This row answered "where
+                              does my ad play?" with the group name -- or "Not in a group"
+                              -- while the screen's actual location sat unused on the
+                              record, readable only by hovering a pin on the map below.
+                              Location first, group as the fallback. */}
+                          <p className="text-muted-foreground truncate text-xs">
+                            {screen.location || groupName(screen.group_id) || 'No location set'}
                             {played?.last_played && ` • last played ${relativeTime(played.last_played)}`}
                           </p>
                         </div>

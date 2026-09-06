@@ -412,7 +412,14 @@ export interface Placement {
   /** The booking plus every extension sold against it. */
   total_price_paise: number | null
   price_paise: number
+  /** Settled in full. The shadow of the figures below, never a separate opinion. */
   is_paid: boolean
+  /** What the client has actually handed over. */
+  amount_paid_paise: number
+  /** What is still outstanding against `total_price_paise`, extensions included. */
+  balance_due_paise: number
+  /** The one word for the two figures above. */
+  payment_status: PaymentStatus
   starts_at: string
   ends_at: string
   notes: string | null
@@ -442,6 +449,8 @@ export interface Payment {
 }
 
 export type PaymentMethod = 'cash' | 'upi' | 'bank_transfer' | 'cheque' | 'card' | 'other'
+
+export type PaymentStatus = 'unpaid' | 'part_paid' | 'paid'
 
 /** One plan a booking could move to, and what moving would mean. */
 export interface PlanOption {

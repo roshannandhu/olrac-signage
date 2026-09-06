@@ -447,6 +447,58 @@ try:
     )
     print("  ok  correcting the plan without extending sells nothing")
 
+    # --- the plan a booking is ON is always listed, even after it is retired -------------
+    # Active-only was right for what a booking can move TO and wrong for what it is moving
+    # FROM: a campaign on a retired package listed no current plan at all, so the change-
+    # plan dialog opened with nothing marked current and no way to tell what the client
+    # had actually bought.
+    retired = http.post("/api/tenant-plans/", headers=auth, json={
+        "name": "Legacy Bundle", "duration_days": 20, "max_locations": 4,
+        "ad_slots": 2, "price_paise": 400000, "support_tier": "standard",
+    }).json()
+    on_retired = http.post("/api/placements/", headers=auth, json={
+        "content_id": ad.id, "plan_id": retired["id"], "advertiser": "Old Deal",
+        "starts_at": now.isoformat(), "price_paise": retired["price_paise"],
+        "targets": [{"screen_id": fleet[0].id}],
+    })
+    assert on_retired.status_code == 201, on_retired.text
+    legacy_id = on_retired.json()["id"]
+    # Sold on, so deleting retires rather than destroys.
+    assert http.delete(f"/api/tenant-plans/{retired['id']}", headers=auth).status_code == 200
+
+    listed = http.get(f"/api/placements/{legacy_id}/plan-options", headers=auth).json()
+    current = [o for o in listed if o["is_current"]]
+    assert len(current) == 1, (
+        "a booking on a retired plan listed no current plan at all: " f"{[o['plan']['name'] for o in listed]}"
+    )
+    assert current[0]["plan"]["name"] == "Legacy Bundle", current[0]
+    assert current[0]["plan"]["is_active"] is False, current[0]
+    assert not any(o["recommended"] and not o["plan"]["is_active"] for o in listed), (
+        "a plan the tenant has stopped selling was recommended"
+    )
+    print("  ok  the plan a booking is on is listed even after it is retired")
+
+    # --- a booking can come back OFF a package -------------------------------------------
+    # Every plan was offered and "no plan" was not, so a booking put on the wrong plan
+    # could be moved between plans but never taken off one, and a client renegotiated onto
+    # an agreed figure had nowhere to be recorded.
+    off = http.post(f"/api/placements/{legacy_id}/upgrade", headers=auth, json={"plan_id": None})
+    assert off.status_code == 200, off.text
+    assert off.json()["plan"] is None, off.json()
+    assert off.json()["plan_max_locations"] == 0, "a custom sale caps no locations"
+    assert off.json()["price_paise"] == retired["price_paise"], (
+        "moving off a package must not rewrite what the client was billed"
+    )
+    assert not off.json()["extensions"], (
+        "there is no plan length to extend by, so moving off a package must sell no time"
+    )
+    print("  ok  a booking can be moved off its package onto a custom price")
+
+    # A bare upgrade with no plan named at all is still a mistake, not a move to custom.
+    assert http.post(f"/api/placements/{legacy_id}/upgrade", headers=auth,
+                     json={"extend": False}).status_code == 422
+    print("  ok  an upgrade that names no plan at all is still refused")
+
     print("tenant plans: all checks passed")
 finally:
     try:

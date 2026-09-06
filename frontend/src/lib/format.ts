@@ -136,3 +136,62 @@ export function bookingState(placement: {
   if (end < now) return { label: 'Ended', tone: 'outline' }
   return { label: 'Running', tone: 'success' }
 }
+
+/**
+ * What a booking is worth, what the client has paid, and what is still owed.
+ *
+ * The server derives all three (see placements.settlement) so that the ad page, the
+ * bookings section, the screen page, the invoices list and the PDF cannot disagree about
+ * one booking. They already did: `is_paid` was set by ANY payment while every page read it
+ * as "settled in full", so ₹5,000 taken against a ₹50,000 campaign showed as "Paid in
+ * full" on the ad, "Paid" on the screen, and "Part paid · ₹45,000 outstanding" on the
+ * invoice -- off the same row.
+ *
+ * The fallbacks matter: they keep a response cached from before those fields existed
+ * rendering the same answer rather than "nothing paid" over a settled campaign.
+ */
+export function money(placement: {
+  price_paise: number
+  total_price_paise?: number | null
+  amount_paid_paise?: number | null
+  balance_due_paise?: number | null
+  payment_status?: 'unpaid' | 'part_paid' | 'paid' | null
+  is_paid: boolean
+  payment?: { amount_paise: number } | null
+}): {
+  total: number
+  paid: number
+  balance: number
+  status: 'unpaid' | 'part_paid' | 'paid'
+  /** "Paid in full" / "₹5,000 paid · ₹45,000 still owing" — a whole sentence, not a flag. */
+  label: string
+  /** Short enough for a badge beside the price. */
+  shortLabel: string
+  /** So the colour follows the state everywhere without being chosen again at each site. */
+  tone: 'success' | 'warning' | 'outline'
+} {
+  const total = placement.total_price_paise ?? placement.price_paise
+  const paid = placement.amount_paid_paise
+    ?? placement.payment?.amount_paise
+    ?? (placement.is_paid ? total : 0)
+  const balance = placement.balance_due_paise ?? Math.max(0, total - paid)
+  const status = placement.payment_status
+    ?? (balance <= 0 && (paid > 0 || placement.is_paid) ? 'paid' : paid > 0 ? 'part_paid' : 'unpaid')
+  return {
+    total,
+    paid,
+    balance,
+    status,
+    label: status === 'paid'
+      ? 'Paid in full'
+      : status === 'part_paid'
+        ? `${rupees(paid)} paid · ${rupees(balance)} still owing`
+        : `Nothing paid yet · ${rupees(balance)} owing`,
+    shortLabel: status === 'paid'
+      ? 'paid'
+      : status === 'part_paid'
+        ? `${rupees(balance)} owing`
+        : 'unpaid',
+    tone: status === 'paid' ? 'success' : status === 'part_paid' ? 'warning' : 'outline',
+  }
+}

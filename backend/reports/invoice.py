@@ -169,16 +169,27 @@ def build_pdf(report: dict) -> bytes:
 
     # --- What was paid ------------------------------------------------------------------
     payment = report.get("payment")
-    is_paid = bool(report.get("is_paid"))
-    received = (payment or {}).get("amount_paise") or 0
-    outstanding = (total or 0) - received if payment else 0
-    # "Part paid" when the money received does not cover the total -- which is exactly what
-    # an upgrade or an extension does until it is settled. Printing "Paid" above a line
-    # reading "Outstanding 5,000" is the kind of contradiction a client rings up about.
-    if payment and outstanding > 0:
-        status_label, status_ink, status_bg = "Part paid", PLAN_INK, PLAN_BG
-    elif is_paid:
+    # Read off the report, which derives all three from one place (placements.settlement),
+    # rather than subtracting them again here. "Part paid" when the money received does not
+    # cover the total -- which is exactly what an upgrade or an extension does until it is
+    # settled. Printing "Paid" above a line reading "Outstanding 5,000" is the kind of
+    # contradiction a client rings up about.
+    #
+    # The fallbacks keep an older report payload rendering rather than crashing on a key.
+    received = report.get("amount_paid_paise")
+    if received is None:
+        received = (payment or {}).get("amount_paise") or 0
+    outstanding = report.get("balance_due_paise")
+    if outstanding is None:
+        outstanding = max(0, (total or 0) - received)
+    status = report.get("payment_status") or (
+        "paid" if report.get("is_paid") and outstanding <= 0 else
+        "part_paid" if received > 0 else "unpaid"
+    )
+    if status == "paid":
         status_label, status_ink, status_bg = "Paid", OK_INK, OK_BG
+    elif status == "part_paid":
+        status_label, status_ink, status_bg = "Part paid", PLAN_INK, PLAN_BG
     else:
         status_label, status_ink, status_bg = "Unpaid", PLAN_INK, PLAN_BG
 

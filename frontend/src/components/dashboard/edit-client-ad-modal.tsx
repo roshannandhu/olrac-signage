@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Building2, CalendarRange, Check, IndianRupee, Mail, Phone, Tag, X } from 'lucide-react'
 import { api } from '@/lib/api'
-import { rupees } from '@/lib/format'
+import { asDate, money, rupees } from '@/lib/format'
 import { invalidateBookingViews } from '@/lib/query-keys'
 import type { Client, ContentItem, Screen, TenantPlan } from '@/lib/types'
 import { Badge } from '@/components/ui/badge'
@@ -81,6 +81,26 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
     enabled: open,
   })
 
+  // The booking itself, on the same query key the Booking & billing section uses -- so
+  // opening this costs no extra request on the ad page, and the two stop being two views
+  // of a booking that disagree about it.
+  //
+  // This editor used to work entirely from the flattened summary on the content row, which
+  // carries the sold price and the SCREEN targets and nothing else. Everything the section
+  // below deals in -- group targets, extensions, what the client has actually paid -- was
+  // therefore invisible here, and a booking sold on a whole group opened this modal reading
+  // "0 screens assigned" over ten TVs that were running the advert.
+  const { data: placements = [] } = useQuery({
+    queryKey: ['placements', contentItem?.id],
+    queryFn: () => api.getPlacements(contentItem!.id),
+    enabled: open && Boolean(contentItem?.id),
+  })
+  // Highest id, matching what serialize_content reports as this asset's booking.
+  const booking = useMemo(
+    () => (placements.length ? [...placements].sort((a, b) => b.id - a.id)[0] : null),
+    [placements],
+  )
+
   // Pre-fill fields when modal opens with contentItem
   useEffect(() => {
     if (contentItem && open) {
@@ -120,10 +140,41 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, contentItem?.id, (defaultScreenIds || []).join(',')])
 
+  // Every plan that can be shown here: the ones still on sale, plus -- when the booking is
+  // on one -- the package it was actually sold on, even after the tenant retired it.
+  // getTenantPlans returns active plans only, so a campaign on a retired package rendered
+  // no selected tile at all: not its plan, which was missing, and not Custom, because
+  // planId was not null. Nothing was highlighted and nothing said why.
+  const selectablePlans = useMemo(() => {
+    const current = booking?.plan
+    if (!current || plans.some((plan) => plan.id === current.id)) return plans
+    return [...plans, current]
+  }, [plans, booking])
+
   // Selected plan metadata
   const selectedPlan = useMemo(() => {
-    return plans.find((p) => p.id === planId) || null
-  }, [plans, planId])
+    return selectablePlans.find((p) => p.id === planId) || null
+  }, [selectablePlans, planId])
+
+  // Screens this booking reaches through a GROUP target. Not editable here -- adding and
+  // removing groups is the bookings section's job -- but they are screens the client is
+  // being given, so the plan's cap has to count them exactly as the server does. Leaving
+  // them out let this form fill a five-screen plan that a ten-screen group had already
+  // used up, and the save then came back as a 409 the operator had no way to anticipate.
+  const groupTargets = useMemo(
+    () => (booking?.targets || []).filter((target) => target.kind === 'group'),
+    [booking],
+  )
+  const groupScreenIds = useMemo(() => {
+    const bookedGroups = new Set(groupTargets.map((target) => target.group_id))
+    return screens.filter((screen) => screen.group_id && bookedGroups.has(screen.group_id)).map((s) => s.id)
+  }, [groupTargets, screens])
+  // The count the cap is measured against: individually assigned screens plus the ones
+  // arriving through a group, de-duplicated the way the server de-duplicates them.
+  const coveredScreenCount = useMemo(
+    () => new Set([...groupScreenIds, ...selectedScreenIds]).size,
+    [groupScreenIds, selectedScreenIds],
+  )
 
   // The one "custom" in this form. Price, run length and per-location overrides are all
   // the operator's on a custom sale and all the package's on a plan -- there is no third
@@ -136,8 +187,6 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
   const legacyPlanWindows = !isCustom && Object.keys(screenDays).length > 0
 
   // Null means "no cap", which is not the same as "capped at however many screens exist".
-  // A booking on a RETIRED plan also lands here, because getTenantPlans returns active
-  // plans only -- so the badge must not imply an allowance that was never sold.
   const maxAllowedScreens = selectedPlan && selectedPlan.max_locations > 0
     ? selectedPlan.max_locations
     : null
@@ -192,8 +241,15 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
       if (prev.includes(screenId)) {
         return prev.filter((id) => id !== screenId)
       }
-      if (maxAllowedScreens !== null && prev.length >= maxAllowedScreens) {
-        toast.error(`Your plan (${selectedPlan?.name || 'Selected'}) is capped at ${maxAllowedScreens} screen(s).`)
+      // Against the same count the server enforces -- group members included. Counting
+      // only the ticked boxes let the form offer screens the save would then refuse.
+      const covered = new Set([...groupScreenIds, ...prev])
+      if (maxAllowedScreens !== null && !covered.has(screenId) && covered.size >= maxAllowedScreens) {
+        toast.error(
+          groupTargets.length
+            ? `${selectedPlan?.name || 'This plan'} covers ${maxAllowedScreens} screens, and the booked groups already use ${covered.size}.`
+            : `Your plan (${selectedPlan?.name || 'Selected'}) is capped at ${maxAllowedScreens} screen(s).`,
+        )
         return prev
       }
       return [...prev, screenId]
@@ -389,7 +445,7 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
                   No location cap · set the run length per screen below
                 </div>
               </button>
-              {plans.map((p) => {
+              {selectablePlans.map((p) => {
                 const isSelected = planId === p.id
                 return (
                   <button
@@ -408,7 +464,7 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
                         : 'border-border/60 hover:border-border hover:bg-muted/30'
                     }`}
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="font-semibold text-xs text-foreground">{p.name}</span>
                       <span className="text-xs font-bold text-primary">{rupees(p.price_paise)}</span>
                     </div>
@@ -416,6 +472,10 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
                       <span>{p.duration_days} days</span>
                       <span>•</span>
                       <span>Max {p.max_locations} screen{p.max_locations > 1 ? 's' : ''}</span>
+                      {/* Listed only because this booking is on it. Said out loud, or the
+                          operator is looking at a package that is no longer on the Plans
+                          page and cannot tell why. */}
+                      {!p.is_active && <Badge variant="warning" className="text-[10px]">no longer sold</Badge>}
                     </div>
                   </button>
                 )
@@ -427,8 +487,12 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
                 is the whole of what "Custom" now means. */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div className="space-y-1.5">
+                {/* "Sold price", not "contract price": everywhere else on this page the
+                    contract value is the total INCLUDING extensions, and this box is the
+                    originally sold figure alone. Two names for two numbers, so the panel
+                    above and this field stop looking like the same one disagreeing. */}
                 <Label htmlFor="ad-price" className="text-xs font-medium">
-                  Contract price (₹) {isCustom && <span className="text-rose-500">*</span>}
+                  Sold price (₹) {isCustom && <span className="text-rose-500">*</span>}
                 </Label>
                 <div className="relative">
                   <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
@@ -473,6 +537,51 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
                 ? 'No package, so the price and the length are both yours to set. Give a screen its own length below only where it differs.'
                 : `From ${selectedPlan?.name || 'the plan'}. The price stays editable for a discount; the length is what the package sells.`}
             </p>
+
+            {/* What the booking is actually worth and what the client has paid.
+                "Contract price" above is the figure this form OWNS -- the originally sold
+                price. Extensions and payments belong to the booking, are edited in Booking
+                & billing, and were absent here entirely: an operator opened this on a
+                campaign extended twice and part paid, saw one number that matched none of
+                it, and reasonably concluded the two screens were separate systems. */}
+            {booking && (() => {
+              const bill = money(booking)
+              const extended = bill.total - booking.price_paise
+              return (
+                <div className="rounded-xl border border-border/60 bg-muted/30 p-3 space-y-1.5">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      This booking
+                    </span>
+                    <Badge variant={bill.tone === 'outline' ? 'warning' : bill.tone} className="text-[10px]">
+                      {bill.label}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] text-muted-foreground sm:grid-cols-3">
+                    <span>
+                      Total billed{' '}
+                      <span className="font-semibold text-foreground tabular-nums">{rupees(bill.total)}</span>
+                      {extended > 0 && ` (incl. ${rupees(extended)} extended)`}
+                    </span>
+                    <span>
+                      Received{' '}
+                      <span className="font-semibold text-foreground tabular-nums">{rupees(bill.paid)}</span>
+                    </span>
+                    <span>
+                      Runs to{' '}
+                      <span className="font-semibold text-foreground">
+                        {asDate(booking.effective_ends_at || booking.ends_at)}
+                      </span>
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Payments, extensions and whole-group placements are edited in
+                    &ldquo;Booking &amp; billing&rdquo; on this page. Editing the price here
+                    changes what is owed; it never touches what has been received.
+                  </p>
+                </div>
+              )
+            })()}
           </div>
 
           {/* Section: Screen Allocation */}
@@ -482,16 +591,41 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
                 Assigned Screens
               </Label>
               <div className="flex items-center gap-2">
+                {/* Counted the way the server counts it: group members included. The badge
+                    used to report only the ticked boxes, so a booking sold on a ten-screen
+                    group read "0 of 5 screens assigned" while delivering ten. */}
                 <Badge
-                  variant={maxAllowedScreens !== null && selectedScreenIds.length > maxAllowedScreens ? 'danger' : 'outline'}
+                  variant={maxAllowedScreens !== null && coveredScreenCount > maxAllowedScreens ? 'danger' : 'outline'}
                   className="text-[11px] font-semibold"
                 >
                   {maxAllowedScreens !== null
-                    ? `${selectedScreenIds.length} of ${maxAllowedScreens} screens assigned`
-                    : `${selectedScreenIds.length} screen${selectedScreenIds.length === 1 ? '' : 's'} assigned`}
+                    ? `${coveredScreenCount} of ${maxAllowedScreens} screens covered`
+                    : `${coveredScreenCount} screen${coveredScreenCount === 1 ? '' : 's'} covered`}
                 </Badge>
               </div>
             </div>
+
+            {/* Whole groups this booking runs on. Shown, never edited: adding or removing
+                a group is the bookings section's job, and this list existing at all is the
+                difference between "this ad plays nowhere" and "this ad plays on a venue". */}
+            {groupTargets.length > 0 && (
+              <div className="rounded-xl border border-border/60 bg-muted/30 p-3 space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Also booked on whole groups
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {groupTargets.map((target) => (
+                    <Badge key={target.id} variant="secondary" className="text-[11px]">
+                      {target.name}
+                    </Badge>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {groupScreenIds.length} screen{groupScreenIds.length === 1 ? '' : 's'} through these
+                  groups, counted against the plan. Change them in &ldquo;Booking &amp; billing&rdquo;.
+                </p>
+              </div>
+            )}
 
             {screens.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border/70 p-4 text-center text-xs text-muted-foreground">
@@ -593,7 +727,7 @@ export function EditClientAdModal({ open, onOpenChange, contentItem, defaultScre
             disabled={
               !clientName.trim()
               || updateMutation.isPending
-              || (maxAllowedScreens !== null && selectedScreenIds.length > maxAllowedScreens)
+              || (maxAllowedScreens !== null && coveredScreenCount > maxAllowedScreens)
               // A custom sale states its own price and its own length. Blank either and
               // the booking falls back to a figure nobody agreed -- Rs.0, or 30 days.
               // Per-location boxes stay optional: blank means "as long as the booking",

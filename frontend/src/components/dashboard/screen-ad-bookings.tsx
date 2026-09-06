@@ -8,7 +8,7 @@ import { ErrorState } from '@/components/dashboard/error-state'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
-import { asDate, bookingState, rupees } from '@/lib/format'
+import { asDate, bookingState, money, rupees } from '@/lib/format'
 
 /** Matches MAX_GROUP_DEPTH in the backend, which walks the same chain. */
 const MAX_GROUP_DEPTH = 32
@@ -100,6 +100,7 @@ export function ScreenAdBookings({ screenId, groupId }: { screenId: number; grou
         <div className="divide-hairline divide-y">
           {booked.map(({ placement, target }) => {
             const state = bookingState(placement)
+            const bill = money(placement)
             const from = target.starts_at || placement.starts_at
             const until = target.ends_at || placement.effective_ends_at || placement.ends_at
             const viaGroup = target.group_id != null ? groupChain.get(target.group_id) : null
@@ -130,12 +131,15 @@ export function ScreenAdBookings({ screenId, groupId }: { screenId: number; grou
 
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                   {!target.is_placed && <Badge variant="warning">Removed by hand</Badge>}
-                  <Badge variant={placement.is_paid ? 'success' : 'outline'}>
-                    {placement.is_paid ? 'Paid' : 'Unpaid'}
+                  {/* Part paid is a state of its own here too. This badge read "Paid" off
+                      a flag any payment set, so a screen page could tell an operator a
+                      campaign was settled while the invoices list chased its balance. */}
+                  <Badge variant={bill.tone}>
+                    {bill.status === 'paid' ? 'Paid' : bill.status === 'part_paid' ? 'Part paid' : 'Unpaid'}
                   </Badge>
                   <Badge variant={state.tone}>{state.label}</Badge>
                   <span className="text-foreground text-sm font-medium tabular-nums">
-                    {rupees(placement.total_price_paise ?? placement.price_paise)}
+                    {rupees(bill.total)}
                   </span>
                 </div>
               </Link>

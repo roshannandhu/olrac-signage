@@ -380,7 +380,9 @@ export const api = {
     fetchWithAuth<PlanOption[]>(`/placements/${placementId}/plan-options`),
 
   upgradePlan: (placementId: number, body: {
-    plan_id: number
+    // Null moves the booking OFF its package onto a negotiated price. Sending it is the
+    // only way back to a custom sale; the endpoint used to refuse it.
+    plan_id: number | null
     extend?: boolean
     price_difference_paise?: number | null
   }) => fetchWithAuth<Placement>(`/placements/${placementId}/upgrade`, {

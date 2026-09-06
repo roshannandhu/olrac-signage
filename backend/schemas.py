@@ -1122,7 +1122,10 @@ class PlanOption(BaseModel):
 
 
 class PlanUpgrade(BaseModel):
-    plan_id: int
+    # Nullable so a booking can come OFF a package onto a negotiated price, which is a real
+    # correction and had no route: the endpoint refused a null and the dashboard therefore
+    # offered no way back to a custom sale.
+    plan_id: Optional[int] = None
     # Whether to add the new plan's duration to the run. On by default because "upgrade"
     # normally means "sell them the bigger package from here", but a mid-term correction of
     # the wrong plan should not silently extend the campaign.
@@ -1183,6 +1186,13 @@ class PlacementResponse(BaseModel):
     total_price_paise: Optional[int] = None
     price_paise: int
     is_paid: bool
+    # The money, derived once on the server (see placements.settlement) instead of being
+    # re-subtracted by every page that shows it. `amount_paid_paise` is what the client has
+    # actually handed over, `balance_due_paise` what is still outstanding against the TOTAL
+    # -- extensions and upgrades included -- and `payment_status` the one word for it.
+    amount_paid_paise: int = 0
+    balance_due_paise: int = 0
+    payment_status: Literal["unpaid", "part_paid", "paid"] = "unpaid"
     starts_at: datetime
     ends_at: datetime
     notes: Optional[str] = None

@@ -37,6 +37,7 @@ import {
   bookingState,
   clipDuration,
   formatBytes,
+  money,
   relativeTime,
   rupees,
 } from '@/lib/format'
@@ -230,9 +231,10 @@ export default function AdDetailPage() {
   const online = scheduledOn.filter((screen) => screen.status === 'online').length
   const state = booking ? bookingState(booking) : null
 
-  const owed = booking
-    ? (booking.total_price_paise ?? booking.price_paise) - (booking.payment?.amount_paise ?? 0)
-    : 0
+  // One derivation, shared with the bookings section below, the invoices page and the
+  // invoice PDF. Subtracting it here as well is how this tile came to read "Paid in full"
+  // over a booking the section underneath it showed as owing ₹45,000.
+  const bill = booking ? money(booking) : null
 
   // The four commercial facts. Every one of these used to be a tab click away, or absent
   // from the page entirely, on the screen where an operator answers "what did we sell?".
@@ -247,8 +249,8 @@ export default function AdDetailPage() {
         {
           label: 'Contract value',
           icon: IndianRupee,
-          value: rupees(booking.total_price_paise ?? booking.price_paise),
-          note: booking.is_paid ? 'Paid in full' : owed > 0 ? `${rupees(owed)} owing` : 'Unpaid',
+          value: rupees(bill!.total),
+          note: bill!.label,
         },
         {
           label: 'On air',

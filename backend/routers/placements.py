@@ -216,6 +216,54 @@ def total_price_paise(placement: models.AdPlacement) -> int:
     return placement.price_paise + sum(e.additional_price_paise for e in placement.extensions)
 
 
+def settlement(placement: models.AdPlacement) -> dict:
+    """What the client owes, what they have handed over, and what is left.
+
+    One derivation, because there were five and they disagreed. The bookings section, the
+    ad's own header, the invoices page and the invoice PDF each subtracted the payment from
+    the total in their own way, and `is_paid` -- a bare boolean -- was read as "settled in
+    full" by all of them while being set to true by ANY payment. Recording 5,000 against a
+    50,000 campaign therefore printed "Paid in full" on the ad page, "Paid" on the screen
+    page, and "Part paid - 45,000 outstanding" on the invoice, off the same row.
+
+    `is_paid` survives as the stored flag and is now kept equal to "balance is zero"
+    wherever money or the total moves. A booking marked paid before payments were recorded
+    has no amount behind it, so its receipt is taken at face value and counted as settled --
+    otherwise migrating that flag into arithmetic would reopen every historical campaign.
+    """
+    total = total_price_paise(placement)
+    payment = placement.payment
+    if payment is not None:
+        received = payment.amount_paise
+    else:
+        received = total if placement.is_paid else 0
+    balance = max(0, total - received)
+    if received >= total and (payment is not None or placement.is_paid):
+        status = "paid"
+    elif received > 0:
+        status = "part_paid"
+    else:
+        status = "unpaid"
+    return {"total": total, "received": received, "balance": balance, "status": status}
+
+
+def refresh_paid_state(placement: models.AdPlacement) -> None:
+    """Re-derive `is_paid` from the money after the total or the receipt changed.
+
+    Called from every path that can move either side of the sum -- recording a payment,
+    selling an extension, cancelling one, moving the booking to another plan, correcting
+    the price. Without it an extension sold against a settled booking left the flag reading
+    "paid" over a balance the client still owed.
+
+    Only touched when a payment record exists. A booking whose flag predates payments has
+    no amount to compare against, and flipping it to unpaid here would present every
+    historical campaign as owing its full price again.
+    """
+    if placement.payment is None:
+        return
+    placement.is_paid = settlement(placement)["balance"] == 0
+
+
 def resolve_client(scope: TenantScope, client_id: int | None) -> models.Client | None:
     """Look a client up inside the tenant, 404 if it is not theirs.
 
@@ -291,6 +339,8 @@ def _serialize(scope: TenantScope, placement: models.AdPlacement) -> schemas.Pla
     # Groups expanded, the same way the cap counts them, so "3 of 5" means three TVs and
     # not three rows.
     usage = plan_screen_usage(placement.plan, set(_booking_screen_ids(scope, placement)))
+    # Reported rather than left to each caller to work out. See settlement().
+    money = settlement(placement)
 
     return schemas.PlacementResponse(
         id=placement.id,
@@ -303,9 +353,12 @@ def _serialize(scope: TenantScope, placement: models.AdPlacement) -> schemas.Pla
         extensions=[schemas.ExtensionResponse.model_validate(e) for e in placement.extensions],
         effective_ends_at=ends,
         days_remaining=days_left,
-        total_price_paise=total_price_paise(placement),
+        total_price_paise=money["total"],
         price_paise=placement.price_paise,
         is_paid=placement.is_paid,
+        amount_paid_paise=money["received"],
+        balance_due_paise=money["balance"],
+        payment_status=money["status"],
         starts_at=placement.starts_at,
         ends_at=placement.ends_at,
         notes=placement.notes,
@@ -504,6 +557,10 @@ def update_placement(
     if placement.ends_at <= placement.starts_at:
         raise HTTPException(status_code=422, detail="The end date must be after the start date")
 
+    # Correcting the price changes what is outstanding against a payment already taken.
+    if "price_paise" in fields:
+        refresh_paid_state(placement)
+
     # Every placed item carries the booking's window, so moving the dates moves them all --
     # and the screens have to be told, which the previous version of this did not do. It
     # rewrote item.start_at/end_at and stopped, leaving playlist.updated_at untouched, so
@@ -669,6 +726,8 @@ def add_extension(
     # Without this the extension is a database row and nothing else: the player stops the
     # advert on PlaylistItem.end_at, which is still the original date.
     sync_placement_window(scope, placement)
+    # More was sold, so a settled booking is settled no longer.
+    refresh_paid_state(placement)
 
     scope.db.commit()
     scope.db.refresh(placement)
@@ -699,6 +758,8 @@ def remove_extension(
     scope.db.refresh(placement)
     # Pulls the run back in: an extension that was cancelled must stop playing.
     sync_placement_window(scope, placement)
+    # And it is no longer owed, so a booking part-paid only because of it is settled again.
+    refresh_paid_state(placement)
 
     scope.db.commit()
     scope.db.refresh(placement)
@@ -728,11 +789,22 @@ def plan_options(
         models.TenantPlan.is_active.is_(True)
     ).order_by(models.TenantPlan.price_paise).all()
 
+    # The plan the booking is ON, even after the tenant stopped selling it. Active-only was
+    # right for what can be moved TO and wrong for what is being moved FROM: a campaign on
+    # a retired package listed no current plan at all, so "Change plan" opened with nothing
+    # marked as current and no way to tell what the client had bought. It is listed, badged
+    # as current, and -- being retired -- not selectable, which is what `is_active` on the
+    # plan itself says.
+    if current is not None and not any(plan.id == current.id for plan in plans):
+        plans = sorted([*plans, current], key=lambda plan: plan.price_paise)
+
     options = [
         schemas.PlanOption(
             plan=schemas.TenantPlanResponse.model_validate(plan),
             is_current=bool(current and plan.id == current.id),
-            # max_locations of 0 means uncapped, so it fits anything.
+            # max_locations of 0 means uncapped, so it fits anything. Kept purely about
+            # the screen count: a retired plan is unsellable for a different reason, which
+            # `plan.is_active` says on its own and the UI reports in its own words.
             fits=plan.max_locations <= 0 or plan.max_locations >= used,
             price_difference_paise=max(0, plan.price_paise - current_price),
             extra_days=plan.duration_days,
@@ -744,7 +816,9 @@ def plan_options(
     # by price, so the first match is the cheapest. Nothing is recommended when the current
     # plan is the only one that fits -- an upgrade prompt with nowhere better to go is
     # noise, and recommending a costlier plan for no reason is worse than that.
-    upgrade = next((o for o in options if o.fits and not o.is_current), None)
+    upgrade = next(
+        (o for o in options if o.fits and not o.is_current and o.plan.is_active), None
+    )
     if upgrade is not None:
         upgrade.recommended = True
     return options
@@ -769,20 +843,29 @@ def upgrade_plan(
         raise HTTPException(status_code=404, detail="Booking not found")
 
     plan = resolve_tenant_plan(scope, payload.plan_id)
-    if plan is None:
+    if plan is None and "plan_id" not in payload.model_fields_set:
         raise HTTPException(status_code=422, detail="An upgrade needs a plan to move to")
 
+    # An explicit null means "off the package": the booking keeps its price, its run and
+    # its history and is billed on a negotiated figure from here. Refusing it was why a
+    # booking put on the wrong plan could be moved between plans but never taken off one --
+    # the same gap PUT /placements/{id} closed for the generic edit.
+    #
     # An upgrade must never leave the booking delivering more screens than the plan it is
     # now billed on -- that is the same breach as adding a screen, arrived at sideways.
+    # A null plan caps nothing, which plan_screen_usage already answers.
     ensure_plan_locations(scope, plan, set(_booking_screen_ids(scope, placement)), set())
 
     difference = payload.price_difference_paise
     if difference is None:
-        difference = max(0, plan.price_paise - (placement.plan.price_paise if placement.plan else 0))
+        difference = max(0, (plan.price_paise if plan else 0)
+                         - (placement.plan.price_paise if placement.plan else 0))
 
-    placement.plan_id = plan.id
+    placement.plan_id = plan.id if plan else None
 
-    if payload.extend:
+    # Nothing to extend BY when the booking is coming off its package: a custom sale states
+    # its own length, and inventing one here would sell the client time nobody agreed.
+    if payload.extend and plan is not None:
         # From the current effective end, not from today: back-to-back, so the advert never
         # goes dark between the old plan finishing and the new one starting.
         starts = effective_ends_at(placement)
@@ -799,6 +882,8 @@ def upgrade_plan(
         # Without this the extension is a row and nothing else -- every placed item still
         # carries the old end date and the player stops the advert on it.
         sync_placement_window(scope, placement)
+        # The difference is owed, so a booking that was settled is part paid again.
+        refresh_paid_state(placement)
 
     scope.db.commit()
     scope.db.refresh(placement)
@@ -835,7 +920,12 @@ def record_payment(
     payment.notes = (payload.notes or "").strip() or None
     # Who took the money. Kept even if they later leave -- the FK is SET NULL, not CASCADE.
     payment.recorded_by_user_id = scope.user.id
-    placement.is_paid = True
+    scope.db.flush()
+    scope.db.refresh(placement)
+    # NOT an unconditional True. A part payment is a part payment: this flag is read
+    # everywhere as "settled in full", and setting it on the first rupee is what made a
+    # 5,000 deposit against a 50,000 campaign show as "Paid in full" on the ad page.
+    placement.is_paid = settlement(placement)["balance"] == 0
 
     scope.db.commit()
     scope.db.refresh(placement)
@@ -904,6 +994,7 @@ def _commercials(placement: models.AdPlacement, generated_at: "datetime") -> dic
     client = placement.client
     plan = placement.plan
     organization = placement.organization
+    money = settlement(placement)
     # Whose report this is FROM. The header band and the footer both carry it, so a client
     # receiving the PDF can tell who sent it without opening the covering email.
     return {
@@ -945,7 +1036,12 @@ def _commercials(placement: models.AdPlacement, generated_at: "datetime") -> dic
         "days_remaining": days_remaining,
         "days_elapsed": days_elapsed,
         "extension_price_paise": sum(e.additional_price_paise for e in placement.extensions),
-        "total_price_paise": total_price_paise(placement),
+        "total_price_paise": money["total"],
+        # The same three figures the dashboard reads, so the PDF a client is sent and the
+        # page an operator is looking at cannot describe the same booking differently.
+        "amount_paid_paise": money["received"],
+        "balance_due_paise": money["balance"],
+        "payment_status": money["status"],
         # For the invoice: its reference number is derived from these two ids, and the
         # payment block is what turns "unpaid" into "unpaid, and here is what we chased".
         # Both live here rather than at each exit so the two report shapes cannot diverge.

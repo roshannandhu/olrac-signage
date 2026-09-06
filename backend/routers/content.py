@@ -451,6 +451,7 @@ def update_content_client_ad(
         _unplace,
         ensure_ad_slot_quota,
         ensure_plan_locations,
+        refresh_paid_state,
         sync_placement_window,
     )
     from datetime import timedelta
@@ -509,6 +510,11 @@ def update_content_client_ad(
         # edit still cannot touch it.
         if payload.price_paise is not None:
             placement.price_paise = payload.price_paise
+            # What is outstanding is the total minus what was received, so correcting the
+            # price here has to re-settle the booking. Without it, cutting the price to
+            # what the client had already paid left them reading as part paid forever, and
+            # raising it left a booking marked paid over money now owed.
+            refresh_paid_state(placement)
         # Re-cut from the booking's own start, so correcting a run to 45 days means 45 days
         # of campaign and not 45 days from today. starts_at is the date it was SOLD on and
         # is left alone.

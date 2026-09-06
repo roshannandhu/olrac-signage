@@ -19,7 +19,7 @@ import { api } from '@/lib/api'
 import { canEditTenantContent } from '@/lib/roles'
 import { useAuthStore } from '@/lib/store'
 import type { PaymentMethod, Placement } from '@/lib/types'
-import { bookingState, rupees } from '@/lib/format'
+import { bookingState, money, rupees } from '@/lib/format'
 
 const asDate = (iso: string) => new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 
@@ -27,8 +27,6 @@ const METHOD_LABELS: Record<PaymentMethod, string> = {
   cash: 'Cash', upi: 'UPI', bank_transfer: 'Bank transfer',
   cheque: 'Cheque', card: 'Card', other: 'Other',
 }
-
-const owed = (placement: Placement) => placement.total_price_paise ?? placement.price_paise
 
 type Filter = 'all' | 'unpaid' | 'paid'
 
@@ -57,7 +55,7 @@ export default function InvoicesPage() {
     return placements.filter((placement) => {
       // On the balance, not the flag: a part-paid booking still owes money and belongs
       // in Unpaid, which is the list a tenant works through when chasing.
-      const stillOwed = Math.max(0, owed(placement) - (placement.payment?.amount_paise ?? 0))
+      const stillOwed = money(placement).balance
       if (filter === 'paid' && stillOwed > 0) return false
       if (filter === 'unpaid' && stillOwed === 0) return false
       if (!needle) return true
@@ -73,10 +71,11 @@ export default function InvoicesPage() {
   // Per booking it is total MINUS received, not a test of the is_paid flag. Reading the
   // flag made a part payment settle the whole booking: recording ₹5,000 against a ₹12,000
   // campaign showed ₹0 outstanding in the tile while the row beside it said ₹7,000 was
-  // still owed.
-  const balance = (p: Placement) => Math.max(0, owed(p) - (p.payment?.amount_paise ?? 0))
+  // still owed. The subtraction now happens once, on the server, and every page reads it
+  // through the same helper.
+  const balance = (p: Placement) => money(p).balance
   const outstanding = placements.reduce((sum, p) => sum + balance(p), 0)
-  const collected = placements.reduce((sum, p) => sum + (p.payment?.amount_paise ?? 0), 0)
+  const collected = placements.reduce((sum, p) => sum + money(p).paid, 0)
   const awaiting = placements.filter((p) => balance(p) > 0).length
 
   const [paying, setPaying] = useState<Placement | null>(null)
@@ -92,7 +91,9 @@ export default function InvoicesPage() {
   const openPayment = (placement: Placement) => {
     setPaying(placement)
     const existing = placement.payment
-    setPayAmount(String(((existing?.amount_paise ?? owed(placement)) || 0) / 100))
+    // The running total received, not this instalment -- one settlement row per booking,
+    // so what is typed here REPLACES what was there. See the note in ad-bookings.tsx.
+    setPayAmount(String((existing?.amount_paise ?? 0) / 100))
     setPayMethod(existing?.method ?? 'upi')
     setPayReference(existing?.reference ?? '')
     setPayDate((existing?.paid_at ?? new Date().toISOString()).slice(0, 10))
@@ -211,9 +212,8 @@ export default function InvoicesPage() {
 
       {visible.map((placement) => {
         const state = bookingState(placement)
-        const total = owed(placement)
-        const received = placement.payment?.amount_paise ?? 0
-        const short = placement.payment ? total - received : 0
+        const bill = money(placement)
+        const total = bill.total
         return (
           <Card key={placement.id} className="ring-hairline bg-card border-0 ring-1">
             <CardContent className="flex flex-wrap items-start justify-between gap-4 p-5">
@@ -224,11 +224,13 @@ export default function InvoicesPage() {
                   {placement.client && <Badge variant="outline">{placement.client.client_code}</Badge>}
                   {/* Part paid is its own state. "Paid" over an outstanding balance is the
                       kind of contradiction a client rings up about. */}
-                  {placement.is_paid && short > 0 ? (
-                    <Badge variant="warning">Part paid · {rupees(short)} outstanding</Badge>
+                  {bill.status === 'part_paid' ? (
+                    <Badge variant="warning">
+                      Part paid · {rupees(bill.paid)} in, {rupees(bill.balance)} outstanding
+                    </Badge>
                   ) : (
-                    <Badge variant={placement.is_paid ? 'success' : 'warning'}>
-                      {placement.is_paid ? 'Paid' : 'Unpaid'}
+                    <Badge variant={bill.status === 'paid' ? 'success' : 'warning'}>
+                      {bill.status === 'paid' ? 'Paid' : 'Unpaid'}
                     </Badge>
                   )}
                   {placement.payment && (
@@ -270,11 +272,11 @@ export default function InvoicesPage() {
                 {canEdit && (
                   <Button
                     size="sm"
-                    variant={placement.is_paid ? 'outline' : 'default'}
+                    variant={bill.balance > 0 ? 'default' : 'outline'}
                     onClick={() => openPayment(placement)}
                   >
                     <IndianRupee data-icon="inline-start" />
-                    {placement.is_paid ? 'Payment' : 'Record payment'}
+                    {bill.status === 'paid' ? 'Payment' : bill.status === 'part_paid' ? 'Add payment' : 'Record payment'}
                   </Button>
                 )}
               </div>
@@ -288,16 +290,50 @@ export default function InvoicesPage() {
           <DialogHeader>
             <DialogTitle>Payment from {paying?.advertiser}</DialogTitle>
             <DialogDescription>
-              Recording this is what marks the booking paid. Owed in total:{' '}
-              {rupees(paying ? owed(paying) : 0)}.
+              A booking carries one running total. Enter everything this client has paid
+              towards it, not just today&apos;s instalment.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
+            {paying && (() => {
+              const bill = money(paying)
+              const after = bill.total - Math.round(Number(payAmount || 0) * 100)
+              return (
+                <div className="bg-muted/40 ring-hairline space-y-2 rounded-xl p-3 text-sm ring-1">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Contract value</span>
+                    <span className="text-foreground font-semibold tabular-nums">{rupees(bill.total)}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Recorded so far</span>
+                    <span className="text-foreground font-semibold tabular-nums">{rupees(bill.paid)}</span>
+                  </div>
+                  <div className="border-hairline flex justify-between gap-3 border-t pt-2">
+                    <span className="text-muted-foreground">Balance after saving</span>
+                    <span className={`font-semibold tabular-nums ${after > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      {after > 0 ? rupees(after) : 'Nothing owing'}
+                    </span>
+                  </div>
+                </div>
+              )
+            })()}
             <div className="space-y-1.5">
-              <Label htmlFor="inv-amount">Amount received (₹)</Label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="inv-amount">Total received to date (₹)</Label>
+                {paying && money(paying).balance > 0 && (
+                  <Button size="xs" variant="ghost"
+                          onClick={() => setPayAmount(String(money(paying).total / 100))}>
+                    They have paid in full
+                  </Button>
+                )}
+              </div>
               <Input id="inv-amount" type="number" min={0} value={payAmount}
                      onChange={(event) => setPayAmount(event.target.value)} autoFocus />
+              <p className="text-muted-foreground text-xs">
+                Part payments are fine — the booking stays part paid until this figure
+                reaches the contract value.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -333,8 +369,11 @@ export default function InvoicesPage() {
                 Clear payment
               </Button>
             )}
-            <Button disabled={savePayment.isPending} onClick={() => savePayment.mutate()}>
-              {savePayment.isPending ? 'Saving…' : 'Record payment'}
+            <Button
+              disabled={savePayment.isPending || !(Number(payAmount) > 0)}
+              onClick={() => savePayment.mutate()}
+            >
+              {savePayment.isPending ? 'Saving…' : 'Save payment'}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -19,8 +19,14 @@ import { api } from '@/lib/api'
 import { canEditTenantContent } from '@/lib/roles'
 import { useAuthStore } from '@/lib/store'
 import type { PaymentMethod, Placement, PlacementTarget, PlanOption, Screen, ScreenGroup } from '@/lib/types'
-import { addDays, asDate, bookingState, dateInput, rupees } from '@/lib/format'
+import { addDays, asDate, bookingState, dateInput, money, rupees } from '@/lib/format'
 import { invalidateBookingViews } from '@/lib/query-keys'
+
+// The same words the invoices page and the invoice PDF use for a method.
+const METHOD_LABELS: Record<PaymentMethod, string> = {
+  cash: 'Cash', upi: 'UPI', bank_transfer: 'Bank transfer',
+  cheque: 'Cheque', card: 'Card', other: 'Other',
+}
 
 /**
  * Selling this advert: who bought it, for how long, and in which places.
@@ -101,7 +107,9 @@ export function AdBookings({ contentId }: { contentId: number }) {
 
   // --- Changing a client's plan -------------------------------------------------------
   const [upgrading, setUpgrading] = useState<Placement | null>(null)
-  const [chosenPlan, setChosenPlan] = useState<number | null>(null)
+  // `null` is now a plan choice of its own -- "off the package, on a negotiated price" --
+  // so "nothing chosen yet" cannot also be null. undefined is that.
+  const [chosenPlan, setChosenPlan] = useState<number | null | undefined>(undefined)
   const [alsoExtend, setAlsoExtend] = useState(true)
   const planOptionsQuery = useQuery({
     queryKey: ['plan-options', upgrading?.id],
@@ -111,15 +119,24 @@ export function AdBookings({ contentId }: { contentId: number }) {
 
   const openUpgrade = (placement: Placement) => {
     setUpgrading(placement)
-    setChosenPlan(null)
+    setChosenPlan(undefined)
     setAlsoExtend(true)
   }
 
   const upgrade = useMutation({
-    mutationFn: () => api.upgradePlan(upgrading!.id, { plan_id: chosenPlan!, extend: alsoExtend }),
+    mutationFn: () => api.upgradePlan(upgrading!.id, {
+      plan_id: chosenPlan ?? null,
+      // Meaningless when coming off a package: there is no plan length to extend BY, and
+      // the server ignores it, so the checkbox is hidden rather than sent as a lie.
+      extend: chosenPlan != null && alsoExtend,
+    }),
     onSuccess: () => {
       refresh()
-      toast.success(alsoExtend ? 'Plan changed and the run extended' : 'Plan changed')
+      toast.success(
+        chosenPlan == null
+          ? 'Moved off the package; the price is yours to set'
+          : alsoExtend ? 'Plan changed and the run extended' : 'Plan changed',
+      )
       setUpgrading(null)
     },
     onError: fail,
@@ -135,9 +152,14 @@ export function AdBookings({ contentId }: { contentId: number }) {
   const openPayment = (placement: Placement) => {
     setPaying(placement)
     const existing = placement.payment
-    // Prefilled with the full amount owed, because that is what is being recorded almost
-    // every time. Correcting it down is one edit; typing it out is not.
-    setPayAmount(String(((existing?.amount_paise ?? placement.total_price_paise ?? placement.price_paise) || 0) / 100))
+    // The box holds the TOTAL received to date, because one booking carries one settlement
+    // row and re-recording replaces it. Prefilling the full contract value was right only
+    // for a first payment: on a part-paid booking it silently proposed writing the whole
+    // amount off as received, and prefilling what was already taken proposed a payment
+    // that changed nothing. The running total after this instalment is neither, so the
+    // figure starts at what is already in and the operator adds to it -- with the balance
+    // shown live underneath, and a button for "they have now paid the lot".
+    setPayAmount(String((existing?.amount_paise ?? 0) / 100))
     setPayMethod(existing?.method ?? 'upi')
     setPayReference(existing?.reference ?? '')
     setPayDate(dateInput(existing?.paid_at ?? new Date()))
@@ -273,6 +295,7 @@ export function AdBookings({ contentId }: { contentId: number }) {
         />
       ) : placements.map((placement) => {
         const state = bookingState(placement)
+        const bill = money(placement)
         return (
           <Card key={placement.id} className="ring-hairline bg-card border-0 ring-1">
             <CardContent className="p-5">
@@ -286,19 +309,11 @@ export function AdBookings({ contentId }: { contentId: number }) {
                     {/* The TOTAL, not the originally sold price. After an upgrade or an
                         extension those differ, and showing the sold figure read as
                         "₹5,000 · paid" on a booking that owed ₹12,000 and had received
-                        ₹5,000 of it. */}
-                    {(placement.total_price_paise ?? placement.price_paise) > 0 && (
-                      <Badge variant={
-                        (placement.payment?.amount_paise ?? 0) >= (placement.total_price_paise ?? placement.price_paise)
-                          ? 'success' : 'warning'
-                      }>
-                        {rupees(placement.total_price_paise ?? placement.price_paise)}
-                        {' · '}
-                        {!placement.payment
-                          ? 'unpaid'
-                          : (placement.payment.amount_paise >= (placement.total_price_paise ?? placement.price_paise)
-                            ? 'paid'
-                            : `${rupees((placement.total_price_paise ?? placement.price_paise) - placement.payment.amount_paise)} owing`)}
+                        ₹5,000 of it. Both halves come from one derivation now, shared with
+                        the ad header, the invoices page and the PDF. */}
+                    {bill.total > 0 && (
+                      <Badge variant={bill.tone === 'outline' ? 'warning' : bill.tone}>
+                        {rupees(bill.total)} · {bill.shortLabel}
                       </Badge>
                     )}
                   </div>
@@ -325,13 +340,16 @@ export function AdBookings({ contentId }: { contentId: number }) {
                     <Button size="sm" variant="outline" onClick={() => openUpgrade(placement)}>
                       <ArrowUpCircle data-icon="inline-start" /> Change plan
                     </Button>
+                    {/* Filled while money is outstanding, part payment included. Reading
+                        `is_paid` made a booking with ₹45,000 still owing offer a quiet
+                        "Payment" button, as if there were nothing left to collect. */}
                     <Button
                       size="sm"
-                      variant={placement.is_paid ? 'outline' : 'default'}
+                      variant={bill.balance > 0 ? 'default' : 'outline'}
                       onClick={() => openPayment(placement)}
                     >
                       <IndianRupee data-icon="inline-start" />
-                      {placement.is_paid ? 'Payment' : 'Record payment'}
+                      {bill.status === 'paid' ? 'Payment' : bill.status === 'part_paid' ? 'Add payment' : 'Record payment'}
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger
@@ -388,6 +406,41 @@ export function AdBookings({ contentId }: { contentId: number }) {
                   </div>
                 )}
               </div>
+
+              {/* The money, spelled out. Everything above states a total and a status; the
+                  question an operator actually asks -- "how much of this have we been
+                  given, and how much is still to come?" -- was answerable only by opening
+                  the payment dialog and reading a prefilled box. Three figures, in the
+                  order they are asked about. */}
+              {bill.total > 0 && (
+                <div className="bg-muted/40 ring-hairline mt-4 grid grid-cols-3 gap-3 rounded-xl p-3 ring-1">
+                  <div>
+                    <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">Contract</p>
+                    <p className="text-foreground text-sm font-semibold tabular-nums">{rupees(bill.total)}</p>
+                    {placement.extensions.length > 0 && (
+                      <p className="text-muted-foreground text-[11px]">
+                        {rupees(placement.price_paise)} sold + {rupees(bill.total - placement.price_paise)} extended
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">Received</p>
+                    <p className="text-foreground text-sm font-semibold tabular-nums">{rupees(bill.paid)}</p>
+                    <p className="text-muted-foreground text-[11px]">
+                      {placement.payment
+                        ? `${METHOD_LABELS[placement.payment.method]} · ${asDate(placement.payment.paid_at)}`
+                        : bill.paid > 0 ? 'Marked paid, no receipt on file' : 'Nothing recorded yet'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">Still owed</p>
+                    <p className={`text-sm font-semibold tabular-nums ${bill.balance > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      {rupees(bill.balance)}
+                    </p>
+                    <p className="text-muted-foreground text-[11px]">{bill.label}</p>
+                  </div>
+                </div>
+              )}
 
               {/* What the client is paying for versus what they are getting. Over the plan
                   is refused by the API and never reaches here; UNDER it is nobody's error
@@ -702,14 +755,66 @@ export function AdBookings({ contentId }: { contentId: number }) {
           </DialogHeader>
 
           <div className="max-h-[50vh] space-y-2 overflow-y-auto py-1">
+            {/* What the booking is on TODAY, stated before the list of what it could move
+                to. The list alone answered it only when the plan was still being sold: a
+                campaign on a retired package, or one sold without a package at all, opened
+                this dialog with nothing marked current and no way to tell what the client
+                had actually bought. */}
+            <p className="text-muted-foreground text-sm">
+              Currently on{' '}
+              <span className="text-foreground font-medium">
+                {upgrading?.plan ? upgrading.plan.name : 'no package — a custom price'}
+              </span>
+              {upgrading && ` · ${rupees(upgrading.total_price_paise ?? upgrading.price_paise)} · runs on ${upgrading.screens_used} screen${upgrading.screens_used === 1 ? '' : 's'}`}
+            </p>
+
             {planOptionsQuery.isPending && <Skeleton className="h-24 w-full" />}
+            {planOptionsQuery.isError && (
+              <ErrorState
+                message="The plans this booking could move to could not be loaded."
+                onRetry={() => planOptionsQuery.refetch()}
+              />
+            )}
+
+            {/* Off the package entirely. Every plan was offered and this was not, so a
+                booking put on the wrong plan could be moved between plans but never taken
+                off one -- and a client renegotiated onto an agreed figure had nowhere to
+                be recorded. */}
+            <button
+              type="button"
+              disabled={!upgrading?.plan}
+              onClick={() => setChosenPlan(null)}
+              className={`w-full rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                chosenPlan === null ? 'border-primary bg-primary/10 shadow-sm' : 'border-input hover:bg-muted/50'
+              }`}
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">Custom — no package</span>
+                {!upgrading?.plan && <Badge variant="outline">Current</Badge>}
+              </div>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Keeps the price and the run as they are, with no location cap. Edit the
+                figure in &ldquo;Edit client &amp; ad details&rdquo;.
+              </p>
+            </button>
+
+            {planOptionsQuery.isSuccess && !planOptionsQuery.data?.length && (
+              <p className="text-muted-foreground text-sm">
+                No packages have been set up yet, so custom pricing is the only option.
+                Create one under Plans to sell by package.
+              </p>
+            )}
+
             {planOptionsQuery.data?.map((option: PlanOption) => {
               const selected = chosenPlan === option.plan.id
+              // Retired plans are listed so the current one is always visible, but a plan
+              // the tenant has stopped selling must not be sellable again from here.
+              const retired = !option.plan.is_active
               return (
                 <button
                   key={option.plan.id}
                   type="button"
-                  disabled={option.is_current || !option.fits}
+                  disabled={option.is_current || !option.fits || retired}
                   onClick={() => setChosenPlan(option.plan.id)}
                   className={`w-full rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                     selected ? 'border-primary bg-primary/10 shadow-sm' : 'border-input hover:bg-muted/50'
@@ -719,6 +824,7 @@ export function AdBookings({ contentId }: { contentId: number }) {
                     <span className="font-medium">{option.plan.name}</span>
                     {option.recommended && <Badge variant="success">Recommended</Badge>}
                     {option.is_current && <Badge variant="outline">Current plan</Badge>}
+                    {retired && <Badge variant="warning">No longer sold</Badge>}
                     {/* Said plainly rather than just disabled: "why can I not pick this?"
                         is the question a greyed-out row always provokes. */}
                     {!option.fits && (
@@ -739,44 +845,104 @@ export function AdBookings({ contentId }: { contentId: number }) {
             })}
           </div>
 
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="accent-primary size-4"
-              checked={alsoExtend}
-              onChange={(event) => setAlsoExtend(event.target.checked)}
-            />
-            Extend the run by the new plan&apos;s length and charge the difference
-          </label>
-          <p className="text-muted-foreground text-xs">
-            Leave this off to correct a booking that is on the wrong plan without selling
-            any extra time.
-          </p>
+          {/* Hidden when moving off a package: there is no plan length to extend by, so
+              offering the choice would promise something the change cannot do. */}
+          {chosenPlan != null && (
+            <>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="accent-primary size-4"
+                  checked={alsoExtend}
+                  onChange={(event) => setAlsoExtend(event.target.checked)}
+                />
+                Extend the run by the new plan&apos;s length and charge the difference
+              </label>
+              <p className="text-muted-foreground text-xs">
+                Leave this off to correct a booking that is on the wrong plan without selling
+                any extra time. Anything charged is added to what the client owes.
+              </p>
+            </>
+          )}
 
           <DialogFooter showCloseButton>
-            <Button disabled={!chosenPlan || upgrade.isPending} onClick={() => upgrade.mutate()}>
-              {upgrade.isPending ? 'Changing…' : 'Change plan'}
+            <Button
+              disabled={chosenPlan === undefined || upgrade.isPending}
+              onClick={() => upgrade.mutate()}
+            >
+              {upgrade.isPending ? 'Changing…' : chosenPlan === null ? 'Move off the package' : 'Change plan'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* --- Record payment --------------------------------------------------------- */}
+      {/* --- Record payment ---------------------------------------------------------
+          One settlement row per booking, so the box holds the running total received and
+          not this instalment. That is the source of the one bug an operator cannot see:
+          typing "5000" for a second ₹5,000 payment REPLACES the first and the client is
+          recorded as having paid ₹5,000 of ₹10,000. So the dialog states the three figures
+          it is arithmetic between, names the box for what it stores, and shows what the
+          balance becomes before anything is saved. */}
       <Dialog open={Boolean(paying)} onOpenChange={(open) => { if (!open) setPaying(null) }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Payment from {paying?.advertiser}</DialogTitle>
             <DialogDescription>
-              Recording this is what marks the booking paid. Owed in total:{' '}
-              {rupees(paying?.total_price_paise ?? paying?.price_paise ?? 0)}.
+              A booking carries one running total. Enter everything this client has paid
+              towards it, not just today&apos;s instalment.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
+            {paying && (() => {
+              const bill = money(paying)
+              const entered = Math.round(Number(payAmount || 0) * 100)
+              const after = bill.total - entered
+              return (
+                <div className="bg-muted/40 ring-hairline space-y-2 rounded-xl p-3 text-sm ring-1">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Contract value</span>
+                    <span className="text-foreground font-semibold tabular-nums">{rupees(bill.total)}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-muted-foreground">Recorded so far</span>
+                    <span className="text-foreground font-semibold tabular-nums">{rupees(bill.paid)}</span>
+                  </div>
+                  <div className="border-hairline flex justify-between gap-3 border-t pt-2">
+                    <span className="text-muted-foreground">Balance after saving</span>
+                    <span className={`font-semibold tabular-nums ${after > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      {after > 0 ? rupees(after) : 'Nothing owing'}
+                    </span>
+                  </div>
+                  {entered > bill.total && (
+                    <p className="text-amber-600 dark:text-amber-400">
+                      That is {rupees(entered - bill.total)} more than the booking is worth.
+                    </p>
+                  )}
+                </div>
+              )
+            })()}
             <div className="space-y-1.5">
-              <Label htmlFor="pay-amount">Amount received (₹)</Label>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label htmlFor="pay-amount">Total received to date (₹)</Label>
+                {paying && money(paying).balance > 0 && (
+                  // One click for the case the box is most often filled by hand for: the
+                  // client has now settled the lot.
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => setPayAmount(String(money(paying).total / 100))}
+                  >
+                    They have paid in full
+                  </Button>
+                )}
+              </div>
               <Input id="pay-amount" type="number" min={0} value={payAmount}
                      onChange={(event) => setPayAmount(event.target.value)} autoFocus />
+              <p className="text-muted-foreground text-xs">
+                Part payments are fine — the booking stays part paid until this figure
+                reaches the contract value.
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -820,8 +986,14 @@ export function AdBookings({ contentId }: { contentId: number }) {
                 Clear payment
               </Button>
             )}
-            <Button disabled={savePayment.isPending} onClick={() => savePayment.mutate()}>
-              {savePayment.isPending ? 'Saving…' : 'Record payment'}
+            {/* A zero is not a payment, it is a clearing -- and there is a button for
+                that beside this one. Saving one wrote a receipt for nothing and left the
+                booking looking settled-with-nothing-received. */}
+            <Button
+              disabled={savePayment.isPending || !(Number(payAmount) > 0)}
+              onClick={() => savePayment.mutate()}
+            >
+              {savePayment.isPending ? 'Saving…' : 'Save payment'}
             </Button>
           </DialogFooter>
         </DialogContent>

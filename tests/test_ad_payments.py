@@ -14,6 +14,9 @@ What is pinned here:
   instalments are ever wanted.
 * Clearing it puts the booking back to unpaid, including for bookings marked paid before
   payments existed and which therefore have no row to delete.
+* "Paid" means the balance is ZERO, not that some money arrived. A part payment leaves the
+  booking part paid and reports what is still owed, and anything that moves the total --
+  an extension, an upgrade, a corrected price -- re-settles it against what was received.
 * A payment belongs to its tenant and its booking, and dies with the booking.
 
 Throwaway Postgres database. Run directly:  python tests/test_ad_payments.py
@@ -155,6 +158,79 @@ try:
         "leaving the flag set would make it permanently unclearable"
     )
     print("  ok  a legacy booking with no payment row can still be marked unpaid")
+
+    # --- a part payment is a part payment ------------------------------------------------
+    # The flag is read everywhere as "settled in full". Setting it on the first rupee is
+    # what let a 5,000 deposit against a 50,000 campaign print "Paid in full" on the ad
+    # page while the invoice for the same booking chased 45,000.
+    part = models.AdPlacement(
+        organization_id=acme.id, content_id=ad.id, advertiser="Deposit Co",
+        price_paise=5000000, starts_at=now, ends_at=now + timedelta(days=30),
+    )
+    db.add(part); db.commit()
+
+    deposit = http.post(f"/api/placements/{part.id}/payment", headers=auth,
+                        json={"amount_paise": 500000, "method": "upi"})
+    assert deposit.status_code == 201, deposit.text
+    body = deposit.json()
+    assert body["is_paid"] is False, (
+        "a 5,000 deposit against a 50,000 booking marked it paid in full"
+    )
+    assert body["payment_status"] == "part_paid", body
+    assert body["amount_paid_paise"] == 500000, body
+    assert body["balance_due_paise"] == 4500000, body
+    print("  ok  a part payment leaves the booking part paid, with the balance reported")
+
+    settled = http.post(f"/api/placements/{part.id}/payment", headers=auth,
+                        json={"amount_paise": 5000000, "method": "upi"})
+    assert settled.json()["is_paid"] is True, settled.json()
+    assert settled.json()["payment_status"] == "paid", settled.json()
+    assert settled.json()["balance_due_paise"] == 0, settled.json()
+    print("  ok  paying the rest settles it")
+
+    # --- selling more re-opens the balance ------------------------------------------------
+    # An extension or an upgrade moves the TOTAL. A booking settled against the old total
+    # is not settled against the new one, and saying otherwise is how airtime gets given
+    # away: the operator sees "Paid" and never chases the difference.
+    extended = http.post(f"/api/placements/{part.id}/extensions", headers=auth, json={
+        "extended_to": (now + timedelta(days=60)).isoformat(),
+        "additional_price_paise": 1500000,
+    })
+    assert extended.status_code == 201, extended.text
+    assert extended.json()["is_paid"] is False, (
+        "a booking stayed 'paid' after 15,000 more was sold against it"
+    )
+    assert extended.json()["payment_status"] == "part_paid", extended.json()
+    assert extended.json()["balance_due_paise"] == 1500000, extended.json()
+    print("  ok  selling an extension against a settled booking re-opens the balance")
+
+    extension_id = extended.json()["extensions"][0]["id"]
+    pulled = http.delete(f"/api/placements/{part.id}/extensions/{extension_id}", headers=auth)
+    assert pulled.status_code == 200, pulled.text
+    assert pulled.json()["is_paid"] is True, (
+        "cancelling the extension left the booking owing money it no longer owes"
+    )
+    print("  ok  cancelling it settles the booking again")
+
+    # --- correcting the price re-settles too ----------------------------------------------
+    repriced = http.put(f"/api/placements/{part.id}", headers=auth,
+                        json={"price_paise": 6000000})
+    assert repriced.json()["balance_due_paise"] == 1000000, repriced.json()
+    assert repriced.json()["is_paid"] is False, repriced.json()
+    print("  ok  correcting the price re-settles against what was already received")
+
+    # A booking marked paid before payments existed reports its price as received rather
+    # than reading as owing the lot again -- that flag is the only receipt it has.
+    legacy_flagged = models.AdPlacement(
+        organization_id=acme.id, content_id=ad.id, advertiser="Before Payments",
+        price_paise=250000, is_paid=True, starts_at=now, ends_at=now + timedelta(days=10),
+    )
+    db.add(legacy_flagged); db.commit()
+    seen = http.get(f"/api/placements/?content_id={ad.id}", headers=auth).json()
+    row = next(p for p in seen if p["id"] == legacy_flagged.id)
+    assert row["payment_status"] == "paid", row
+    assert row["balance_due_paise"] == 0, row
+    print("  ok  a booking marked paid before payments existed still reads as settled")
 
     # --- tenant isolation -----------------------------------------------------------------
     for call in (

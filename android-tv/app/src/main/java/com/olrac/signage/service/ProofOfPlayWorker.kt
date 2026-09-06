@@ -111,9 +111,14 @@ class ProofOfPlayWorker(
         val database = AppDatabase.getDatabase(applicationContext)
         val playEventDao = database.playEventDao()
 
-        // Offset learned by the most recent heartbeat. Applied below to any event that was
+        // Offset learned by SignageClock or heartbeat. Applied below to any event that was
         // recorded before this device had ever reached the server.
-        val currentOffsetMs = prefs.getLong("server_time_offset_ms", 0L)
+        val clock = com.olrac.signage.data.SignageClock.getInstance(applicationContext)
+        val currentOffsetMs = if (clock.isClockVerified()) {
+            clock.currentEstimatedUtcMillis() - System.currentTimeMillis()
+        } else {
+            prefs.getLong("server_time_offset_ms", 0L)
+        }
 
         // Drain in a loop rather than uploading one batch and going back to sleep.
         //

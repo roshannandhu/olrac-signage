@@ -78,4 +78,26 @@ class OperatingHoursTest {
     fun `a day with the wrong number of entries is closed, not crashing`() {
         assertTrue(OperatingHours.isOff("hours", mapOf("mon" to listOf("09:00")), monday(12)))
     }
+
+    @Test
+    fun `unverified clock fails safe to not off`() {
+        val clock = io.mockk.mockk<SignageClock>()
+        io.mockk.every { clock.isClockVerified() } returns false
+
+        val hours = mapOf("mon" to listOf("09:00", "17:00"))
+        assertFalse(OperatingHours.isOff("hours", hours, clock))
+    }
+
+    @Test
+    fun `verified clock respects configured hours`() {
+        val clock = io.mockk.mockk<SignageClock>()
+        io.mockk.every { clock.isClockVerified() } returns true
+        io.mockk.every { clock.nowLocal() } returns monday(12)
+
+        val hours = mapOf("mon" to listOf("09:00", "17:00"))
+        assertFalse(OperatingHours.isOff("hours", hours, clock))
+
+        io.mockk.every { clock.nowLocal() } returns monday(22)
+        assertTrue(OperatingHours.isOff("hours", hours, clock))
+    }
 }

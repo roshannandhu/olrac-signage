@@ -5,6 +5,25 @@ import java.time.LocalTime
 import java.time.OffsetDateTime
 
 object ScheduleEvaluator {
+    /**
+     * Evaluates whether an item is currently active using [SignageClock].
+     *
+     * In commercial digital signage, hardware displays often boot cold without internet or
+     * real-time clock (RTC) batteries, defaulting to Year 1970. Dropping ads on unverified clocks
+     * results in a dead black screen in customer stores.
+     *
+     * FAIL-SAFE POLICY:
+     * If the clock is unverified, all cached playlist items are considered active so the screen
+     * continues playing its cached loop until network/NTP syncs.
+     */
+    fun isActive(item: PlaylistItemEntity, clock: SignageClock): Boolean {
+        if (!clock.isClockVerified()) {
+            // Fail-safe: un-synced/1970 clock must not silence the screen
+            return true
+        }
+        return isActive(item, clock.nowLocal())
+    }
+
     fun isActive(item: PlaylistItemEntity, now: LocalDateTime = LocalDateTime.now()): Boolean {
         val absoluteStart = parseDateTime(item.startAt)
         val absoluteEnd = parseDateTime(item.endAt)

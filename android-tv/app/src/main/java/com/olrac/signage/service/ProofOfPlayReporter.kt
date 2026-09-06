@@ -28,7 +28,12 @@ object ProofOfPlayReporter {
             val orgId = prefs.getInt("organization_id", -1)
             val database = AppDatabase.getDatabase(appContext)
             val playEventDao = database.playEventDao()
-            val currentOffsetMs = prefs.getLong("server_time_offset_ms", 0L)
+            val clock = com.olrac.signage.data.SignageClock.getInstance(appContext)
+            val currentOffsetMs = if (clock.isClockVerified()) {
+                clock.currentEstimatedUtcMillis() - System.currentTimeMillis()
+            } else {
+                prefs.getLong("server_time_offset_ms", 0L)
+            }
 
             var totalUploaded = 0
             while (true) {

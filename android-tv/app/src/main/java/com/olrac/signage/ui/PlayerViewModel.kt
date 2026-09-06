@@ -61,7 +61,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
      */
     private fun activeItems(items: List<PlaylistItemEntity>): List<PlaylistItemEntity> {
         val state = DeviceState(getApplication())
-        if (OperatingHours.isOff(state.operatingMode, state.operatingHours)) return emptyList()
-        return items.filter { it.localPath != null && ScheduleEvaluator.isActive(it) }
+        val clock = com.olrac.signage.data.SignageClock.getInstance(getApplication())
+        if (OperatingHours.isOff(state.operatingMode, state.operatingHours, clock)) return emptyList()
+        return items.filter { it.localPath != null && ScheduleEvaluator.isActive(it, clock) }
     }
 }

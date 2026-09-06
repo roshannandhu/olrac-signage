@@ -35,8 +35,8 @@
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/data/ScheduleEvaluator.kt": {
-    "mtime": 1788285614.465619,
-    "ast_hash": "bfb98dcb130e72c6a7a3a3b319076f8e",
+    "mtime": 1788702458.251779,
+    "ast_hash": "74ffbb09a26e020aebadabbdb9adbc72",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/data/TransitionSpec.kt": {
@@ -45,8 +45,8 @@
     "semantic_hash": "c4fa7b81473768c706f29aae69472db4"
   },
   "android-tv/app/src/main/java/com/olrac/signage/network/ApiClient.kt": {
-    "mtime": 1788341792.781147,
-    "ast_hash": "45bf964165317385de282cffefbbe639",
+    "mtime": 1788702488.6204567,
+    "ast_hash": "13297d101c7e5082b506aa5b0aad3fc9",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/network/ApiService.kt": {
@@ -70,8 +70,8 @@
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/sync/PlaylistSynchronizer.kt": {
-    "mtime": 1788344345.9821198,
-    "ast_hash": "8cf6c68cbcabbbab6ee51c773fac5305",
+    "mtime": 1788702503.7463465,
+    "ast_hash": "9d67aceaaccdc26f287fdd32b48f34f9",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/sync/SyncBackoffPolicy.kt": {
@@ -95,13 +95,13 @@
     "semantic_hash": "102be328260c5deb369b740ba62e5b32"
   },
   "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerScreen.kt": {
-    "mtime": 1788285667.194366,
-    "ast_hash": "247533762f5c4976f3519122d36e4b51",
+    "mtime": 1788702582.818487,
+    "ast_hash": "010bd2eb536f00e121f3e9cb4ed708d5",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/ui/PlayerViewModel.kt": {
-    "mtime": 1788344386.1993196,
-    "ast_hash": "c6e835f7d6d8d4772c8960e01b07a224",
+    "mtime": 1788702479.597554,
+    "ast_hash": "e4a2e857117a72249b8366d1b1f33b94",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/workers/HeartbeatWorker.kt": {
@@ -120,9 +120,9 @@
     "semantic_hash": ""
   },
   "android-tv/app/src/test/java/com/olrac/signage/data/ScheduleEvaluatorTest.kt": {
-    "mtime": 1786039036.9039726,
-    "ast_hash": "29985d4289a7fa64917d0a4d114b6450",
-    "semantic_hash": "29985d4289a7fa64917d0a4d114b6450"
+    "mtime": 1788702621.236875,
+    "ast_hash": "6171b75a0612ddea75bd5bf51131db64",
+    "semantic_hash": ""
   },
   "android-tv/app/src/test/java/com/olrac/signage/data/TransitionSpecResolverTest.kt": {
     "mtime": 1786045296.6060636,
@@ -545,8 +545,8 @@
     "semantic_hash": "7a90041842e015b2b9981fa0553d3b2c"
   },
   "android-tv/app/src/main/java/com/olrac/signage/service/ProofOfPlayWorker.kt": {
-    "mtime": 1788093999.4086812,
-    "ast_hash": "d06b78382e8dd2bda4ffacecb4444266",
+    "mtime": 1788702556.7170815,
+    "ast_hash": "ec330ec73bfdc387bcc360a08c97558c",
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/sync/InstallReceiver.kt": {
@@ -735,8 +735,8 @@
     "semantic_hash": ""
   },
   "frontend/src/app/dashboard/screens/[id]/page.tsx": {
-    "mtime": 1788520698.298215,
-    "ast_hash": "0f6829768eaebd9b2640735b2c7b9fe2",
+    "mtime": 1788702034.2401412,
+    "ast_hash": "feeb739635fd69fe4611f8df63d35c02",
     "semantic_hash": ""
   },
   "scripts/preflight.py": {
@@ -1470,8 +1470,8 @@
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/service/ProofOfPlayReporter.kt": {
-    "mtime": 1788094012.282186,
-    "ast_hash": "08b74f180a6b6600163969d14155cd15",
+    "mtime": 1788702669.2368248,
+    "ast_hash": "68c70ed9330b4fdc31d099c473af9b18",
     "semantic_hash": ""
   },
   "backend/alembic/versions/c1d2e3f4a5b6_super_admin_role_and_quota_columns.py": {
@@ -1720,13 +1720,13 @@
     "semantic_hash": ""
   },
   "android-tv/app/src/main/java/com/olrac/signage/data/OperatingHours.kt": {
-    "mtime": 1788344196.5426612,
-    "ast_hash": "f523d211e76e58554c736b973d8412f7",
+    "mtime": 1788702468.3139868,
+    "ast_hash": "983e03d4f23fb431ba20525656273beb",
     "semantic_hash": ""
   },
   "android-tv/app/src/test/java/com/olrac/signage/data/OperatingHoursTest.kt": {
-    "mtime": 1788344479.3364947,
-    "ast_hash": "9e1db921a41e7225ceafc63b3fe70f4f",
+    "mtime": 1788702633.4481294,
+    "ast_hash": "9d6c55ebce9fe5a11170b90703e60148",
     "semantic_hash": ""
   },
   "frontend/src/app/api/media/[...key]/route.ts": {
@@ -1880,8 +1880,8 @@
     "semantic_hash": ""
   },
   "backend/services/placement_service.py": {
-    "mtime": 1788700182.7893946,
-    "ast_hash": "dec5a93e15fadd5a5f6ee3018a665ee9",
+    "mtime": 1788702169.2853792,
+    "ast_hash": "f8d9bf1107a0ca1590663206acd3ea65",
     "semantic_hash": ""
   },
   "backend/services/playlist_service.py": {
@@ -1904,14 +1904,19 @@
     "ast_hash": "10cc2c0ea7318a99a772ad85dcec350d",
     "semantic_hash": ""
   },
-  "frontend/src/lib/api/client.ts": {
-    "mtime": 1788700182.7963936,
-    "ast_hash": "9cbe5f770297da3cc950284095303e66",
-    "semantic_hash": ""
-  },
   "frontend/src/components/dashboard/create-booking-modal.tsx": {
     "mtime": 1788701769.461349,
     "ast_hash": "bf87d238497c45b71e4bd8dd2e597247",
+    "semantic_hash": ""
+  },
+  "android-tv/app/src/main/java/com/olrac/signage/data/SignageClock.kt": {
+    "mtime": 1788702445.2138646,
+    "ast_hash": "6ba97da22e95131f8c3334cd2cda41a7",
+    "semantic_hash": ""
+  },
+  ".agents/rules/commercial-signage-architecture.md": {
+    "mtime": 1788702427.6484027,
+    "ast_hash": "702baa1128f2e9a90e30c23b63920fb6",
     "semantic_hash": ""
   }
 }

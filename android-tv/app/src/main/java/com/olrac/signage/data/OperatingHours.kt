@@ -23,6 +23,22 @@ object OperatingHours {
     private val WEEKDAYS = listOf("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
     /**
+     * Evaluates whether the screen should be off using [SignageClock].
+     * If the clock is unverified, fails safe by returning false (screen stays on).
+     */
+    fun isOff(
+        mode: String?,
+        windows: Map<String, List<String>>?,
+        clock: SignageClock,
+    ): Boolean {
+        if (!clock.isClockVerified()) {
+            // Fail-safe: an unverified clock must not cause the screen to go dark
+            return false
+        }
+        return isOff(mode, windows, clock.nowLocal())
+    }
+
+    /**
      * @param mode "always" (default), "hours", or "never"
      * @param windows day -> ["HH:MM", "HH:MM"]
      * @param now device-local time; the panel is physically at the venue, so its own clock

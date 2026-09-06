@@ -39,6 +39,13 @@ class PlaylistSynchronizer(context: Context) {
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.MINUTES)
         .callTimeout(10, TimeUnit.MINUTES)
+        .addNetworkInterceptor { chain ->
+            val resp = chain.proceed(chain.request())
+            resp.header("Date")?.let {
+                com.olrac.signage.data.SignageClock.getInstance(appContext).updateFromHttpDate(it)
+            }
+            resp
+        }
         .build()
     private val storageManager = StorageManager(appContext)
 

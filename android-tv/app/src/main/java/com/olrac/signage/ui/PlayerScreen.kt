@@ -190,11 +190,11 @@ private fun DualSurfacePlayer(
     ) {
         val durationMs = PlayCompletion.durationMs(startedAtMs, finishedAtMs)
         val prefs = context.getSharedPreferences("signage_prefs", android.content.Context.MODE_PRIVATE)
-        val offset = if (prefs.contains("server_time_offset_ms")) {
-            prefs.getLong("server_time_offset_ms", 0L)
-        } else {
-            null
-        }
+        val clock = com.olrac.signage.data.SignageClock.getInstance(context)
+        val isTimeValid = clock.isClockVerified()
+        val calculatedOffset = clock.currentEstimatedUtcMillis() - System.currentTimeMillis()
+        val effectiveOffset = if (isTimeValid) calculatedOffset else null
+        val finalError = if (!isTimeValid && error == null) "time_unverified_offline" else error
 
         val formatter = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply {
             timeZone = java.util.TimeZone.getTimeZone("UTC")
@@ -204,11 +204,6 @@ private fun DualSurfacePlayer(
             reason == PlayEndReason.PLAYED_TO_END &&
             !PlayCompletion.isPlausible(startedAtMs, finishedAtMs)
         ) PlayEndReason.INTERRUPTED else reason
-
-        val isTimeValid = startedAtMs > 1704067200000L
-        val finalError = if (!isTimeValid && error == null) "time_invalid_rtc_reset" else error
-        
-        val effectiveOffset = if (isTimeValid) offset else null
 
         val eventId = prefs.getString(CHECKPOINT_EVENT_ID, null)
             ?.takeIf { prefs.getInt(CHECKPOINT_ITEM_ID, -1) == item.id }

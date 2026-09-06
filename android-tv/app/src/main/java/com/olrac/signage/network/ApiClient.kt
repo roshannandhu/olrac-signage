@@ -91,6 +91,10 @@ object ApiClient {
                     request
                 }
                 val response = chain.proceed(signed)
+                val dateHeader = response.header("Date")
+                if (!dateHeader.isNullOrBlank()) {
+                    com.olrac.signage.data.SignageClock.getInstance(appContext).updateFromHttpDate(dateHeader)
+                }
                 // A rejected token is almost always an expired one; drop it so the next
                 // call re-exchanges rather than repeating the failure until restart.
                 if (response.code == 401 && token != null && isApiHost) clearToken()

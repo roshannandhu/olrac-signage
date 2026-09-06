@@ -49,4 +49,26 @@ class ScheduleEvaluatorTest {
         assertTrue(ScheduleEvaluator.isActive(scheduled, LocalDateTime.parse("2026-08-06T09:00:00")))
         assertFalse(ScheduleEvaluator.isActive(scheduled, LocalDateTime.parse("2026-08-06T17:00:00")))
     }
+
+    @Test
+    fun unverifiedClockFailsSafeToActive() {
+        val clock = io.mockk.mockk<SignageClock>()
+        io.mockk.every { clock.isClockVerified() } returns false
+
+        val scheduledFuture = item(startAt = "2026-10-01T09:00:00", endAt = "2026-10-30T17:00:00")
+        assertTrue(ScheduleEvaluator.isActive(scheduledFuture, clock))
+    }
+
+    @Test
+    fun verifiedClockAppliesScheduleWindows() {
+        val clock = io.mockk.mockk<SignageClock>()
+        io.mockk.every { clock.isClockVerified() } returns true
+        io.mockk.every { clock.nowLocal() } returns LocalDateTime.parse("2026-08-06T10:00:00")
+
+        val scheduled = item(startAt = "2026-08-01T09:00:00", endAt = "2026-08-10T17:00:00")
+        assertTrue(ScheduleEvaluator.isActive(scheduled, clock))
+
+        io.mockk.every { clock.nowLocal() } returns LocalDateTime.parse("2026-08-15T10:00:00")
+        assertFalse(ScheduleEvaluator.isActive(scheduled, clock))
+    }
 }

@@ -835,10 +835,15 @@ class AdPlacement(Base):
         cascade="all, delete-orphan",
         order_by="AdPlacementExtension.extended_from",
     )
-    # One or none. delete-orphan because a deleted booking's payment record has nothing
-    # left to be a payment for.
-    payment = relationship(
-        "AdPayment", back_populates="placement", uselist=False, cascade="all, delete-orphan"
+    # Every receipt taken against this booking, oldest first -- a client who pays a deposit
+    # in March and the balance in May has two, and overwriting the first with the second is
+    # how ₹5,000 of a ₹10,000 campaign used to vanish. delete-orphan because a deleted
+    # booking's receipts have nothing left to be receipts for.
+    payments = relationship(
+        "AdPayment",
+        back_populates="placement",
+        cascade="all, delete-orphan",
+        order_by="AdPayment.paid_at",
     )
 
 
@@ -950,10 +955,15 @@ class AdPayment(Base):
     so "did Brightmart pay by UPI or is that the cheque that bounced?" had no answer
     anywhere in the system, and a mis-click was indistinguishable from a receipt.
 
-    One row per booking, enforced by the unique constraint. That is a deliberate ceiling,
-    not an oversight: it records a settled payment, not a ledger. Instalments would mean
-    dropping the constraint and summing against the booking total -- the shape of the row
-    does not have to change for that, so the smaller thing is worth having now.
+    A row per receipt, not per booking. It was one-per-booking (a unique constraint on
+    placement_id) on the reasoning that this records a settled payment rather than a
+    ledger -- but clients pay deposits, and recording the second ₹5,000 of a ₹10,000
+    campaign overwrote the first and filed the client as having paid half. What the client
+    has handed over is now the SUM of these rows; see placements.settlement().
+
+    Rows are never edited to correct an amount. A wrong receipt is deleted and the right
+    one recorded, so the ledger reads as what actually happened rather than as whatever it
+    was last saved as.
 
     `method` is validated in the schema against PAYMENT_METHODS rather than by a database
     enum, so accepting a new one is a deploy and not a migration.
@@ -978,11 +988,13 @@ class AdPayment(Base):
     created_at = Column(UtcDateTime, nullable=False, default=utcnow)
     updated_at = Column(UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow)
 
-    placement = relationship("AdPlacement", back_populates="payment")
+    placement = relationship("AdPlacement", back_populates="payments")
     recorded_by = relationship("User")
 
     __table_args__ = (
-        UniqueConstraint("placement_id", name="uq_ad_payments_placement"),
+        # A receipt for nothing is a mis-click, not a payment, and it drags a booking into
+        # "part paid" while adding no money to it.
+        CheckConstraint("amount_paise > 0", name="ck_ad_payments_amount_positive"),
     )
 
 

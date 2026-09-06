@@ -168,7 +168,12 @@ def build_pdf(report: dict) -> bytes:
     story.append(Spacer(1, 5 * mm))
 
     # --- What was paid ------------------------------------------------------------------
-    payment = report.get("payment")
+    # A list now: a booking carries every receipt taken against it, and a deposit followed
+    # by a balance is two. The singular fallback keeps an older report payload rendering.
+    payments = report.get("payments")
+    if payments is None:
+        single = report.get("payment")
+        payments = [single] if single else []
     # Read off the report, which derives all three from one place (placements.settlement),
     # rather than subtracting them again here. "Part paid" when the money received does not
     # cover the total -- which is exactly what an upgrade or an extension does until it is
@@ -178,7 +183,7 @@ def build_pdf(report: dict) -> bytes:
     # The fallbacks keep an older report payload rendering rather than crashing on a key.
     received = report.get("amount_paid_paise")
     if received is None:
-        received = (payment or {}).get("amount_paise") or 0
+        received = sum(p.get("amount_paise") or 0 for p in payments)
     outstanding = report.get("balance_due_paise")
     if outstanding is None:
         outstanding = max(0, (total or 0) - received)
@@ -195,22 +200,27 @@ def build_pdf(report: dict) -> bytes:
 
     settled_rows = [[Paragraph("Status", style["body"]),
                      _pill(style, status_label, status_ink, status_bg)]]
-    if payment:
-        method = METHOD_LABELS.get(payment.get("method"), _safe(payment.get("method")))
-        settled_rows.append([Paragraph("Method", style["body"]),
-                             Paragraph(f'<para align="right">{method}</para>', style["body"])])
-        settled_rows.append([Paragraph("Amount received", style["body"]),
-                             Paragraph(f'<para align="right">{_money(payment.get("amount_paise"))}</para>', style["body"])])
-        settled_rows.append([Paragraph("Received on", style["body"]),
-                             Paragraph(f'<para align="right">{_date(payment.get("paid_at"))}</para>', style["body"])])
-        if payment.get("reference"):
-            settled_rows.append([Paragraph("Reference", style["body"]),
-                                 Paragraph(f'<para align="right">{_safe(payment["reference"])}</para>', style["body"])])
-        # An amount received that does not match the total is the single most useful thing
-        # this document can point at, so it is stated rather than left to be worked out.
-        if outstanding > 0:
-            settled_rows.append([Paragraph("<b>Outstanding</b>", style["body"]),
-                                 Paragraph(f'<para align="right"><b>{_money(outstanding)}</b></para>', style["body"])])
+    # One row per receipt, in the order the money arrived, each carrying the method and the
+    # reference under its date. A client checking this against their own bank statement is
+    # looking for a UTR and a date, and a single collapsed "amount received" gives them
+    # neither -- it also cannot be told apart from a part payment of the same size.
+    for entry in payments:
+        method = METHOD_LABELS.get(entry.get("method"), _safe(entry.get("method")))
+        detail = f"{method} &middot; {_safe(entry['reference'])}" if entry.get("reference") else method
+        settled_rows.append([
+            Paragraph(f'{_date(entry.get("paid_at"))}<br/><font size="7">{detail}</font>', style["body"]),
+            Paragraph(f'<para align="right">{_money(entry.get("amount_paise"))}</para>', style["body"]),
+        ])
+    # Stated only when it is not simply the row above it, so a booking settled in one
+    # transfer does not print the same figure twice.
+    if len(payments) > 1:
+        settled_rows.append([Paragraph("Total received", style["body"]),
+                             Paragraph(f'<para align="right">{_money(received)}</para>', style["body"])])
+    # An amount received that does not match the total is the single most useful thing this
+    # document can point at, so it is stated rather than left to be worked out.
+    if payments and outstanding > 0:
+        settled_rows.append([Paragraph("<b>Outstanding</b>", style["body"]),
+                             Paragraph(f'<para align="right"><b>{_money(outstanding)}</b></para>', style["body"])])
 
     settled = Table(settled_rows, colWidths=[36 * mm, 48 * mm])
     settled.setStyle(TableStyle([

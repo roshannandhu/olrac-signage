@@ -9,11 +9,13 @@ What is pinned here:
 
 * Recording a payment is the ONLY way a booking becomes paid. The generic PUT can no
   longer flip the flag, so the receipt and the flag cannot disagree.
-* One settlement per booking. Recording again corrects the record rather than stacking a
-  second one -- the deliberate ceiling, and the thing that would have to change first if
-  instalments are ever wanted.
-* Clearing it puts the booking back to unpaid, including for bookings marked paid before
-  payments existed and which therefore have no row to delete.
+* A ledger, not one settlement row. Recording a payment ADDS a receipt; what the client
+  has handed over is their SUM. It used to overwrite, so a client's second instalment
+  erased their first -- amount, date, method and reference -- and filed them as having
+  paid a fraction of what they really had. A wrong receipt is deleted, not edited, and
+  removing one leaves the others standing.
+* Clearing wipes every receipt and puts the booking back to unpaid, including for
+  bookings marked paid before payments existed and which have no row to delete.
 * "Paid" means the balance is ZERO, not that some money arrived. A part payment leaves the
   booking part paid and reports what is still owed, and anything that moves the total --
   an extension, an upgrade, a corrected price -- re-settles it against what was received.
@@ -80,7 +82,7 @@ try:
     assert booking.status_code == 201, booking.text
     booking_id = booking.json()["id"]
     assert booking.json()["is_paid"] is False, "a new booking is not paid"
-    assert booking.json()["payment"] is None, booking.json()
+    assert booking.json()["payments"] == [], booking.json()
     print("  ok  a new booking starts unpaid, with no payment record")
 
     # --- the flag can no longer be set without a receipt behind it -----------------------
@@ -90,18 +92,19 @@ try:
         "a blind PUT marked the booking paid -- is_paid must be the shadow of a payment "
         "record, or a mis-click is indistinguishable from a receipt"
     )
-    assert blind.json()["payment"] is None, blind.json()
+    assert blind.json()["payments"] == [], blind.json()
     print("  ok  the generic PUT can no longer mark a booking paid")
 
     # --- recording a payment is what settles it ------------------------------------------
-    paid = http.post(f"/api/placements/{booking_id}/payment", headers=auth, json={
+    paid = http.post(f"/api/placements/{booking_id}/payments", headers=auth, json={
         "amount_paise": 2500000, "method": "upi", "reference": "UTR9988776655",
         "notes": "Settled at the counter",
     })
     assert paid.status_code == 201, paid.text
     body = paid.json()
     assert body["is_paid"] is True, body
-    payment = body["payment"]
+    assert len(body["payments"]) == 1, body["payments"]
+    payment = body["payments"][0]
     assert payment["amount_paise"] == 2500000, payment
     assert payment["method"] == "upi", payment
     assert payment["reference"] == "UTR9988776655", payment
@@ -111,38 +114,68 @@ try:
     assert payment["paid_at"], payment
     print("  ok  recording a payment settles the booking and keeps amount, method, reference and taker")
 
-    # --- one settlement per booking; recording again corrects it -------------------------
-    corrected = http.post(f"/api/placements/{booking_id}/payment", headers=auth, json={
+    # --- a second receipt is a second row, not an overwrite ------------------------------
+    # The whole point of the ledger. This used to UPDATE the row above, so a client paying
+    # 25,000 and then another 24,000 was recorded as having paid 24,000 -- their first
+    # instalment gone, with no date, no method and no reference left to trace it by.
+    second = http.post(f"/api/placements/{booking_id}/payments", headers=auth, json={
         "amount_paise": 2400000, "method": "cheque", "reference": "CHQ 41003",
     })
-    assert corrected.status_code == 201, corrected.text
-    assert corrected.json()["payment"]["method"] == "cheque", corrected.json()["payment"]
-    assert corrected.json()["payment"]["amount_paise"] == 2400000, corrected.json()["payment"]
-    assert corrected.json()["payment"]["reference"] == "CHQ 41003", corrected.json()["payment"]
-    rows = db.query(models.AdPayment).filter(models.AdPayment.placement_id == booking_id).count()
-    assert rows == 1, f"re-recording stacked {rows} payments; one booking settles once"
-    print("  ok  re-recording corrects the settlement rather than stacking a second one")
+    assert second.status_code == 201, second.text
+    receipts = second.json()["payments"]
+    assert len(receipts) == 2, f"the second instalment overwrote the first: {receipts}"
+    assert [r["amount_paise"] for r in receipts] == [2500000, 2400000], receipts
+    assert [r["method"] for r in receipts] == ["upi", "cheque"], receipts
+    assert receipts[0]["reference"] == "UTR9988776655", receipts
+    assert second.json()["amount_paid_paise"] == 4900000, (
+        "what the client has handed over is the SUM of the receipts, not the last one"
+    )
+    print("  ok  a second payment is added to the ledger, not written over the first")
+
+    # --- a receipt for nothing is a mis-click, not a payment ------------------------------
+    # It adds no money and yet drags the booking into "part paid", which reads worse than
+    # the unpaid it really is.
+    zero = http.post(f"/api/placements/{booking_id}/payments", headers=auth,
+                     json={"amount_paise": 0, "method": "cash"})
+    assert zero.status_code == 422, zero.text
+    print("  ok  a zero-rupee receipt is refused")
+
+    # --- one wrong receipt comes out, the rest stand -------------------------------------
+    # How a mistyped amount is corrected, since a receipt is never edited in place.
+    dropped = http.delete(
+        f"/api/placements/{booking_id}/payments/{receipts[1]['id']}", headers=auth)
+    assert dropped.status_code == 200, dropped.text
+    assert [r["amount_paise"] for r in dropped.json()["payments"]] == [2500000], (
+        "deleting the cheque took the UPI deposit with it"
+    )
+    assert dropped.json()["amount_paid_paise"] == 2500000, dropped.json()
+    assert dropped.json()["is_paid"] is True, (
+        "removing an extra receipt un-paid a booking the remaining one covers"
+    )
+    missing = http.delete(f"/api/placements/{booking_id}/payments/999999", headers=auth)
+    assert missing.status_code == 404, missing.text
+    print("  ok  a single receipt can be removed without disturbing the others")
 
     # --- an unknown method is refused, so the column cannot fill with typos ---------------
-    bad = http.post(f"/api/placements/{booking_id}/payment", headers=auth,
+    bad = http.post(f"/api/placements/{booking_id}/payments", headers=auth,
                     json={"amount_paise": 100, "method": "crypto"})
     assert bad.status_code == 422, bad.text
-    mixed_case = http.post(f"/api/placements/{booking_id}/payment", headers=auth,
+    mixed_case = http.post(f"/api/placements/{booking_id}/payments", headers=auth,
                            json={"amount_paise": 100, "method": "  Bank_Transfer "})
     assert mixed_case.status_code == 201, mixed_case.text
-    assert mixed_case.json()["payment"]["method"] == "bank_transfer", (
+    assert mixed_case.json()["payments"][-1]["method"] == "bank_transfer", (
         "a method typed with stray case or spacing must normalise, not create a second "
         "spelling of the same method"
     )
     print("  ok  an unknown method is refused and a sloppily typed one is normalised")
 
     # --- clearing puts it back to unpaid --------------------------------------------------
-    cleared = http.delete(f"/api/placements/{booking_id}/payment", headers=auth)
+    cleared = http.delete(f"/api/placements/{booking_id}/payments", headers=auth)
     assert cleared.status_code == 200, cleared.text
     assert cleared.json()["is_paid"] is False, cleared.json()
-    assert cleared.json()["payment"] is None, cleared.json()
+    assert cleared.json()["payments"] == [], cleared.json()
     assert db.query(models.AdPayment).filter(models.AdPayment.placement_id == booking_id).count() == 0
-    print("  ok  clearing a payment returns the booking to unpaid")
+    print("  ok  clearing wipes every receipt and returns the booking to unpaid")
 
     # A booking marked paid before payments existed has no row to delete. Clearing must
     # still work, or a legacy campaign is stuck paid forever.
@@ -151,7 +184,7 @@ try:
         price_paise=100000, is_paid=True, starts_at=now, ends_at=now + timedelta(days=10),
     )
     db.add(legacy); db.commit()
-    legacy_cleared = http.delete(f"/api/placements/{legacy.id}/payment", headers=auth)
+    legacy_cleared = http.delete(f"/api/placements/{legacy.id}/payments", headers=auth)
     assert legacy_cleared.status_code == 200, legacy_cleared.text
     assert legacy_cleared.json()["is_paid"] is False, (
         "a booking marked paid before payments were recorded has no row to delete, and "
@@ -169,7 +202,7 @@ try:
     )
     db.add(part); db.commit()
 
-    deposit = http.post(f"/api/placements/{part.id}/payment", headers=auth,
+    deposit = http.post(f"/api/placements/{part.id}/payments", headers=auth,
                         json={"amount_paise": 500000, "method": "upi"})
     assert deposit.status_code == 201, deposit.text
     body = deposit.json()
@@ -181,12 +214,16 @@ try:
     assert body["balance_due_paise"] == 4500000, body
     print("  ok  a part payment leaves the booking part paid, with the balance reported")
 
-    settled = http.post(f"/api/placements/{part.id}/payment", headers=auth,
-                        json={"amount_paise": 5000000, "method": "upi"})
+    settled = http.post(f"/api/placements/{part.id}/payments", headers=auth,
+                        json={"amount_paise": 4500000, "method": "upi"})
     assert settled.json()["is_paid"] is True, settled.json()
     assert settled.json()["payment_status"] == "paid", settled.json()
     assert settled.json()["balance_due_paise"] == 0, settled.json()
-    print("  ok  paying the rest settles it")
+    assert settled.json()["amount_paid_paise"] == 5000000, (
+        "the deposit stopped counting the moment the balance was paid"
+    )
+    assert len(settled.json()["payments"]) == 2, settled.json()["payments"]
+    print("  ok  the deposit and the balance both stand, and together they settle it")
 
     # --- selling more re-opens the balance ------------------------------------------------
     # An extension or an upgrade moves the TOTAL. A booking settled against the old total
@@ -234,22 +271,22 @@ try:
 
     # --- tenant isolation -----------------------------------------------------------------
     for call in (
-        lambda: http.post(f"/api/placements/{booking_id}/payment", headers=rival_auth,
+        lambda: http.post(f"/api/placements/{booking_id}/payments", headers=rival_auth,
                           json={"amount_paise": 1, "method": "cash"}),
-        lambda: http.delete(f"/api/placements/{booking_id}/payment", headers=rival_auth),
+        lambda: http.delete(f"/api/placements/{booking_id}/payments", headers=rival_auth),
     ):
         assert call().status_code == 404, "another tenant reached this booking's payment"
     print("  ok  another tenant can neither record nor clear a payment on this booking")
 
     # --- the payment dies with the booking -------------------------------------------------
-    http.post(f"/api/placements/{booking_id}/payment", headers=auth,
+    http.post(f"/api/placements/{booking_id}/payments", headers=auth,
               json={"amount_paise": 2500000, "method": "cash"})
     assert http.delete(f"/api/placements/{booking_id}", headers=auth).status_code == 200
     db.expire_all()
     assert db.query(models.AdPayment).filter(models.AdPayment.placement_id == booking_id).count() == 0, (
         "deleting a booking left its payment behind, pointing at nothing"
     )
-    print("  ok  deleting a booking takes its payment record with it")
+    print("  ok  deleting a booking takes its payment records with it")
 
     print("ad payments: all checks passed")
 finally:

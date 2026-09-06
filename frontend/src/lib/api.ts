@@ -356,15 +356,18 @@ export const api = {
     fetchWithAuth<{ status: string; to: string }>(
       `/placements/${placementId}/email?document=${document}`, { method: 'POST' }),
 
-  // --- Billing on a booking. `is_paid` is the shadow of this record, so these are the
-  // only two calls that change whether a booking counts as paid.
+  // --- Billing on a booking. `is_paid` is the shadow of these records, so these are the
+  // only calls that change whether a booking counts as paid.
+  //
+  // ADDS a receipt; it does not replace the last one. Correcting a wrong amount is
+  // deletePayment followed by recordPayment, which is also what leaves an honest ledger.
   recordPayment: (placementId: number, body: {
     amount_paise: number
     method: PaymentMethod
     reference?: string | null
     paid_at?: string | null
     notes?: string | null
-  }) => fetchWithAuth<Placement>(`/placements/${placementId}/payment`, {
+  }) => fetchWithAuth<Placement>(`/placements/${placementId}/payments`, {
     // The header is not optional: without it fetch labels a string body text/plain and
     // FastAPI rejects it before the handler runs, returning a validation LIST in `detail`
     // where authFetch expects a string -- so a perfectly good payment fails as
@@ -372,8 +375,15 @@ export const api = {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   }),
 
+  /** One receipt out -- a duplicate, or a cheque that bounced. The others still stand. */
+  deletePayment: (placementId: number, paymentId: number) =>
+    fetchWithAuth<Placement>(`/placements/${placementId}/payments/${paymentId}`,
+      { method: 'DELETE' }),
+
+  /** Every receipt out: none of this was ever paid. Also the only way to clear a booking
+   *  flagged paid before payments were recorded, which has no receipt to remove. */
   clearPayment: (placementId: number) =>
-    fetchWithAuth<Placement>(`/placements/${placementId}/payment`, { method: 'DELETE' }),
+    fetchWithAuth<Placement>(`/placements/${placementId}/payments`, { method: 'DELETE' }),
 
   // --- Moving a client to a different plan.
   getPlanOptions: (placementId: number) =>

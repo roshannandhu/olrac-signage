@@ -232,13 +232,14 @@ def settlement(placement: models.AdPlacement) -> dict:
     otherwise migrating that flag into arithmetic would reopen every historical campaign.
     """
     total = total_price_paise(placement)
-    payment = placement.payment
-    if payment is not None:
-        received = payment.amount_paise
+    # The SUM of the receipts, not the latest one. A deposit in March and the balance in
+    # May are two rows and one campaign.
+    if placement.payments:
+        received = sum(p.amount_paise for p in placement.payments)
     else:
         received = total if placement.is_paid else 0
     balance = max(0, total - received)
-    if received >= total and (payment is not None or placement.is_paid):
+    if received >= total and (placement.payments or placement.is_paid):
         status = "paid"
     elif received > 0:
         status = "part_paid"
@@ -255,11 +256,11 @@ def refresh_paid_state(placement: models.AdPlacement) -> None:
     the price. Without it an extension sold against a settled booking left the flag reading
     "paid" over a balance the client still owed.
 
-    Only touched when a payment record exists. A booking whose flag predates payments has
-    no amount to compare against, and flipping it to unpaid here would present every
+    Only touched when at least one receipt exists. A booking whose flag predates payments
+    has no amount to compare against, and flipping it to unpaid here would present every
     historical campaign as owing its full price again.
     """
-    if placement.payment is None:
+    if not placement.payments:
         return
     placement.is_paid = settlement(placement)["balance"] == 0
 
@@ -387,23 +388,23 @@ def _serialize(scope: TenantScope, placement: models.AdPlacement) -> schemas.Pla
         screens_used=usage["used"],
         plan_max_locations=usage["allowed"],
         screens_unused=usage["unused"],
-        payment=(
+        # Every receipt, oldest first. The client asking "what have I already sent you?"
+        # wants the list, and an operator reconciling a bank statement wants the
+        # references -- neither is answerable from a single collapsed figure.
+        payments=[
             schemas.PaymentResponse(
-                id=placement.payment.id,
-                amount_paise=placement.payment.amount_paise,
-                method=placement.payment.method,
-                reference=placement.payment.reference,
-                paid_at=placement.payment.paid_at,
-                notes=placement.payment.notes,
+                id=payment.id,
+                amount_paise=payment.amount_paise,
+                method=payment.method,
+                reference=payment.reference,
+                paid_at=payment.paid_at,
+                notes=payment.notes,
                 # The name, not the id: this is read by a human chasing a receipt.
-                recorded_by=(
-                    placement.payment.recorded_by.username
-                    if placement.payment.recorded_by else None
-                ),
-                created_at=placement.payment.created_at,
+                recorded_by=payment.recorded_by.username if payment.recorded_by else None,
+                created_at=payment.created_at,
             )
-            if placement.payment else None
-        ),
+            for payment in placement.payments
+        ],
     )
 
 
@@ -890,36 +891,40 @@ def upgrade_plan(
     return _serialize(scope, placement)
 
 
-@router.post("/{placement_id}/payment", response_model=schemas.PlacementResponse, status_code=201)
+@router.post("/{placement_id}/payments", response_model=schemas.PlacementResponse, status_code=201)
 def record_payment(
     placement_id: int,
     payload: schemas.PaymentWrite,
     scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
 ):
-    """Record what the client paid and how. The only way a booking becomes paid.
+    """Record one receipt against the booking. The only way a booking becomes paid.
 
-    Replaces the existing record rather than adding to it -- one settlement per booking is
-    the modelled shape, so re-recording is how a wrong amount or method gets corrected.
+    ADDS a receipt; it does not replace the last one. It used to replace, because the table
+    allowed one row per booking -- so an operator entering a client's second 5,000
+    instalment overwrote the first, and the client was filed as having paid half of what
+    they had actually handed over. A wrong entry is now corrected by deleting that receipt
+    and recording the right one, which is also what leaves an honest ledger behind.
+
+    Overpayment is accepted rather than rejected. Clients round up, pay an advance against
+    the next campaign, or settle two bookings with one transfer; refusing the receipt would
+    only mean the money went unrecorded. `settlement` floors the balance at zero.
     """
     placement = scope.get(models.AdPlacement, placement_id)
     if not placement:
         raise HTTPException(status_code=404, detail="Booking not found")
 
-    payment = placement.payment
-    if payment is None:
-        payment = models.AdPayment(
-            organization_id=scope.organization_id,
-            placement_id=placement.id,
-        )
-        scope.db.add(payment)
-
-    payment.amount_paise = payload.amount_paise
-    payment.method = payload.method
-    payment.reference = (payload.reference or "").strip() or None
-    payment.paid_at = payload.paid_at or models.utcnow()
-    payment.notes = (payload.notes or "").strip() or None
-    # Who took the money. Kept even if they later leave -- the FK is SET NULL, not CASCADE.
-    payment.recorded_by_user_id = scope.user.id
+    payment = models.AdPayment(
+        organization_id=scope.organization_id,
+        placement_id=placement.id,
+        amount_paise=payload.amount_paise,
+        method=payload.method,
+        reference=(payload.reference or "").strip() or None,
+        paid_at=payload.paid_at or models.utcnow(),
+        notes=(payload.notes or "").strip() or None,
+        # Who took the money. Kept even if they later leave -- the FK is SET NULL.
+        recorded_by_user_id=scope.user.id,
+    )
+    scope.db.add(payment)
     scope.db.flush()
     scope.db.refresh(placement)
     # NOT an unconditional True. A part payment is a part payment: this flag is read
@@ -932,20 +937,58 @@ def record_payment(
     return _serialize(scope, placement)
 
 
-@router.delete("/{placement_id}/payment", response_model=schemas.PlacementResponse)
+@router.delete("/{placement_id}/payments", response_model=schemas.PlacementResponse)
 def clear_payment(
     placement_id: int,
     scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
 ):
-    """Undo a payment recorded in error. The booking goes back to unpaid."""
+    """Wipe the whole settlement: every receipt goes and the booking is unpaid again.
+
+    Kept alongside the per-receipt delete below because they answer different questions.
+    This one is "none of this was ever paid" -- and it is the only thing that can clear a
+    booking flagged paid before payments were recorded at all, which has no receipt to
+    remove and would otherwise be stuck reading as settled forever.
+    """
     placement = scope.get(models.AdPlacement, placement_id)
     if not placement:
         raise HTTPException(status_code=404, detail="Booking not found")
-    if placement.payment is not None:
-        scope.db.delete(placement.payment)
-    # Set regardless: a booking marked paid before payments were recorded has no row to
-    # delete, and leaving the flag true would make it unclearable.
+    for payment in list(placement.payments):
+        scope.db.delete(payment)
+    # Set regardless, for the legacy booking described above: it has no row to delete, and
+    # leaving the flag true would make it unclearable.
     placement.is_paid = False
+
+    scope.db.commit()
+    scope.db.refresh(placement)
+    return _serialize(scope, placement)
+
+
+@router.delete("/{placement_id}/payments/{payment_id}", response_model=schemas.PlacementResponse)
+def delete_payment(
+    placement_id: int,
+    payment_id: int,
+    scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
+):
+    """Remove ONE receipt -- a duplicate entry, or a cheque that bounced.
+
+    How a wrong amount gets corrected, since a receipt is never edited in place: delete it
+    and record the right one. The remaining receipts still count, so pulling a mistaken
+    second instalment does not un-pay the deposit that really was taken.
+    """
+    placement = scope.get(models.AdPlacement, placement_id)
+    if not placement:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    payment = next((p for p in placement.payments if p.id == payment_id), None)
+    if payment is None:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    scope.db.delete(payment)
+    scope.db.flush()
+    scope.db.refresh(placement)
+    # Straight off the remaining receipts. refresh_paid_state would return early once the
+    # last one is gone and leave the flag reading paid over a booking with no money on it.
+    placement.is_paid = bool(placement.payments) and settlement(placement)["balance"] == 0
 
     scope.db.commit()
     scope.db.refresh(placement)
@@ -1046,12 +1089,19 @@ def _commercials(placement: models.AdPlacement, generated_at: "datetime") -> dic
         # payment block is what turns "unpaid" into "unpaid, and here is what we chased".
         # Both live here rather than at each exit so the two report shapes cannot diverge.
         "organization_id": placement.organization_id,
-        "payment": {
-            "amount_paise": placement.payment.amount_paise,
-            "method": placement.payment.method,
-            "reference": placement.payment.reference,
-            "paid_at": placement.payment.paid_at,
-        } if placement.payment else None,
+        # Every receipt, not a collapsed total. A client who paid a deposit and a balance
+        # is entitled to see both on the invoice -- one line reading "amount received
+        # 10,000" against two transfers they made months apart is not something they can
+        # check against their own bank statement.
+        "payments": [
+            {
+                "amount_paise": payment.amount_paise,
+                "method": payment.method,
+                "reference": payment.reference,
+                "paid_at": payment.paid_at,
+            }
+            for payment in placement.payments
+        ],
     }
 
 

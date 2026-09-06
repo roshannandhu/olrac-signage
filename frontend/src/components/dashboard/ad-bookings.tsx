@@ -151,18 +151,15 @@ export function AdBookings({ contentId }: { contentId: number }) {
 
   const openPayment = (placement: Placement) => {
     setPaying(placement)
-    const existing = placement.payment
-    // The box holds the TOTAL received to date, because one booking carries one settlement
-    // row and re-recording replaces it. Prefilling the full contract value was right only
-    // for a first payment: on a part-paid booking it silently proposed writing the whole
-    // amount off as received, and prefilling what was already taken proposed a payment
-    // that changed nothing. The running total after this instalment is neither, so the
-    // figure starts at what is already in and the operator adds to it -- with the balance
-    // shown live underneath, and a button for "they have now paid the lot".
-    setPayAmount(String((existing?.amount_paise ?? 0) / 100))
-    setPayMethod(existing?.method ?? 'upi')
-    setPayReference(existing?.reference ?? '')
-    setPayDate(dateInput(existing?.paid_at ?? new Date()))
+    // THIS receipt, not the running total: payments are a ledger and saving adds a row.
+    // Prefilled with the outstanding balance, which is what is being handed over almost
+    // every time -- and unlike the old running-total box, an operator who types today's
+    // instalment out of habit now gets exactly what they meant.
+    const last = placement.payments.at(-1)
+    setPayAmount(String(money(placement).balance / 100))
+    setPayMethod(last?.method ?? 'upi')
+    setPayReference('')
+    setPayDate(dateInput(new Date()))
   }
 
   const savePayment = useMutation({
@@ -178,7 +175,16 @@ export function AdBookings({ contentId }: { contentId: number }) {
 
   const clearPayment = useMutation({
     mutationFn: () => api.clearPayment(paying!.id),
-    onSuccess: () => { refresh(); toast.success('Payment cleared; the booking is unpaid again'); setPaying(null) },
+    onSuccess: () => { refresh(); toast.success('Every receipt cleared; the booking is unpaid again'); setPaying(null) },
+    onError: fail,
+  })
+
+  // One receipt out. The rest stand, so pulling a duplicate does not un-pay the deposit
+  // that really was taken -- and it is how a mistyped amount gets corrected, since a
+  // receipt is never edited in place.
+  const deletePayment = useMutation({
+    mutationFn: (paymentId: number) => api.deletePayment(paying!.id, paymentId),
+    onSuccess: () => { refresh(); toast.success('Receipt removed'); setPaying(null) },
     onError: fail,
   })
 
@@ -427,9 +433,11 @@ export function AdBookings({ contentId }: { contentId: number }) {
                     <p className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">Received</p>
                     <p className="text-foreground text-sm font-semibold tabular-nums">{rupees(bill.paid)}</p>
                     <p className="text-muted-foreground text-[11px]">
-                      {placement.payment
-                        ? `${METHOD_LABELS[placement.payment.method]} · ${asDate(placement.payment.paid_at)}`
-                        : bill.paid > 0 ? 'Marked paid, no receipt on file' : 'Nothing recorded yet'}
+                      {placement.payments.length === 1
+                        ? `${METHOD_LABELS[placement.payments[0].method]} · ${asDate(placement.payments[0].paid_at)}`
+                        : placement.payments.length > 1
+                          ? `${placement.payments.length} receipts · last ${asDate(placement.payments.at(-1)!.paid_at)}`
+                          : bill.paid > 0 ? 'Marked paid, no receipt on file' : 'Nothing recorded yet'}
                     </p>
                   </div>
                   <div>
@@ -877,19 +885,18 @@ export function AdBookings({ contentId }: { contentId: number }) {
       </Dialog>
 
       {/* --- Record payment ---------------------------------------------------------
-          One settlement row per booking, so the box holds the running total received and
-          not this instalment. That is the source of the one bug an operator cannot see:
-          typing "5000" for a second ₹5,000 payment REPLACES the first and the client is
-          recorded as having paid ₹5,000 of ₹10,000. So the dialog states the three figures
-          it is arithmetic between, names the box for what it stores, and shows what the
-          balance becomes before anything is saved. */}
+          A ledger: saving ADDS a receipt. It used to overwrite the single settlement row,
+          so typing "5000" for a second ₹5,000 instalment filed the client as having paid
+          ₹5,000 of ₹10,000 and took the first receipt's date, method and reference with
+          it. The box is now this instalment, every receipt already taken is listed, and
+          the balance after saving is shown before anything is written. */}
       <Dialog open={Boolean(paying)} onOpenChange={(open) => { if (!open) setPaying(null) }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Payment from {paying?.advertiser}</DialogTitle>
             <DialogDescription>
-              A booking carries one running total. Enter everything this client has paid
-              towards it, not just today&apos;s instalment.
+              What the client has handed over this time. Each payment is kept as its own
+              receipt, so a deposit and a balance both stay on the record.
             </DialogDescription>
           </DialogHeader>
 
@@ -897,7 +904,9 @@ export function AdBookings({ contentId }: { contentId: number }) {
             {paying && (() => {
               const bill = money(paying)
               const entered = Math.round(Number(payAmount || 0) * 100)
-              const after = bill.total - entered
+              // Against the BALANCE, not the contract: this instalment lands on top of
+              // what has already been received rather than replacing it.
+              const after = bill.balance - entered
               return (
                 <div className="bg-muted/40 ring-hairline space-y-2 rounded-xl p-3 text-sm ring-1">
                   <div className="flex justify-between gap-3">
@@ -914,9 +923,10 @@ export function AdBookings({ contentId }: { contentId: number }) {
                       {after > 0 ? rupees(after) : 'Nothing owing'}
                     </span>
                   </div>
-                  {entered > bill.total && (
+                  {entered > bill.balance && (
                     <p className="text-amber-600 dark:text-amber-400">
-                      That is {rupees(entered - bill.total)} more than the booking is worth.
+                      That is {rupees(entered - bill.balance)} more than is still owed. Saved
+                      as an overpayment.
                     </p>
                   )}
                 </div>
@@ -924,24 +934,24 @@ export function AdBookings({ contentId }: { contentId: number }) {
             })()}
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <Label htmlFor="pay-amount">Total received to date (₹)</Label>
+                <Label htmlFor="pay-amount">Amount received now (₹)</Label>
                 {paying && money(paying).balance > 0 && (
                   // One click for the case the box is most often filled by hand for: the
                   // client has now settled the lot.
                   <Button
                     size="xs"
                     variant="ghost"
-                    onClick={() => setPayAmount(String(money(paying).total / 100))}
+                    onClick={() => setPayAmount(String(money(paying).balance / 100))}
                   >
-                    They have paid in full
+                    Settles the balance
                   </Button>
                 )}
               </div>
               <Input id="pay-amount" type="number" min={0} value={payAmount}
                      onChange={(event) => setPayAmount(event.target.value)} autoFocus />
               <p className="text-muted-foreground text-xs">
-                Part payments are fine — the booking stays part paid until this figure
-                reaches the contract value.
+                Part payments are fine — this is added to what has already been received,
+                and the booking stays part paid until the two together cover the contract.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -972,20 +982,57 @@ export function AdBookings({ contentId }: { contentId: number }) {
               <Input id="pay-ref" value={payReference} placeholder="UTR, cheque number, transaction id"
                      onChange={(event) => setPayReference(event.target.value)} />
             </div>
-            {paying?.payment?.recorded_by && (
-              <p className="text-muted-foreground text-xs">
-                Last recorded by {paying.payment.recorded_by}.
-              </p>
+            {/* The receipts already taken, in the order the money arrived. An operator
+                asking "did we already enter that transfer?" was answering it from a single
+                prefilled box, which is exactly how the same payment got typed twice. */}
+            {paying && paying.payments.length > 0 && (
+              <div className="space-y-1.5">
+                <Label>Already received</Label>
+                <ul className="border-hairline divide-hairline divide-y rounded-xl border">
+                  {paying.payments.map((receipt) => (
+                    <li key={receipt.id} className="flex items-center justify-between gap-3 p-2.5 text-sm">
+                      <div className="min-w-0">
+                        <p className="text-foreground font-medium tabular-nums">
+                          {rupees(receipt.amount_paise)}
+                          <span className="text-muted-foreground font-normal">
+                            {' · '}{METHOD_LABELS[receipt.method]}{' · '}{asDate(receipt.paid_at)}
+                          </span>
+                        </p>
+                        {(receipt.reference || receipt.recorded_by) && (
+                          <p className="text-muted-foreground truncate text-xs">
+                            {receipt.reference && `Ref ${receipt.reference}`}
+                            {receipt.reference && receipt.recorded_by && ' · '}
+                            {receipt.recorded_by && `recorded by ${receipt.recorded_by}`}
+                          </p>
+                        )}
+                      </div>
+                      {/* A wrong amount is corrected by removing the receipt and entering
+                          the right one, so the ledger reads as what happened. */}
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        className="text-destructive shrink-0"
+                        disabled={deletePayment.isPending}
+                        onClick={() => deletePayment.mutate(receipt.id)}
+                      >
+                        Remove
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
 
           <DialogFooter showCloseButton>
-            {paying?.payment && (
+            {/* Everything off at once. Also the only way to clear a booking flagged paid
+                before payments were recorded: it has no receipt to remove. */}
+            {(paying?.payments.length || paying?.is_paid) ? (
               <Button variant="ghost" className="text-destructive" disabled={clearPayment.isPending}
                       onClick={() => clearPayment.mutate()}>
-                Clear payment
+                Clear all
               </Button>
-            )}
+            ) : null}
             {/* A zero is not a payment, it is a clearing -- and there is a button for
                 that beside this one. Saving one wrote a receipt for nothing and left the
                 booking looking settled-with-nothing-received. */}

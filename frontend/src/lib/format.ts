@@ -157,7 +157,7 @@ export function money(placement: {
   balance_due_paise?: number | null
   payment_status?: 'unpaid' | 'part_paid' | 'paid' | null
   is_paid: boolean
-  payment?: { amount_paise: number } | null
+  payments?: { amount_paise: number }[] | null
 }): {
   total: number
   paid: number
@@ -171,9 +171,11 @@ export function money(placement: {
   tone: 'success' | 'warning' | 'outline'
 } {
   const total = placement.total_price_paise ?? placement.price_paise
+  // The SUM of the receipts. A client who paid a deposit and then the balance has two, and
+  // reading either one alone reports half of what they sent.
+  const received = placement.payments?.reduce((sum, p) => sum + p.amount_paise, 0)
   const paid = placement.amount_paid_paise
-    ?? placement.payment?.amount_paise
-    ?? (placement.is_paid ? total : 0)
+    ?? (received || (placement.is_paid ? total : 0))
   const balance = placement.balance_due_paise ?? Math.max(0, total - paid)
   const status = placement.payment_status
     ?? (balance <= 0 && (paid > 0 || placement.is_paid) ? 'paid' : paid > 0 ? 'part_paid' : 'unpaid')

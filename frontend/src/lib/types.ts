@@ -431,11 +431,11 @@ export interface Placement {
   plan_max_locations: number
   /** Paid for and not being used. Never blocks a save; it is money the client is owed. */
   screens_unused: number
-  /** How the booking was settled. Null until someone records it. */
-  payment: Payment | null
+  /** Every receipt taken against this booking, oldest first. Empty until one is recorded. */
+  payments: Payment[]
 }
 
-/** What a client actually paid, and how. `Placement.is_paid` is this record's shadow. */
+/** One receipt against a booking. Their sum is `amount_paid_paise`, and `is_paid` its shadow. */
 export interface Payment {
   id: number
   amount_paise: number

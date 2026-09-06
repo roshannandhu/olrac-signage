@@ -90,13 +90,14 @@ export default function InvoicesPage() {
 
   const openPayment = (placement: Placement) => {
     setPaying(placement)
-    const existing = placement.payment
-    // The running total received, not this instalment -- one settlement row per booking,
-    // so what is typed here REPLACES what was there. See the note in ad-bookings.tsx.
-    setPayAmount(String((existing?.amount_paise ?? 0) / 100))
-    setPayMethod(existing?.method ?? 'upi')
-    setPayReference(existing?.reference ?? '')
-    setPayDate((existing?.paid_at ?? new Date().toISOString()).slice(0, 10))
+    const last = placement.payments.at(-1)
+    // THIS receipt, not the running total -- payments are a ledger and saving adds a row.
+    // Prefilled with what is still owed, which is what is being handed over almost every
+    // time. See the note in ad-bookings.tsx.
+    setPayAmount(String(money(placement).balance / 100))
+    setPayMethod(last?.method ?? 'upi')
+    setPayReference('')
+    setPayDate(new Date().toISOString().slice(0, 10))
   }
 
   const savePayment = useMutation({
@@ -112,7 +113,7 @@ export default function InvoicesPage() {
 
   const clearPayment = useMutation({
     mutationFn: () => api.clearPayment(paying!.id),
-    onSuccess: () => { refresh(); toast.success('Payment cleared; the booking is unpaid again'); setPaying(null) },
+    onSuccess: () => { refresh(); toast.success('Every receipt cleared; the booking is unpaid again'); setPaying(null) },
     onError: fail,
   })
 
@@ -233,9 +234,13 @@ export default function InvoicesPage() {
                       {bill.status === 'paid' ? 'Paid' : 'Unpaid'}
                     </Badge>
                   )}
-                  {placement.payment && (
-                    <Badge variant="outline">{METHOD_LABELS[placement.payment.method]}</Badge>
-                  )}
+                  {/* The method of the last receipt. With several, the count is the more
+                      useful thing -- "3 receipts" tells an operator to open it. */}
+                  {placement.payments.length === 1 ? (
+                    <Badge variant="outline">{METHOD_LABELS[placement.payments[0].method]}</Badge>
+                  ) : placement.payments.length > 1 ? (
+                    <Badge variant="outline">{placement.payments.length} receipts</Badge>
+                  ) : null}
                 </div>
                 <p className="text-muted-foreground mt-1 flex flex-wrap items-center gap-1.5 text-sm">
                   <CalendarRange className="size-3.5" aria-hidden="true" />
@@ -247,12 +252,19 @@ export default function InvoicesPage() {
                     </Link>
                   )}
                 </p>
-                {placement.payment?.reference && (
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    Ref {placement.payment.reference} · received {asDate(placement.payment.paid_at)}
-                    {placement.payment.recorded_by && ` · recorded by ${placement.payment.recorded_by}`}
-                  </p>
-                )}
+                {/* The most recent receipt. The full ledger is in the payment dialog;
+                    what belongs on a row being scanned is the last thing that happened. */}
+                {placement.payments.length > 0 && (() => {
+                  const last = placement.payments[placement.payments.length - 1]
+                  return (
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {placement.payments.length > 1 && 'Latest: '}
+                      {rupees(last.amount_paise)} received {asDate(last.paid_at)}
+                      {last.reference && ` · ref ${last.reference}`}
+                      {last.recorded_by && ` · recorded by ${last.recorded_by}`}
+                    </p>
+                  )
+                })()}
               </div>
 
               <div className="flex shrink-0 items-center gap-3">
@@ -290,15 +302,17 @@ export default function InvoicesPage() {
           <DialogHeader>
             <DialogTitle>Payment from {paying?.advertiser}</DialogTitle>
             <DialogDescription>
-              A booking carries one running total. Enter everything this client has paid
-              towards it, not just today&apos;s instalment.
+              What the client has handed over this time. Each payment is kept as its own
+              receipt, so a deposit and a balance both stay on the record.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
             {paying && (() => {
               const bill = money(paying)
-              const after = bill.total - Math.round(Number(payAmount || 0) * 100)
+              // Against the BALANCE, not the contract: this instalment lands on top of
+              // what has already been received rather than replacing it.
+              const after = bill.balance - Math.round(Number(payAmount || 0) * 100)
               return (
                 <div className="bg-muted/40 ring-hairline space-y-2 rounded-xl p-3 text-sm ring-1">
                   <div className="flex justify-between gap-3">
@@ -320,19 +334,19 @@ export default function InvoicesPage() {
             })()}
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <Label htmlFor="inv-amount">Total received to date (₹)</Label>
+                <Label htmlFor="inv-amount">Amount received now (₹)</Label>
                 {paying && money(paying).balance > 0 && (
                   <Button size="xs" variant="ghost"
-                          onClick={() => setPayAmount(String(money(paying).total / 100))}>
-                    They have paid in full
+                          onClick={() => setPayAmount(String(money(paying).balance / 100))}>
+                    Settles the balance
                   </Button>
                 )}
               </div>
               <Input id="inv-amount" type="number" min={0} value={payAmount}
                      onChange={(event) => setPayAmount(event.target.value)} autoFocus />
               <p className="text-muted-foreground text-xs">
-                Part payments are fine — the booking stays part paid until this figure
-                reaches the contract value.
+                Part payments are fine — this is added to what has already been received,
+                and the booking stays part paid until the two together cover the contract.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -363,12 +377,14 @@ export default function InvoicesPage() {
           </div>
 
           <DialogFooter showCloseButton>
-            {paying?.payment && (
+            {/* Everything off at once. The per-receipt remove lives on the ad's own page,
+                where the full ledger is shown; this list is for chasing, not editing. */}
+            {(paying?.payments.length || paying?.is_paid) ? (
               <Button variant="ghost" className="text-destructive" disabled={clearPayment.isPending}
                       onClick={() => clearPayment.mutate()}>
-                Clear payment
+                Clear all
               </Button>
-            )}
+            ) : null}
             <Button
               disabled={savePayment.isPending || !(Number(payAmount) > 0)}
               onClick={() => savePayment.mutate()}

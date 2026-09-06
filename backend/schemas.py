@@ -1139,8 +1139,13 @@ PAYMENT_METHODS = ("cash", "upi", "bank_transfer", "cheque", "card", "other")
 
 
 class PaymentWrite(BaseModel):
-    """Recording that a client settled a booking."""
-    amount_paise: int = Field(ge=0)
+    """One receipt against a booking -- not the booking's whole settlement.
+
+    Posting this ADDS to what the client has paid. A second instalment is a second call.
+    """
+    # gt, not ge. A receipt for nothing is a mis-click: it records no money and yet moves
+    # the booking into "part paid", which reads worse than the unpaid it really is.
+    amount_paise: int = Field(gt=0)
     method: str
     reference: Optional[str] = Field(default=None, max_length=80)
     # Defaults to now in the router. Backdating matters: a cheque banked on Friday and
@@ -1205,9 +1210,10 @@ class PlacementResponse(BaseModel):
     screens_used: int = 0
     plan_max_locations: int = 0
     screens_unused: int = 0
-    # How the booking was settled. `is_paid` above says whether; this says what, when and
-    # by which method, and is None until someone records it.
-    payment: Optional[PaymentResponse] = None
+    # How the booking was settled. `is_paid` above says whether; these say what, when and
+    # by which method, oldest first, and the list is empty until someone records one.
+    # A list because clients pay deposits: `amount_paid_paise` is their sum.
+    payments: List[PaymentResponse] = []
 
 
 class ResolveLinkRequest(BaseModel):

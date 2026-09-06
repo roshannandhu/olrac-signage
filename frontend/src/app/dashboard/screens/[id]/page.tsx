@@ -14,7 +14,6 @@ import { ScreenDetailsDrawer } from '@/components/dashboard/screen-details-drawe
 import { ScreenHoursDialog } from '@/components/dashboard/screen-hours-dialog'
 import { ScreenMap } from '@/components/dashboard/screen-map'
 import { ScreenSettingsDialog } from '@/components/dashboard/screen-settings-dialog'
-import { AssignPlaylistCard } from '@/components/dashboard/assign-playlist-card'
 import { ScreenAdBookings } from '@/components/dashboard/screen-ad-bookings'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -184,10 +183,18 @@ export default function ScreenDetailPage() {
         <ScreenAdBookings screenId={screen.id} groupId={screen.group_id ?? null} />
       </div>
 
+      {/* A freshly paired TV has no playlist, and it does not need one made by hand.
+          Selling an advert to this screen creates its loop -- see playlist_for_target,
+          which provisions "{screen} loop" on the first booking and seeds it from the
+          group's loop when the screen inherits one. Prompting for a playlist here asked
+          an operator to do the system's job, at the one moment they have least reason to
+          know what a playlist is: they have just plugged a television in. */}
       {!screen.effective_playlist_id ? (
-        canEdit
-          ? <AssignPlaylistCard target={{ kind: 'screen', id: screen.id, name: label }} />
-          : <EmptyState icon={MonitorPlay} title="No playlist assigned" description="Ask an editor to schedule content on this screen." />
+        <EmptyState
+          icon={MonitorPlay}
+          title="Nothing scheduled yet"
+          description="This screen starts looping as soon as an advert is booked onto it. Its playlist is created with the first booking."
+        />
       ) : (
         <div className="space-y-4">
           {inherited && (

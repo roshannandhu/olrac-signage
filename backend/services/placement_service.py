@@ -29,8 +29,23 @@ def total_price_paise(placement: models.AdPlacement) -> int:
 
 
 def settlement(placement: models.AdPlacement) -> Dict[str, Any]:
-    """Calculate client billing settlement (total price, amount paid, balance due)."""
+    """What the client owes, what they have handed over, and what is left.
+
+    One derivation, because there were five and they disagreed. The bookings section, the
+    ad's own header, the invoices page and the invoice PDF each subtracted the payment from
+    the total in their own way, and `is_paid` -- a bare boolean -- was read as "settled in
+    full" by all of them while being set to true by ANY payment. Recording 5,000 against a
+    50,000 campaign therefore printed "Paid in full" on the ad page, "Paid" on the screen
+    page, and "Part paid - 45,000 outstanding" on the invoice, off the same row.
+
+    `is_paid` survives as the stored flag and is now kept equal to "balance is zero"
+    wherever money or the total moves. A booking marked paid before payments were recorded
+    has no amount behind it, so its receipt is taken at face value and counted as settled --
+    otherwise migrating that flag into arithmetic would reopen every historical campaign.
+    """
     total = total_price_paise(placement)
+    # The SUM of the receipts, not the latest one. A deposit in March and the balance in
+    # May are two rows and one campaign.
     if placement.payments:
         received = sum(p.amount_paise for p in placement.payments)
     else:
@@ -46,7 +61,17 @@ def settlement(placement: models.AdPlacement) -> Dict[str, Any]:
 
 
 def refresh_paid_state(placement: models.AdPlacement) -> None:
-    """Re-derive is_paid from the money after the total or the receipt changed."""
+    """Re-derive `is_paid` from the money after the total or the receipt changed.
+
+    Called from every path that can move either side of the sum -- recording a payment,
+    selling an extension, cancelling one, moving the booking to another plan, correcting
+    the price. Without it an extension sold against a settled booking left the flag reading
+    "paid" over a balance the client still owed.
+
+    Only touched when at least one receipt exists. A booking whose flag predates payments
+    has no amount to compare against, and flipping it to unpaid here would present every
+    historical campaign as owing its full price again.
+    """
     if not placement.payments:
         return
     settled = settlement(placement)
@@ -55,7 +80,12 @@ def refresh_paid_state(placement: models.AdPlacement) -> None:
 
 
 def playlist_for_target(scope: TenantScope, target: schemas.PlacementTargetRef) -> models.Playlist:
-    """Resolve or dynamically provision the target playlist for screen or group booking."""
+    """The playlist a booking should write into for this screen or group.
+
+    A place with no playlist yet gets one, otherwise selling an ad to a brand new screen
+    would silently do nothing. This is also why the dashboard does not ask an operator to
+    create a playlist for a freshly paired TV -- the first booking provisions it.
+    """
     if target.screen_id is not None:
         screen = scope.get(models.Screen, target.screen_id)
         if not screen:
@@ -65,6 +95,23 @@ def playlist_for_target(scope: TenantScope, target: schemas.PlacementTargetRef) 
             if playlist:
                 return playlist
 
+        # The screen has no playlist of its OWN, but it may still be playing one it
+        # inherits from a group. Two things must not happen here, and both used to:
+        #
+        #   - writing the advert into the inherited playlist would put it on every other
+        #     screen in that group, which is not what was sold. The booking would report
+        #     one location while ten TVs ran it.
+        #   - giving the screen a fresh empty playlist silently takes the group's loop
+        #     away from it -- the screen goes from playing the venue's content to playing
+        #     one advert and nothing else.
+        #
+        # So it gets its own playlist seeded with what it was already playing, and the
+        # advert lands on top.
+        #
+        # ponytail: a fork, not a link. Later edits to the group's loop no longer reach
+        # this screen -- which is what "this screen is booked separately" has to mean --
+        # but it is a real divergence and the screen page's "inherited from group" notice
+        # correctly stops showing.
         inherited_id = screen.resolve_playlist_id()
         playlist = models.Playlist(
             organization_id=scope.organization_id,

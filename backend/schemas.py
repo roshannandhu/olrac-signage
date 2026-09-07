@@ -1094,6 +1094,7 @@ class PlacementTargetResponse(BaseModel):
     screen_id: Optional[int]
     group_id: Optional[int]
     name: str
+    location: Optional[str] = None
     kind: Literal["screen", "group"]
     # False when the playlist item was deleted by hand on the screen page: the deal is
     # still recorded, it just is not on air there any more.

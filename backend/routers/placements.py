@@ -98,7 +98,19 @@ def sync_placement_window(scope: TenantScope, placement: models.AdPlacement) -> 
 
 def _serialize(scope: TenantScope, placement: models.AdPlacement) -> schemas.PlacementResponse:
     screen_names = dict(scope.db.query(models.Screen.id, models.Screen.name).all())
+    screen_locations = dict(scope.db.query(models.Screen.id, models.Screen.location).all())
     group_names = dict(scope.db.query(models.ScreenGroup.id, models.ScreenGroup.name).all())
+    # Group locations derived from screen members
+    group_screens = (
+        scope.db.query(models.Screen.group_id, models.Screen.location)
+        .filter(models.Screen.group_id.isnot(None), models.Screen.location.isnot(None))
+        .all()
+    )
+    group_locations: dict[int, list[str]] = {}
+    for gid, loc in group_screens:
+        if loc and loc.strip():
+            group_locations.setdefault(gid, []).append(loc.strip())
+
     now = models.utcnow()
     ends = effective_ends_at(placement)
     days_left = max(0, (ends - now).days) if ends > now else 0
@@ -139,6 +151,11 @@ def _serialize(scope: TenantScope, placement: models.AdPlacement) -> schemas.Pla
                 group_id=t.group_id,
                 name=(screen_names.get(t.screen_id) or f"Screen {t.screen_id}") if t.screen_id
                 else (group_names.get(t.group_id) or f"Group {t.group_id}"),
+                location=(
+                    screen_locations.get(t.screen_id)
+                    if t.screen_id
+                    else (", ".join(dict.fromkeys(group_locations.get(t.group_id, []))) or None)
+                ),
                 kind="screen" if t.screen_id else "group",
                 is_placed=t.playlist_item_id is not None,
                 starts_at=t.starts_at,

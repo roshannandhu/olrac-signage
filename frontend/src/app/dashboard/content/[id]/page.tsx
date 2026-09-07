@@ -186,8 +186,46 @@ export default function AdDetailPage() {
       playlists.filter((playlist) => (playlist.items || []).some((entry) => entry.content_id === contentId))
         .map((playlist) => playlist.id),
     )
-    return screens.filter((screen) => screen.effective_playlist_id && playlistIds.has(screen.effective_playlist_id))
-  }, [playlistsQuery.data, screensQuery.data, contentId])
+
+    const matchedScreenIds = new Set(
+      screens.filter((screen) => screen.effective_playlist_id && playlistIds.has(screen.effective_playlist_id)).map((s) => s.id),
+    )
+
+    // Screens directly or via groups targeted by active commercial bookings
+    if (booking?.targets) {
+      for (const target of booking.targets) {
+        if (target.screen_id) {
+          matchedScreenIds.add(target.screen_id)
+        } else if (target.group_id) {
+          for (const s of screens) {
+            if (s.group_id === target.group_id) matchedScreenIds.add(s.id)
+          }
+        }
+      }
+    }
+
+    // Screens recorded in playback history
+    if (reportQuery.data?.per_screen) {
+      for (const row of reportQuery.data.per_screen) {
+        if (row.total_plays > 0) matchedScreenIds.add(row.screen_id)
+      }
+    }
+
+    return screens.filter((screen) => matchedScreenIds.has(screen.id))
+  }, [playlistsQuery.data, screensQuery.data, contentId, booking, reportQuery.data])
+
+  const activeLocations = useMemo(() => {
+    const locs = new Set<string>()
+    for (const screen of scheduledOn) {
+      if (screen.location?.trim()) locs.add(screen.location.trim())
+    }
+    if (booking?.targets) {
+      for (const t of booking.targets) {
+        if (t.location?.trim()) locs.add(t.location.trim())
+      }
+    }
+    return Array.from(locs)
+  }, [scheduledOn, booking])
 
   const placesScheduled = useMemo(
     () => new Set(scheduledOn.map((screen) => screen.group_id ?? `ungrouped-${screen.id}`)).size,
@@ -339,7 +377,19 @@ export default function AdDetailPage() {
               ) : (
                 <>
                   Scheduled on <strong>{scheduledOn.length} screen{scheduledOn.length === 1 ? '' : 's'}</strong>
-                  {' '}across <strong>{placesScheduled} group{placesScheduled === 1 ? '' : 's'}</strong>
+                  {activeLocations.length > 0 ? (
+                    <>
+                      {' across '}
+                      <strong>
+                        {activeLocations.length} location{activeLocations.length === 1 ? `: ${activeLocations[0]}` : `s (${activeLocations.slice(0, 2).join(', ')}${activeLocations.length > 2 ? '…' : ''})`}
+                      </strong>
+                    </>
+                  ) : placesScheduled > 0 ? (
+                    <>
+                      {' across '}
+                      <strong>{placesScheduled} group{placesScheduled === 1 ? '' : 's'}</strong>
+                    </>
+                  ) : null}
                   {' — '}
                   <span className={online ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}>
                     {online} online now
@@ -418,34 +468,70 @@ export default function AdDetailPage() {
                 <CalendarRange className="text-primary dark:text-brand size-4" aria-hidden="true" /> Sold schedule per location
               </h3>
               {!booking?.targets.length ? (
-                <p className="text-muted-foreground text-sm">
-                  This advert is not booked into any location yet.
-                </p>
+                scheduledOn.length > 0 ? (
+                  <div>
+                    <p className="text-muted-foreground mb-3 text-sm">
+                      Running across <strong>{scheduledOn.length} active screen{scheduledOn.length === 1 ? '' : 's'}</strong>
+                      {activeLocations.length > 0 && <> in <strong>{activeLocations.join(', ')}</strong></>}. No commercial booking package attached.
+                    </p>
+                    <div className="divide-hairline divide-y">
+                      {scheduledOn.map((screen) => (
+                        <div key={screen.id} className="flex items-center justify-between gap-3 py-2.5">
+                          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                            <span className="bg-primary/10 text-primary dark:text-brand grid size-8 shrink-0 place-items-center rounded-lg">
+                              <MapPin className="size-4" aria-hidden="true" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-foreground truncate text-sm font-medium">
+                                {screen.location || screen.name || `Screen ${screen.id}`}
+                              </p>
+                              <p className="text-muted-foreground truncate text-xs">
+                                {screen.name}{screen.location ? ` • ${screen.location}` : ' • No location specified'}
+                              </p>
+                            </div>
+                          </div>
+                          <Badge variant={screen.status === 'online' ? 'success' : 'outline'}>
+                            {screen.status === 'online' ? 'Online' : 'Offline'}
+                          </Badge>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    This advert is not booked or scheduled in any location yet.
+                  </p>
+                )
               ) : (
                 <div className="divide-hairline divide-y">
-                  {booking.targets.map((target) => (
-                    <div key={target.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
-                      <div className="flex min-w-0 flex-1 items-center gap-2.5">
-                        <span className="bg-primary/10 text-primary dark:text-brand grid size-8 shrink-0 place-items-center rounded-lg">
-                          {target.kind === 'group'
-                            ? <Layers3 className="size-4" aria-hidden="true" />
-                            : <MonitorPlay className="size-4" aria-hidden="true" />}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-foreground truncate text-sm font-medium">{target.name}</p>
-                          <p className="text-muted-foreground text-xs">
-                            {target.starts_at && target.ends_at
-                              ? `${asDate(target.starts_at)} → ${asDate(target.ends_at)}`
-                              : 'Follows the booking window'}
-                          </p>
+                  {booking.targets.map((target) => {
+                    const matchedScreen = (screensQuery.data || []).find((s) => s.id === target.screen_id)
+                    const loc = target.location || matchedScreen?.location
+                    return (
+                      <div key={target.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                          <span className="bg-primary/10 text-primary dark:text-brand grid size-8 shrink-0 place-items-center rounded-lg">
+                            <MapPin className="size-4" aria-hidden="true" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-foreground truncate text-sm font-medium">
+                              {loc || target.name}
+                            </p>
+                            <p className="text-muted-foreground truncate text-xs">
+                              {loc ? `${target.name} • ` : ''}
+                              {target.starts_at && target.ends_at
+                                ? `${asDate(target.starts_at)} → ${asDate(target.ends_at)}`
+                                : 'Follows the booking window'}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2">
+                          {target.days != null && <Badge variant="secondary">{target.days} days</Badge>}
+                          {!target.is_placed && <Badge variant="warning">Removed by hand</Badge>}
                         </div>
                       </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        {target.days != null && <Badge variant="secondary">{target.days} days</Badge>}
-                        {!target.is_placed && <Badge variant="warning">Removed by hand</Badge>}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </CardContent>

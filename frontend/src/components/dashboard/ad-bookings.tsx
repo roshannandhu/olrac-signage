@@ -456,6 +456,11 @@ export function AdBookings({ contentId }: { contentId: number }) {
                       ? <Layers3 className="text-primary dark:text-brand size-3.5" aria-hidden="true" />
                       : <MonitorPlay className="text-primary dark:text-brand size-3.5" aria-hidden="true" />}
                     {target.name}
+                    {Boolean(target.location || screens.find((s) => s.id === target.screen_id)?.location) && (
+                      <span className="text-muted-foreground text-xs font-normal">
+                        ({target.location || screens.find((s) => s.id === target.screen_id)?.location})
+                      </span>
+                    )}
                     {/* The location's own run length, when it was sold one. The API has
                         always returned it; until the type carried it, a booking sold as
                         "airport 50 days, mall 30" looked identical to a uniform one. */}

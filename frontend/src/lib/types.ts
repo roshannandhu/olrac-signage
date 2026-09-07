@@ -334,6 +334,7 @@ export interface PlacementTarget {
   screen_id: number | null
   group_id: number | null
   name: string
+  location?: string | null
   kind: 'screen' | 'group'
   /** False if the playlist item was deleted by hand — sold, but no longer on air there. */
   is_placed: boolean

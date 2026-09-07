@@ -362,23 +362,96 @@ function GoogleMap({ points, height }: { points: MapPoint[]; height: number }) {
 }
 
 function NoLocations({ points }: { points: MapPoint[] }) {
-  const named = [...new Set(points.map((p) => p.location).filter(Boolean))] as string[]
+  const named = [...new Set(points.map((p) => p.location?.trim()).filter(Boolean))] as string[]
+
+  if (named.length > 0) {
+    return (
+      <div className="border-hairline bg-card/60 rounded-xl border p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-border/50">
+          <div className="flex items-center gap-2">
+            <span className="grid size-8 place-items-center rounded-lg bg-primary/10 text-primary">
+              <MapPin className="size-4" />
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                {named.length} Venue Location{named.length === 1 ? '' : 's'} Active
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Assigned screens running this advert
+              </p>
+            </div>
+          </div>
+          <span className="text-xs text-muted-foreground bg-muted px-2.5 py-1 rounded-md">
+            GPS pin optional
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+          {named.map((place) => {
+            const screensAtPlace = points.filter((p) => p.location?.trim() === place)
+            const onlineCount = screensAtPlace.filter((p) => p.online).length
+            return (
+              <div
+                key={place}
+                className="rounded-xl border border-hairline bg-background/80 p-3.5 flex flex-col justify-between gap-2.5 shadow-sm hover:border-primary/40 transition-colors"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <MapPin className="size-3.5 text-primary shrink-0" />
+                      <p className="text-sm font-semibold text-foreground truncate" title={place}>
+                        {place}
+                      </p>
+                    </div>
+                    <Badge variant={onlineCount > 0 ? 'success' : 'outline'} className="text-[10px] shrink-0">
+                      {onlineCount > 0 ? `${onlineCount} Online` : 'Offline'}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 truncate">
+                    {screensAtPlace.map((s) => s.name).join(', ')}
+                  </p>
+                  {screensAtPlace[0]?.detail && (
+                    <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                      {screensAtPlace[0].detail}
+                    </p>
+                  )}
+                </div>
+
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-primary hover:underline inline-flex items-center gap-1 pt-1.5 border-t border-border/40"
+                >
+                  Search on Google Maps &rarr;
+                </a>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  if (points.length > 0) {
+    return (
+      <div className="border-hairline bg-muted/30 rounded-xl border border-dashed p-6 text-center">
+        <MapPin className="text-muted-foreground/50 mx-auto size-6" aria-hidden="true" />
+        <p className="text-foreground mt-2 text-sm font-medium">No venue locations specified</p>
+        <p className="text-muted-foreground mt-1 text-sm">
+          {points.length} screen{points.length === 1 ? ' is' : 's are'} assigned without a location. Open screen settings to set venue names or GPS pins.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className="border-hairline bg-muted/30 rounded-xl border border-dashed p-6 text-center">
       <MapPin className="text-muted-foreground/50 mx-auto size-6" aria-hidden="true" />
-      <p className="text-foreground mt-2 text-sm font-medium">No locations pinned yet</p>
+      <p className="text-foreground mt-2 text-sm font-medium">Not scheduled on any screen yet</p>
       <p className="text-muted-foreground mt-1 text-sm">
-        Open a screen&apos;s Settings and paste its Google Maps link to put it on the map.
+        Add this ad to a playlist or booking to assign screens and show venue locations.
       </p>
-      {named.length > 0 && (
-        <div className="mt-3 flex flex-wrap justify-center gap-2">
-          {named.map((place) => (
-            <Badge key={place} variant="secondary">
-              <MapPin className="size-3" /> {place.length > 40 ? `${place.slice(0, 40)}…` : place}
-            </Badge>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

@@ -137,10 +137,10 @@ class Organization(Base):
 
     @property
     def effective_max_ad_slots(self) -> int | None:
-        """Ad slots this tenant may actually sell. None means no limit. See above."""
+        """Ad slots this tenant may actually sell. None (or 0) means unlimited."""
         if self.max_ad_slots and self.max_ad_slots > 0:
             return self.max_ad_slots
-        if self.plan is not None:
+        if self.plan is not None and self.plan.max_ad_slots and self.plan.max_ad_slots > 0:
             return self.plan.max_ad_slots
         return None
 

@@ -230,7 +230,7 @@ def ensure_ad_slot_quota(scope: TenantScope) -> None:
     # ensure_screen_quota had a subtly different one that returned early on a 0 override --
     # two copies of one rule that disagreed.
     limit = org.effective_max_ad_slots
-    if limit is None:
+    if limit is None or limit <= 0:
         return
 
     # On the EFFECTIVE end. Counting the sold `ends_at` freed the slot of any campaign kept

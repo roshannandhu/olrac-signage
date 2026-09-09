@@ -68,14 +68,19 @@ export default function ActivateWorkspacePage() {
       const me = await api.me()
       if (me.organization_status === 'active') {
         setSession(token, me)
-        router.replace('/dashboard/screens')
+        // A full-document navigation, NOT router.replace: the app wraps every page in
+        // <ViewTransition>, and a client transition into a freshly-activated dashboard was
+        // aborting on the browser's DOM-update timeout and leaving a blank page. A hard load
+        // sidesteps the transition entirely and enters the dashboard with the fresh session
+        // already in localStorage.
+        window.location.assign('/dashboard/screens')
         return true
       }
     } catch {
       /* transient — the interval retries */
     }
     return false
-  }, [token, setSession, router])
+  }, [token, setSession])
 
   useEffect(() => {
     if (!token) {

@@ -186,7 +186,11 @@ export interface Plan {
   slug: string
   monthly_price_paise: number
   yearly_price_paise: number
+  // One-time charge for `duration_days` of access — what the storefront sells on.
+  price_paise: number
+  duration_days: number
   max_screens: number
+  max_clients: number
   max_storage_bytes: number
   feature_flags: Record<string, boolean>
 }
@@ -213,6 +217,43 @@ export interface CheckoutSession {
   provider: string
   provider_subscription_id: string
   checkout_url: string
+}
+
+export interface PurchaseResponse {
+  // "internal" (free, activated now), "mock" (finish via mockConfirmOrder), or "razorpay"
+  // (open Razorpay Checkout with key_id + order_id + amount_paise).
+  provider: string
+  order_id: string | null
+  amount_paise: number
+  key_id: string | null
+  checkout_url: string | null
+}
+
+export interface CustomPlanRequestInput {
+  max_screens: number
+  max_clients: number
+  max_ad_slots: number
+  max_storage_bytes: number
+  duration_days: number
+  feature_flags: Record<string, boolean>
+  notes?: string | null
+}
+
+export interface CustomPlanRequestItem {
+  id: number
+  organization_id: number
+  max_screens: number
+  max_clients: number
+  max_ad_slots: number
+  max_storage_bytes: number
+  duration_days: number
+  feature_flags: Record<string, boolean>
+  // 0 until the operator prices it; status carries whether that has happened.
+  price_paise: number
+  status: 'requested' | 'priced' | 'paid' | 'rejected'
+  notes: string | null
+  created_at: string
+  organization_name?: string | null
 }
 
 export interface AppRelease {
@@ -552,9 +593,13 @@ export interface Package {
   slug: string
   monthly_price_paise: number
   yearly_price_paise: number
+  price_paise: number
+  duration_days: number
   max_screens: number
+  max_clients: number
   max_storage_bytes: number
   max_ad_slots: number
+  feature_flags: Record<string, boolean>
   is_active: boolean
 }
 
@@ -565,8 +610,12 @@ export interface PackageWrite {
   slug: string
   monthly_price_paise: number
   yearly_price_paise: number
+  price_paise: number
+  duration_days: number
   max_screens: number
+  max_clients: number
   max_storage_bytes: number
   max_ad_slots: number
+  feature_flags: Record<string, boolean>
   is_active: boolean
 }

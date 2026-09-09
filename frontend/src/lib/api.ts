@@ -1,5 +1,5 @@
 import { useAuthStore } from './store'
-import type { Package, PackageWrite, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, Placement, PaymentMethod, PlanOption, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
+import type { Package, PackageWrite, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, Placement, PaymentMethod, PlanOption, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, PurchaseResponse, CustomPlanRequestInput, CustomPlanRequestItem, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
 
 const PROD_API_URL = 'https://olrac-signage-32lh.onrender.com'
 const configuredUrl = (process.env.NEXT_PUBLIC_API_URL || PROD_API_URL).replace(/\/$/, '')
@@ -542,6 +542,20 @@ export const api = {
   createCheckout: (planId: number, billingPeriod: 'monthly' | 'yearly') => fetchWithAuth<CheckoutSession>('/billing/checkout', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan_id: planId, billing_period: billingPeriod }),
   }),
+  // Storefront: buy a package as a one-time charge for its access period.
+  purchasePlan: (planId: number) => fetchWithAuth<PurchaseResponse>('/billing/purchase', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ plan_id: planId }),
+  }),
+  // Finish a mock (test) purchase; refused by the server under a real provider.
+  mockConfirmOrder: (orderId: string) => fetchWithAuth<PurchaseResponse>('/billing/mock/confirm', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ order_id: orderId }),
+  }),
+  // Custom plans: submit a bespoke shape, list your own requests, pay a priced one.
+  submitCustomRequest: (body: CustomPlanRequestInput) => fetchWithAuth<CustomPlanRequestItem>('/billing/custom-request', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }),
+  getMyCustomRequests: () => fetchWithAuth<CustomPlanRequestItem[]>('/billing/custom-request'),
+  purchaseCustomRequest: (id: number) => fetchWithAuth<PurchaseResponse>(`/billing/custom-request/${id}/purchase`, { method: 'POST' }),
 
   // P6/P7 Endpoints
   getEmergencyBroadcasts: () => fetchWithAuth<EmergencyBroadcast[]>('/emergency/active'),
@@ -628,6 +642,15 @@ export const adminApi = {
     }),
   deletePackage: (id: number) =>
     fetchWithAuth<{ status: string; detail?: string }>(`/admin/plans/${id}`, { method: 'DELETE' }),
+
+  // Custom-plan request queue.
+  listCustomRequests: () => fetchWithAuth<CustomPlanRequestItem[]>('/admin/custom-requests'),
+  priceCustomRequest: (id: number, pricePaise: number) =>
+    fetchWithAuth<CustomPlanRequestItem>(`/admin/custom-requests/${id}/price`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ price_paise: pricePaise }),
+    }),
+  rejectCustomRequest: (id: number) =>
+    fetchWithAuth<CustomPlanRequestItem>(`/admin/custom-requests/${id}/reject`, { method: 'POST' }),
 
   getDemoVideo: () => fetchWithAuth<{ url: string; description?: string }>('/admin/demo-video'),
   setDemoVideo: (url: string, description?: string) =>

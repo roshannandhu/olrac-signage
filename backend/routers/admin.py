@@ -11,18 +11,20 @@ Nothing in this module edits a tenant's own content. The drill-in routes are del
 read-only -- an operator needs to see what a workspace contains to support it, not to
 change it.
 """
+import json
 import logging
 import os
 import pathlib
 import shutil
 import uuid
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
-from .. import database, models
+from .. import database, models, schemas
+from ..billing import plan_features
 from ..media_urls import resolve_media_url
 from ..tenancy import TenantScope, require_super_admin
 
@@ -45,9 +47,16 @@ class PlanOut(BaseModel):
     slug: str
     monthly_price_paise: int
     yearly_price_paise: int
+    # The one-time price the storefront charges for `duration_days` of access.
+    price_paise: int
+    duration_days: int
     max_screens: int
+    max_clients: int
     max_storage_bytes: int
     max_ad_slots: int
+    # Populated from feature_flags_json by _plan_out; from_attributes cannot decode the
+    # stored JSON on its own.
+    feature_flags: Dict[str, bool] = Field(default_factory=dict)
     is_active: bool
 
 
@@ -56,10 +65,14 @@ class PlanWrite(BaseModel):
     slug: str = Field(min_length=1, max_length=40, pattern=r"^[a-z0-9][a-z0-9-]*$")
     monthly_price_paise: int = Field(default=0, ge=0)
     yearly_price_paise: int = Field(default=0, ge=0)
+    price_paise: int = Field(default=0, ge=0)
+    duration_days: int = Field(default=30, ge=1)
     # 0 = unlimited throughout, matching Organization.max_screens / max_ad_slots.
     max_screens: int = Field(default=0, ge=0)
+    max_clients: int = Field(default=0, ge=0)
     max_storage_bytes: int = Field(default=10 * 1024 * 1024 * 1024, ge=0)
     max_ad_slots: int = Field(default=0, ge=0)
+    feature_flags: Dict[str, bool] = Field(default_factory=dict)
     is_active: bool = True
 
 
@@ -67,9 +80,13 @@ class PlanPatch(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=80)
     monthly_price_paise: Optional[int] = Field(default=None, ge=0)
     yearly_price_paise: Optional[int] = Field(default=None, ge=0)
+    price_paise: Optional[int] = Field(default=None, ge=0)
+    duration_days: Optional[int] = Field(default=None, ge=1)
     max_screens: Optional[int] = Field(default=None, ge=0)
+    max_clients: Optional[int] = Field(default=None, ge=0)
     max_storage_bytes: Optional[int] = Field(default=None, ge=0)
     max_ad_slots: Optional[int] = Field(default=None, ge=0)
+    feature_flags: Optional[Dict[str, bool]] = None
     is_active: Optional[bool] = None
 
 
@@ -469,6 +486,29 @@ def reinstate_tenant(
 # --------------------------------------------------------------------------- packages
 
 
+def _plan_out(plan: models.Plan) -> PlanOut:
+    """PlanOut with feature_flags decoded from the stored JSON.
+
+    Built by hand rather than from_attributes because feature_flags lives as a JSON string
+    on the row (feature_flags_json) and Pydantic cannot decode it into a dict on its own.
+    """
+    return PlanOut(
+        id=plan.id,
+        name=plan.name,
+        slug=plan.slug,
+        monthly_price_paise=plan.monthly_price_paise,
+        yearly_price_paise=plan.yearly_price_paise,
+        price_paise=plan.price_paise,
+        duration_days=plan.duration_days,
+        max_screens=plan.max_screens,
+        max_clients=plan.max_clients,
+        max_storage_bytes=plan.max_storage_bytes,
+        max_ad_slots=plan.max_ad_slots,
+        feature_flags=plan_features(plan),
+        is_active=plan.is_active,
+    )
+
+
 @router.get("/plans", response_model=List[PlanOut])
 def list_plans(
     scope: TenantScope = Depends(require_super_admin),
@@ -478,8 +518,18 @@ def list_plans(
 
     /api/billing/plans is the tenant-facing view and shows only active ones; this is the
     operator's, which has to show a retired package so it can be re-activated.
+
+    Bespoke plans minted for a paid custom request (slug 'custom-<id>') are hidden: they are
+    one tenant's negotiated shape, not a package on the shelf, and would only clutter the
+    catalogue.
     """
-    return db.query(models.Plan).order_by(models.Plan.monthly_price_paise).all()
+    plans = (
+        db.query(models.Plan)
+        .filter(~models.Plan.slug.like("custom-%"))
+        .order_by(models.Plan.price_paise)
+        .all()
+    )
+    return [_plan_out(plan) for plan in plans]
 
 
 @router.post("/plans", response_model=PlanOut, status_code=201)
@@ -490,12 +540,16 @@ def create_plan(
 ):
     if db.query(models.Plan).filter(models.Plan.slug == payload.slug).first():
         raise HTTPException(status_code=409, detail="A package with that slug already exists")
-    plan = models.Plan(**payload.model_dump(), feature_flags_json="{}")
+    fields = payload.model_dump()
+    # feature_flags is a dict on the wire but a JSON string on the row. This is the fix for
+    # the old create_plan, which hardcoded "{}" and made features un-settable at all.
+    features = fields.pop("feature_flags")
+    plan = models.Plan(**fields, feature_flags_json=json.dumps(features, sort_keys=True))
     db.add(plan)
     db.commit()
     db.refresh(plan)
     logger.info("Package %s created by %s", plan.slug, scope.user.username)
-    return plan
+    return _plan_out(plan)
 
 
 @router.patch("/plans/{plan_id}", response_model=PlanOut)
@@ -514,12 +568,16 @@ def update_plan(
     plan = db.query(models.Plan).filter(models.Plan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Package not found")
-    for field, value in payload.model_dump(exclude_unset=True, exclude_none=True).items():
+    fields = payload.model_dump(exclude_unset=True, exclude_none=True)
+    features = fields.pop("feature_flags", None)
+    if features is not None:
+        plan.feature_flags_json = json.dumps(features, sort_keys=True)
+    for field, value in fields.items():
         setattr(plan, field, value)
     db.commit()
     db.refresh(plan)
     logger.info("Package %s updated by %s", plan.slug, scope.user.username)
-    return plan
+    return _plan_out(plan)
 
 
 @router.delete("/plans/{plan_id}")
@@ -551,6 +609,78 @@ def delete_plan(
     db.commit()
     logger.info("Package %s deleted by %s", plan.slug, scope.user.username)
     return {"status": "deleted"}
+
+
+# ------------------------------------------------------------------ custom-plan requests
+
+
+@router.get("/custom-requests", response_model=List[schemas.CustomPlanRequestResponse])
+def list_custom_requests(
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    """Open bespoke-package requests awaiting a price or payment.
+
+    Paid and rejected ones drop off the queue; a paid one has already been turned into a
+    hidden plan and applied to its workspace.
+    """
+    from .billing import serialize_custom_request
+
+    requests = (
+        db.query(models.CustomPlanRequest)
+        .filter(models.CustomPlanRequest.status.in_(("requested", "priced")))
+        .order_by(models.CustomPlanRequest.created_at.asc())
+        .all()
+    )
+    return [serialize_custom_request(request, include_org=True) for request in requests]
+
+
+@router.post("/custom-requests/{request_id}/price", response_model=schemas.CustomPlanRequestResponse)
+def price_custom_request(
+    request_id: int,
+    payload: schemas.CustomPlanRequestPrice,
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    """Set what a bespoke request costs. The tenant pays it from their storefront."""
+    from .billing import serialize_custom_request
+
+    request = db.query(models.CustomPlanRequest).filter(
+        models.CustomPlanRequest.id == request_id
+    ).first()
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if request.status == "paid":
+        raise HTTPException(status_code=409, detail="This request has already been paid")
+    request.price_paise = payload.price_paise
+    request.status = "priced"
+    request.updated_at = models.utcnow()
+    db.commit()
+    db.refresh(request)
+    logger.info("Custom request %s priced at %s paise by %s", request.id, payload.price_paise, scope.user.username)
+    return serialize_custom_request(request, include_org=True)
+
+
+@router.post("/custom-requests/{request_id}/reject", response_model=schemas.CustomPlanRequestResponse)
+def reject_custom_request(
+    request_id: int,
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    from .billing import serialize_custom_request
+
+    request = db.query(models.CustomPlanRequest).filter(
+        models.CustomPlanRequest.id == request_id
+    ).first()
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if request.status == "paid":
+        raise HTTPException(status_code=409, detail="A paid request cannot be rejected")
+    request.status = "rejected"
+    request.updated_at = models.utcnow()
+    db.commit()
+    db.refresh(request)
+    return serialize_custom_request(request, include_org=True)
 
 
 # --------------------------------------------------------------------------- demo reel

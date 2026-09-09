@@ -68,6 +68,9 @@ ISOLATED_SCRIPTS = {
     "test_storage_cleanup.py",
     "test_sync_invalidation.py",
     "test_release_rollout.py",
+    # Storefront: pay-to-access, the clients cap, the feature gate and the custom flow.
+    # Falls back to SQLite with no server, like the two below.
+    "test_plan_purchase.py",
     # Google sign-in: authorisation, a case-insensitive lookup and a tenant guard.
     # Owns a database, so it belongs here rather than in pytest.ini.
     "test_google_signin.py",
@@ -140,6 +143,7 @@ _PG_REACHABLE = None
 NEEDS_POSTGRES = ISOLATED_SCRIPTS - {
     "test_sqlite_utc.py",
     "test_release_rollout.py",
+    "test_plan_purchase.py",
     # Falls back to SQLite when no server is listening; nothing it checks is
     # dialect-specific, so it still runs on a machine with no database.
     "test_google_signin.py",

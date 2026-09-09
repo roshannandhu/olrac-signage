@@ -123,6 +123,24 @@ def get_tenant_scope(
     return TenantScope(db=db, user=user)
 
 
+def get_billing_scope(
+    db: Session = Depends(database.get_db),
+    user: models.User = Depends(get_current_user),
+) -> TenantScope:
+    """Scope for the storefront routes.
+
+    Unlike get_tenant_scope this lets a `pending_approval` workspace through, because paying
+    is exactly how a self-serve workspace leaves that state -- gating the purchase behind the
+    status it is trying to clear would be a deadlock. A `suspended` or `rejected` workspace
+    still cannot reach it: those are operator decisions money is not allowed to override.
+    """
+    if not is_super_admin(user):
+        status = user.organization_status
+        if status in ("suspended", "rejected"):
+            raise HTTPException(status_code=403, detail=BLOCKED_ORGANIZATION_STATUSES[status])
+    return TenantScope(db=db, user=user)
+
+
 def require_super_admin(
     scope: TenantScope = Depends(get_tenant_scope),
 ) -> TenantScope:
@@ -139,6 +157,37 @@ def require_super_admin(
             detail="Only platform administrators can perform this action.",
         )
     return scope
+
+
+def require_feature(feature: str):
+    """Gate a route behind a plan feature flag (e.g. "emergency_alert").
+
+    Add alongside the route's role dependency; both resolve the same request-cached scope.
+    A super admin is exempt, and a workspace with no plan has no features, so the gate holds
+    closed until a package that includes the flag is bought.
+    """
+    def dependency(scope: TenantScope = Depends(get_tenant_scope)) -> TenantScope:
+        if is_super_admin(scope.user):
+            return scope
+        # Local import: billing imports models only, but keeping it here avoids any
+        # import-order coupling in this early module.
+        from .billing import plan_features
+
+        org = scope.db.query(models.Organization).filter(
+            models.Organization.id == scope.organization_id
+        ).first()
+        plan = org.plan if org else None
+        if not (plan and plan_features(plan).get(feature)):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"Your plan does not include {feature.replace('_', ' ')}. "
+                    f"Upgrade your plan to enable it."
+                ),
+            )
+        return scope
+
+    return dependency
 
 
 def require_tenant_roles(*roles: str, writable: bool = True):

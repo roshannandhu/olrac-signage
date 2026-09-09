@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .. import database, models, schemas
-from ..tenancy import TenantScope, require_tenant_roles
+from ..tenancy import TenantScope, require_feature, require_tenant_roles
 
 router = APIRouter()
 
@@ -36,6 +36,7 @@ def get_active_broadcasts(
 async def trigger_emergency_broadcast(
     req: BroadcastRequest,
     tenant: TenantScope = Depends(require_tenant_roles("owner", "editor")),
+    _feature: TenantScope = Depends(require_feature("emergency_alert")),
     db: Session = Depends(database.get_db)
 ):
     if req.target_type not in ("all", "group", "screen"):
@@ -83,6 +84,7 @@ async def trigger_emergency_broadcast(
 async def cancel_emergency_broadcast(
     req: BroadcastRequest,
     tenant: TenantScope = Depends(require_tenant_roles("owner", "editor")),
+    _feature: TenantScope = Depends(require_feature("emergency_alert")),
     db: Session = Depends(database.get_db)
 ):
     broadcast = db.query(models.EmergencyBroadcast).filter(

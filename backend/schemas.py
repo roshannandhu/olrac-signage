@@ -800,7 +800,11 @@ class PlanResponse(BaseModel):
     slug: str
     monthly_price_paise: int
     yearly_price_paise: int
+    # One-time charge for `duration_days` of access — what the storefront sells on.
+    price_paise: int = 0
+    duration_days: int = 30
     max_screens: int
+    max_clients: int = 0
     max_storage_bytes: int
     feature_flags: dict[str, bool] = Field(default_factory=dict)
 
@@ -832,6 +836,70 @@ class CheckoutResponse(BaseModel):
     provider: str
     provider_subscription_id: str
     checkout_url: str
+
+
+class PurchaseRequest(BaseModel):
+    """Buy a standard package as a one-time charge for its access period."""
+
+    plan_id: int
+
+
+class PurchaseResponse(BaseModel):
+    """Everything the client needs to open a payment sheet, or to auto-complete a mock buy.
+
+    `provider` is "internal" for a free package (activated on the spot, no order),
+    "mock" when PAYMENT_PROVIDER=mock (the client hits /billing/mock/confirm to finish), or
+    "razorpay" (open Razorpay Checkout with `key_id` + `order_id` + `amount_paise`).
+    """
+
+    provider: str
+    order_id: Optional[str] = None
+    amount_paise: int = 0
+    key_id: Optional[str] = None
+    # Where to send the browser: a hosted page for a real provider, or an internal route
+    # for the free/mock paths.
+    checkout_url: Optional[str] = None
+
+
+class MockConfirmRequest(BaseModel):
+    """Finish a mock (test) purchase: the order the storefront was handed."""
+
+    order_id: str
+
+
+class CustomPlanRequestCreate(BaseModel):
+    """A tenant's ask for a bespoke package: the counts and period they want."""
+
+    max_screens: int = Field(default=0, ge=0)
+    max_clients: int = Field(default=0, ge=0)
+    max_ad_slots: int = Field(default=0, ge=0)
+    max_storage_bytes: int = Field(default=10 * 1024 * 1024 * 1024, ge=0)
+    duration_days: int = Field(default=30, ge=1)
+    feature_flags: dict[str, bool] = Field(default_factory=dict)
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+
+class CustomPlanRequestPrice(BaseModel):
+    """The operator setting a price on a custom request."""
+
+    price_paise: int = Field(ge=0)
+
+
+class CustomPlanRequestResponse(BaseModel):
+    id: int
+    organization_id: int
+    max_screens: int
+    max_clients: int
+    max_ad_slots: int
+    max_storage_bytes: int
+    duration_days: int
+    feature_flags: dict[str, bool] = Field(default_factory=dict)
+    price_paise: int
+    status: str
+    notes: Optional[str] = None
+    created_at: datetime
+    # Only on the operator's list, so a request can be attributed to a workspace.
+    organization_name: Optional[str] = None
 
 
 class EnrollmentTokenCreate(BaseModel):

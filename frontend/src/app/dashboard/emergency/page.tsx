@@ -40,6 +40,11 @@ export default function EmergencyPage() {
   const playlistsQuery = useQuery({ queryKey: ['playlists'], queryFn: api.getPlaylists })
   const screensQuery = useQuery({ queryKey: ['screens'], queryFn: api.getScreens })
   const groupsQuery = useQuery({ queryKey: ['groups'], queryFn: api.getGroups })
+  const summaryQuery = useQuery({ queryKey: ['billing-summary'], queryFn: api.getBillingSummary })
+  // The backend refuses a broadcast without this flag (require_feature). Mirror that here so
+  // the controls read as locked rather than failing on submit. Default to allowed while the
+  // plan is still loading, to avoid flashing a locked state on every visit.
+  const hasEmergency = summaryQuery.data ? Boolean(summaryQuery.data.plan.feature_flags?.emergency_alert) : true
 
   const triggerMutation = useMutation({
     mutationFn: api.triggerEmergencyBroadcast,
@@ -62,6 +67,7 @@ export default function EmergencyPage() {
   })
 
   const handleTrigger = () => {
+    if (!hasEmergency) return toast.error('Your plan does not include emergency alerts. Upgrade to enable it.')
     if (!playlistId) return toast.error('Choose the playlist to broadcast')
     if (targetType !== 'all' && !targetId) return toast.error(`Choose which ${targetType} to override`)
     triggerMutation.mutate({
@@ -108,6 +114,16 @@ export default function EmergencyPage() {
         actions={canEdit ? <Badge variant="warning">Takes effect immediately</Badge> : <Badge variant="outline">View only</Badge>}
       />
 
+      {!hasEmergency && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-950 dark:text-amber-100">
+          <AlertTriangle className="mt-0.5 size-5 shrink-0" />
+          <div>
+            <p className="font-semibold">Emergency alerts are not on your plan</p>
+            <p className="mt-1 opacity-80">Upgrade your plan from the Billing page to interrupt playback across your fleet.</p>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card className="ring-hairline bg-card border-0 py-0 shadow-[0_1px_2px_rgba(15,23,42,.04)] ring-1">
           <CardContent className="p-5 sm:p-6">
@@ -121,7 +137,7 @@ export default function EmergencyPage() {
               </div>
             </div>
 
-            <fieldset disabled={!canEdit || triggerMutation.isPending} className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <fieldset disabled={!canEdit || !hasEmergency || triggerMutation.isPending} className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Target</Label>
                 <Select value={targetType} onValueChange={(value) => { setTargetType(value || 'all'); setTargetId('') }}>

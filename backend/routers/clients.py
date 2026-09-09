@@ -81,11 +81,41 @@ def list_clients(scope: TenantScope = Depends(get_tenant_scope)):
     return [_serialize_client(scope, c) for c in clients]
 
 
+def ensure_client_quota(scope: TenantScope) -> None:
+    """Reject the caller when the organisation is already at its client limit.
+
+    Same "override then package, 0 means unlimited" rule as ensure_screen_quota and
+    ensure_ad_slot_quota, read through Organization.effective_max_clients so the enforced
+    limit can never drift from the one the console shows.
+    """
+    org = scope.db.query(models.Organization).filter(
+        models.Organization.id == scope.organization_id
+    ).first()
+    if not org:
+        return
+    limit = org.effective_max_clients
+    if limit is None or limit <= 0:
+        return
+    # scope.query already scopes to this organisation; Client has no soft-delete column so a
+    # plain count is the live total.
+    count = scope.query(models.Client).count()
+    if count >= limit:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Client limit reached ({count}/{limit}). "
+                f"Upgrade your plan to add more clients."
+            ),
+        )
+
+
 @router.post("/", response_model=schemas.ClientResponse, status_code=201)
 def create_client(
     payload: schemas.ClientCreate,
     scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
 ):
+    ensure_client_quota(scope)
+
     code = (payload.client_code or "").strip().upper() or next_client_code(scope)
 
     # Checked here as well as by the constraint so the operator gets a sentence rather than

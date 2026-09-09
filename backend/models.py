@@ -59,6 +59,16 @@ class Plan(Base):
     # 0 = unlimited, matching Organization.max_ad_slots. A package carries the default;
     # Organization.max_ad_slots overrides it for one tenant without editing the package.
     max_ad_slots = Column(Integer, nullable=False, default=0, server_default="0")
+    # Advertisers (Client rows) this package lets the tenant keep. 0 = unlimited, matching
+    # every other cap here.
+    max_clients = Column(Integer, nullable=False, default=0, server_default="0")
+    # The storefront sells access as a ONE-TIME charge for a fixed window, not a
+    # monthly/yearly subscription: `price_paise` buys `duration_days` days. The older
+    # recurring columns (monthly/yearly_price_paise) stay for the subscription checkout that
+    # predates this, but the storefront and the one-time order path read these two.
+    # duration_days backfills to 30 so an existing package keeps a sane window.
+    price_paise = Column(BigInteger, nullable=False, default=0, server_default="0")
+    duration_days = Column(Integer, nullable=False, default=30, server_default="30")
     feature_flags_json = Column(Text, nullable=False, default="{}")
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(UtcDateTime, nullable=False, default=utcnow)
@@ -84,6 +94,7 @@ class Organization(Base):
     # directly; on their own they say nothing about what the tenant is actually allowed.
     max_screens = Column(Integer, nullable=False, default=0)
     max_ad_slots = Column(Integer, nullable=False, default=0)
+    max_clients = Column(Integer, nullable=False, default=0, server_default="0")
 
     # What a CLIENT sees at the top of their campaign report. `name` is the workspace name
     # an operator picked when signing up ("Roshan's Workspace"); it is not necessarily the
@@ -142,6 +153,19 @@ class Organization(Base):
             return self.max_ad_slots
         if self.plan is not None and self.plan.max_ad_slots and self.plan.max_ad_slots > 0:
             return self.plan.max_ad_slots
+        return None
+
+    @property
+    def effective_max_clients(self) -> int | None:
+        """Advertisers this tenant may keep. None (or 0) means unlimited.
+
+        Same override-then-package derivation as effective_max_screens, so the enforced
+        limit and the one the console shows can never read different columns.
+        """
+        if self.max_clients and self.max_clients > 0:
+            return self.max_clients
+        if self.plan is not None and self.plan.max_clients and self.plan.max_clients > 0:
+            return self.plan.max_clients
         return None
 
     @property
@@ -208,6 +232,52 @@ class WebhookEvent(Base):
     provider_event_id = Column(String, unique=True, nullable=False, index=True)
     event_type = Column(String, nullable=False)
     received_at = Column(UtcDateTime, nullable=False, default=utcnow)
+
+
+class CustomPlanRequest(Base):
+    """A tenant asking for a bespoke package: the counts they want, and what the operator
+    priced it at.
+
+    Standard tiers are bought straight off the shelf. A custom shape cannot be, because only
+    the platform operator sets its price -- so it is a small request queue rather than a
+    per-org row bolted onto the global `plans` catalogue, which is shared and must not gain a
+    tenant-specific entry every time someone asks.
+
+    Lifecycle: 'requested' (tenant submitted) -> 'priced' (operator set price_paise) ->
+    'paid' (a one-time order for it was captured) | 'rejected'. On payment the requested caps
+    are copied onto the organisation, exactly as approving a tenant does.
+    """
+
+    __tablename__ = "custom_plan_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    organization_id = Column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    max_screens = Column(Integer, nullable=False, default=0)
+    max_clients = Column(Integer, nullable=False, default=0)
+    max_ad_slots = Column(Integer, nullable=False, default=0)
+    max_storage_bytes = Column(BigInteger, nullable=False, default=10 * 1024 * 1024 * 1024)
+    duration_days = Column(Integer, nullable=False, default=30)
+    feature_flags_json = Column(Text, nullable=False, default="{}")
+    # Smallest currency unit, like every other price here, so money never touches a float.
+    # 0 until the operator prices it; `status` carries whether that has happened yet.
+    price_paise = Column(BigInteger, nullable=False, default=0)
+    status = Column(String(20), nullable=False, default="requested", index=True)
+    notes = Column(String, nullable=True)
+    # The one-time order raised to pay for this request, so the webhook can find it back.
+    provider_order_id = Column(String, unique=True, nullable=True, index=True)
+    created_at = Column(UtcDateTime, nullable=False, default=utcnow)
+    updated_at = Column(UtcDateTime, nullable=False, default=utcnow, onupdate=utcnow)
+
+    organization = relationship("Organization")
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('requested', 'priced', 'paid', 'rejected')",
+            name="ck_custom_plan_requests_status",
+        ),
+    )
 
 
 class User(Base):

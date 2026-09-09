@@ -77,7 +77,10 @@ export default function ContentPage() {
   // operator sets the price and the run length themselves. Only read when sellPlanId is the
   // 'custom' sentinel.
   const [sellPrice, setSellPrice] = useState('')
+  // The DEFAULT run length; each selected screen can override it below (per-TV airtime),
+  // exactly like the booking modal's "custom airtime days per screen".
   const [sellDays, setSellDays] = useState('30')
+  const [screenDays, setScreenDays] = useState<Record<number, string>>({})
   const [sellScreenIds, setSellScreenIds] = useState<number[]>([])
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -198,8 +201,23 @@ export default function ContentPage() {
     // One clock read for the whole upload: every file shares the same booking window, and
     // it keeps the single impure Date() call out of the per-file loop.
     const bookingStartIso = new Date().toISOString()
+    // Per-screen run lengths for a custom deal: each TV gets its own days, defaulting to the
+    // base duration. Every target carries its own `days` so the backend writes a per-location
+    // window (AdPlacementTarget), and the booking-level end must cover the longest of them.
+    const baseDays = Math.max(1, Math.floor(Number(sellDays) || 1))
+    const customTargetDays: Record<number, number> = {}
+    let maxCustomDays = baseDays
+    if (isCustomPlan) {
+      for (const id of sellScreenIds) {
+        const raw = screenDays[id]
+        const parsed = raw !== undefined && raw !== '' ? Math.floor(Number(raw)) : baseDays
+        const days = Number.isFinite(parsed) && parsed >= 1 ? parsed : baseDays
+        customTargetDays[id] = days
+        if (days > maxCustomDays) maxCustomDays = days
+      }
+    }
     const customEndsIso = isCustomPlan
-      ? new Date(Date.parse(bookingStartIso) + Number(sellDays) * 86_400_000).toISOString()
+      ? new Date(Date.parse(bookingStartIso) + maxCustomDays * 86_400_000).toISOString()
       : undefined
 
     let failures = 0
@@ -230,7 +248,11 @@ export default function ContentPage() {
               ...(isCustomPlan ? { ends_at: customEndsIso } : {}),
               is_paid: false,
               starts_at: bookingStartIso,
-              targets: sellScreenIds.map((id) => ({ screen_id: id })),
+              // Custom: each screen carries its own run length; a plan booking lets the
+              // plan's duration apply uniformly.
+              targets: sellScreenIds.map((id) =>
+                isCustomPlan ? { screen_id: id, days: customTargetDays[id] } : { screen_id: id },
+              ),
             })
           } catch (reason) {
             toast.error(`Uploaded "${entry.name}", but ad booking failed: ${reason instanceof Error ? reason.message : 'unknown error'}`)
@@ -284,6 +306,7 @@ export default function ContentPage() {
     setSellPlanId('')
     setSellPrice('')
     setSellDays('30')
+    setScreenDays({})
     setSellScreenIds([])
     setDragging(false)
   }
@@ -460,7 +483,7 @@ export default function ContentPage() {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="sell-days" className="text-[11px] text-muted-foreground">Duration (days) *</Label>
+                    <Label htmlFor="sell-days" className="text-[11px] text-muted-foreground">Default days *</Label>
                     <Input
                       id="sell-days"
                       type="number"
@@ -479,7 +502,9 @@ export default function ContentPage() {
               {(chosenPlan || isCustomPlan) && (
                 <div className="space-y-1.5 pt-1">
                   <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold text-foreground">Target Screens *</Label>
+                    <Label className="text-xs font-semibold text-foreground">
+                      Target Screens *{isCustomPlan && <span className="ml-1 font-normal text-muted-foreground">— set each TV&apos;s days</span>}
+                    </Label>
                     <span className="text-[10px] text-muted-foreground">
                       {sellScreenIds.length}{Number.isFinite(screenCap) ? ` of ${screenCap}` : ''} selected
                     </span>
@@ -510,9 +535,27 @@ export default function ContentPage() {
                             />
                             <span className="truncate font-medium text-foreground">{screen.name || `Screen ${screen.id}`}</span>
                           </div>
-                          <Badge variant={screen.status === 'online' ? 'success' : 'outline'} className="text-[9px] uppercase py-0 px-1.5">
-                            {screen.status}
-                          </Badge>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {/* Per-TV airtime: only when this screen is part of a custom deal.
+                                stopPropagation so typing here does not toggle the row's checkbox. */}
+                            {isCustomPlan && picked && (
+                              <div className="flex items-center gap-1" onClick={(e) => e.preventDefault()}>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={screenDays[screen.id] ?? sellDays}
+                                  disabled={uploading}
+                                  onChange={(e) => setScreenDays((prev) => ({ ...prev, [screen.id]: e.target.value }))}
+                                  className="border-input bg-background h-6 w-14 rounded border px-1.5 text-[11px]"
+                                  aria-label={`Days for ${screen.name || `Screen ${screen.id}`}`}
+                                />
+                                <span className="text-[10px] text-muted-foreground">days</span>
+                              </div>
+                            )}
+                            <Badge variant={screen.status === 'online' ? 'success' : 'outline'} className="text-[9px] uppercase py-0 px-1.5">
+                              {screen.status}
+                            </Badge>
+                          </div>
                         </label>
                       )
                     })}

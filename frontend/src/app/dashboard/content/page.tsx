@@ -64,19 +64,29 @@ export default function ContentPage() {
   const [queue, setQueue] = useState<QueuedUpload[]>([])
   const [tags, setTags] = useState('')
 
-  // Client Selection / Creation state
-  const [isNewClient, setIsNewClient] = useState(false)
+  // Client Selection / Creation state. Defaults to NEW client: uploading a new ad almost
+  // always means a new advertiser, so that is the first thing offered; "Pick existing
+  // client" switches away.
+  const [isNewClient, setIsNewClient] = useState(true)
   const [newClientName, setNewClientName] = useState('')
   const [newClientEmail, setNewClientEmail] = useState('')
   const [newClientPhone, setNewClientPhone] = useState('')
   const [sellClientId, setSellClientId] = useState('')
   const [sellPlanId, setSellPlanId] = useState('')
+  // Custom (no-package) pricing, mirroring the booking modal's "Custom — no package": the
+  // operator sets the price and the run length themselves. Only read when sellPlanId is the
+  // 'custom' sentinel.
+  const [sellPrice, setSellPrice] = useState('')
+  const [sellDays, setSellDays] = useState('30')
   const [sellScreenIds, setSellScreenIds] = useState<number[]>([])
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
   const fileInput = useRef<HTMLInputElement>(null)
 
   const chosenPlan = sellPlans.find((plan) => String(plan.id) === sellPlanId)
+  const isCustomPlan = sellPlanId === 'custom'
+  // A real plan caps screens at its max_locations; a custom deal has no package and no cap.
+  const screenCap = chosenPlan ? chosenPlan.max_locations : Infinity
 
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<CommonSort>('newest')
@@ -141,6 +151,18 @@ export default function ContentPage() {
         toast.error('Please select a pricing plan for this ad')
         return
       }
+      if (isCustomPlan) {
+        // A custom deal has no plan to borrow a price or duration from, so both are required
+        // here — the backend rejects a placement with no end date and no plan.
+        if (!sellPrice.trim() || Number(sellPrice) <= 0) {
+          toast.error('Enter the custom price for this ad')
+          return
+        }
+        if (!sellDays.trim() || Number(sellDays) < 1) {
+          toast.error('Enter how many days the custom booking runs')
+          return
+        }
+      }
       if (!sellScreenIds.length) {
         toast.error('Please select at least 1 screen to deploy this ad')
         return
@@ -173,6 +195,13 @@ export default function ContentPage() {
       }
     }
 
+    // One clock read for the whole upload: every file shares the same booking window, and
+    // it keeps the single impure Date() call out of the per-file loop.
+    const bookingStartIso = new Date().toISOString()
+    const customEndsIso = isCustomPlan
+      ? new Date(Date.parse(bookingStartIso) + Number(sellDays) * 86_400_000).toISOString()
+      : undefined
+
     let failures = 0
     for (const [index, entry] of queue.entries()) {
       if (entry.status === 'done') continue
@@ -191,10 +220,16 @@ export default function ContentPage() {
               content_id: uploaded.id,
               client_id: resolvedClientId,
               advertiser: resolvedClientName,
-              plan_id: Number(sellPlanId),
-              price_paise: chosenPlan ? chosenPlan.price_paise : 0,
+              // Custom = no package: plan_id null, price the operator set, and an explicit
+              // end date (the backend takes duration from the plan otherwise, and a custom
+              // deal has none). Same shape the booking modal's custom path sends.
+              plan_id: isCustomPlan ? null : Number(sellPlanId),
+              price_paise: isCustomPlan
+                ? Math.round(Number(sellPrice) * 100)
+                : (chosenPlan ? chosenPlan.price_paise : 0),
+              ...(isCustomPlan ? { ends_at: customEndsIso } : {}),
               is_paid: false,
-              starts_at: new Date().toISOString(),
+              starts_at: bookingStartIso,
               targets: sellScreenIds.map((id) => ({ screen_id: id })),
             })
           } catch (reason) {
@@ -241,12 +276,14 @@ export default function ContentPage() {
     setUploadOpen(false)
     setQueue([])
     setTags('')
-    setIsNewClient(false)
+    setIsNewClient(true)
     setNewClientName('')
     setNewClientEmail('')
     setNewClientPhone('')
     setSellClientId('')
     setSellPlanId('')
+    setSellPrice('')
+    setSellDays('30')
     setSellScreenIds([])
     setDragging(false)
   }
@@ -386,10 +423,12 @@ export default function ContentPage() {
                   value={sellPlanId}
                   disabled={uploading}
                   onChange={(event) => {
-                    setSellPlanId(event.target.value)
-                    const next = sellPlans.find((plan) => String(plan.id) === event.target.value)
+                    const value = event.target.value
+                    setSellPlanId(value)
+                    const next = sellPlans.find((plan) => String(plan.id) === value)
                     if (next) setSellScreenIds((current) => current.slice(0, next.max_locations))
-                    else setSellScreenIds([])
+                    else if (value !== 'custom') setSellScreenIds([])
+                    // 'custom' keeps the current screen selection — it has no cap to trim to.
                   }}
                 >
                   <option value="">-- Select plan --</option>
@@ -398,23 +437,58 @@ export default function ContentPage() {
                       {plan.name} (₹{(plan.price_paise / 100).toLocaleString('en-IN')} · {plan.duration_days} days · up to {plan.max_locations} screens)
                     </option>
                   ))}
+                  <option value="custom">Custom — set your own price &amp; days</option>
                 </select>
               </div>
 
-              {/* Screen selector */}
-              {chosenPlan && (
+              {/* Custom pricing inputs — only when the Custom option is chosen. Mirrors the
+                  booking modal: operator-set price and run length, no screen cap. */}
+              {isCustomPlan && (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div>
+                    <Label htmlFor="sell-price" className="text-[11px] text-muted-foreground">Price (₹) *</Label>
+                    <Input
+                      id="sell-price"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="25000"
+                      value={sellPrice}
+                      disabled={uploading}
+                      onChange={(e) => setSellPrice(e.target.value)}
+                      className="h-8 text-xs mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="sell-days" className="text-[11px] text-muted-foreground">Duration (days) *</Label>
+                    <Input
+                      id="sell-days"
+                      type="number"
+                      min="1"
+                      placeholder="30"
+                      value={sellDays}
+                      disabled={uploading}
+                      onChange={(e) => setSellDays(e.target.value)}
+                      className="h-8 text-xs mt-1"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Screen selector — shown for a real plan or a custom deal */}
+              {(chosenPlan || isCustomPlan) && (
                 <div className="space-y-1.5 pt-1">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-semibold text-foreground">Target Screens *</Label>
                     <span className="text-[10px] text-muted-foreground">
-                      {sellScreenIds.length} of {chosenPlan.max_locations} selected
+                      {sellScreenIds.length}{Number.isFinite(screenCap) ? ` of ${screenCap}` : ''} selected
                     </span>
                   </div>
                   <div className="border-hairline max-h-32 space-y-1 overflow-y-auto rounded-xl border p-2 bg-card">
                     {!sellScreens.length && <p className="text-muted-foreground p-2 text-xs">No screens paired yet.</p>}
                     {sellScreens.map((screen) => {
                       const picked = sellScreenIds.includes(screen.id)
-                      const full = !picked && sellScreenIds.length >= chosenPlan.max_locations
+                      const full = !picked && sellScreenIds.length >= screenCap
                       return (
                         <label
                           key={screen.id}

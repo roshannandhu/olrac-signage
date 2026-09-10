@@ -231,6 +231,43 @@ def run() -> None:
     finally:
         db.close()
 
+    # --- revise the custom package AFTER payment ---------------------------------------
+    # The operator raising a paid tenant's caps has to move the workspace immediately and
+    # without re-billing it. Before this endpoint existed a paid request was filtered out of
+    # the operator queue entirely and its price was a 409, so a custom tenant was frozen on
+    # whatever they first asked for.
+    still_listed = client.get("/api/admin/custom-requests", headers=root)
+    check(any(r["id"] == req_id for r in still_listed.json()),
+          "a PAID custom request vanished from the operator queue, so it cannot be revised")
+
+    revised = client.patch(f"/api/admin/custom-requests/{req_id}", headers=root, json={
+        "max_screens": 200,
+        "max_clients": 90,
+        "max_storage_bytes": 90 * 1024 * 1024 * 1024,
+        "price_paise": 900000,
+        "feature_flags": {"emergency_alert": True, "priority_support": True},
+    })
+    check(revised.status_code == 200, f"revising a paid custom request failed: {revised.status_code} {revised.text[:160]}")
+    check(revised.json()["status"] == "paid",
+          f"revising must not reopen a paid request for payment: status={revised.json()['status']}")
+    check(revised.json()["price_paise"] == 900000, "revised price not saved")
+
+    db = TestingSessionLocal()
+    try:
+        org = db.query(models.Organization).filter(models.Organization.slug == "acme").one()
+        db.refresh(org)
+        check(org.effective_max_screens == 200,
+              f"revised screens cap did not reach the workspace: {org.effective_max_screens}")
+        check(org.effective_max_clients == 90,
+              f"revised clients cap did not reach the workspace: {org.effective_max_clients}")
+        # storage is a copied column, not a derived one -- the bug this line guards
+        check(org.storage_quota_bytes == 90 * 1024 * 1024 * 1024,
+              f"revised storage quota did not reach the workspace: {org.storage_quota_bytes}")
+        check(org.plan.feature_flags_json and "priority_support" in org.plan.feature_flags_json,
+              "revised features did not reach the plan the workspace runs on")
+    finally:
+        db.close()
+
     # the bespoke plan is not a sellable package
     catalogue = client.get("/api/admin/plans", headers=root)
     slugs = [p["slug"] for p in catalogue.json()]

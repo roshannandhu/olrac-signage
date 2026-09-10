@@ -239,6 +239,20 @@ export interface CustomPlanRequestInput {
   notes?: string | null
 }
 
+/** A revision to a bespoke package. Every field optional -- send only what changed.
+ *  Valid at any status, including 'paid': that is how a tenant already on a custom
+ *  package gets moved, and it does not re-bill them. */
+export interface CustomPlanRequestUpdate {
+  max_screens?: number
+  max_clients?: number
+  max_ad_slots?: number
+  max_storage_bytes?: number
+  duration_days?: number
+  feature_flags?: Record<string, boolean>
+  price_paise?: number
+  notes?: string | null
+}
+
 export interface CustomPlanRequestItem {
   id: number
   organization_id: number

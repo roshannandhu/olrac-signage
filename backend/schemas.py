@@ -885,6 +885,25 @@ class CustomPlanRequestPrice(BaseModel):
     price_paise: int = Field(ge=0)
 
 
+class CustomPlanRequestUpdate(BaseModel):
+    """The operator revising a bespoke package -- including one already paid for.
+
+    Every field optional: a PATCH carries only what changed. Editing a paid request is the
+    supported way to move a tenant already sitting on a custom package, because the caps are
+    read through the plan rather than copied onto the org (see Organization.effective_max_*),
+    so revising the plan moves the tenant with it.
+    """
+
+    max_screens: Optional[int] = Field(default=None, ge=0)
+    max_clients: Optional[int] = Field(default=None, ge=0)
+    max_ad_slots: Optional[int] = Field(default=None, ge=0)
+    max_storage_bytes: Optional[int] = Field(default=None, ge=0)
+    duration_days: Optional[int] = Field(default=None, ge=1)
+    feature_flags: Optional[dict[str, bool]] = None
+    price_paise: Optional[int] = Field(default=None, ge=0)
+    notes: Optional[str] = Field(default=None, max_length=1000)
+
+
 class CustomPlanRequestResponse(BaseModel):
     id: int
     organization_id: int

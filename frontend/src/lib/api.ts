@@ -1,5 +1,5 @@
 import { useAuthStore } from './store'
-import type { Package, PackageWrite, FleetOverview, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, Placement, PaymentMethod, PlanOption, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, PurchaseResponse, CustomPlanRequestInput, CustomPlanRequestItem, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
+import type { Package, PackageWrite, FleetOverview, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, Placement, PaymentMethod, PlanOption, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, PurchaseResponse, CustomPlanRequestInput, CustomPlanRequestItem, CustomPlanRequestUpdate, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
 
 const PROD_API_URL = 'https://olrac-signage-32lh.onrender.com'
 const configuredUrl = (process.env.NEXT_PUBLIC_API_URL || PROD_API_URL).replace(/\/$/, '')
@@ -649,6 +649,11 @@ export const adminApi = {
   priceCustomRequest: (id: number, pricePaise: number) =>
     fetchWithAuth<CustomPlanRequestItem>(`/admin/custom-requests/${id}/price`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ price_paise: pricePaise }),
+    }),
+  updateCustomRequest: (id: number, body: CustomPlanRequestUpdate) =>
+    fetchWithAuth<CustomPlanRequestItem>(`/admin/custom-requests/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
     }),
   rejectCustomRequest: (id: number) =>
     fetchWithAuth<CustomPlanRequestItem>(`/admin/custom-requests/${id}/reject`, { method: 'POST' }),

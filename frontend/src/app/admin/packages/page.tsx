@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Package as PackageIcon, Plus, Save, Sparkles, Trash2 } from 'lucide-react'
 import { adminApi } from '@/lib/api'
-import type { CustomPlanRequestItem, Package, PackageWrite } from '@/lib/types'
+import type { CustomPlanRequestItem, CustomPlanRequestUpdate, Package, PackageWrite } from '@/lib/types'
 import { Feedback, PageHeader, formatBytes, formatPaise } from '@/components/admin/admin-ui'
 
 const GIB = 1024 ** 3
@@ -99,6 +99,28 @@ export default function AdminPackagesPage() {
     onSuccess: (r) => { setError(''); setMessage(`Priced request #${r.id}. The workspace can now pay.`); refreshRequests() },
     onError: failed,
   })
+  // Unsaved edits to a request's caps/features, by request id. Same shape as the package
+  // editor above so a row can be revised at any status -- including one already paid for.
+  const [reqEdits, setReqEdits] = useState<Record<number, CustomPlanRequestUpdate>>({})
+  const editReq = (id: number, patch: CustomPlanRequestUpdate) =>
+    setReqEdits((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }))
+
+  const updateReq = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: CustomPlanRequestUpdate }) =>
+      adminApi.updateCustomRequest(id, body),
+    onSuccess: (r) => {
+      setError('')
+      setMessage(
+        r.status === 'paid'
+          ? `Updated request #${r.id}. The workspace moved to the new caps immediately; it was not re-billed.`
+          : `Updated request #${r.id}.`,
+      )
+      setReqEdits((prev) => { const next = { ...prev }; delete next[r.id]; return next })
+      refreshRequests()
+    },
+    onError: failed,
+  })
+
   const rejectReq = useMutation({
     mutationFn: (id: number) => adminApi.rejectCustomRequest(id),
     onSuccess: (r) => { setError(''); setMessage(`Request #${r.id} declined.`); refreshRequests() },
@@ -339,21 +361,55 @@ export default function AdminPackagesPage() {
         ) : (
           <ul className="divide-y divide-border">
             {customRequests.map((request: CustomPlanRequestItem) => {
-              const features = Object.entries(request.feature_flags).filter(([, on]) => on).map(([f]) => f.replaceAll('_', ' '))
+              const draft = reqEdits[request.id] ?? {}
+              const dirty = Object.keys(draft).length > 0
+              const draftFeatures = draft.feature_flags ?? request.feature_flags ?? {}
               return (
                 <li key={request.id} className="flex flex-wrap items-center justify-between gap-4 p-5">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold">
                       {request.organization_name ?? `Workspace ${request.organization_id}`}
-                      <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${request.status === 'priced' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-300'}`}>
+                      <span className={`ml-2 rounded-full px-2 py-0.5 text-xs ${request.status === 'paid' ? 'bg-violet-500/10 text-violet-300' : request.status === 'priced' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-amber-500/10 text-amber-300'}`}>
                         {request.status}
                       </span>
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {(request.max_screens || '∞')} TVs · {(request.max_clients || '∞')} clients · {formatBytes(request.max_storage_bytes)} · {request.duration_days} days
-                      {features.length > 0 && <> · {features.join(', ')}</>}
-                    </p>
                     {request.notes && <p className="mt-1 text-xs italic text-muted-foreground">“{request.notes}”</p>}
+                    <div className="mt-3 flex flex-wrap items-end gap-2">
+                      <NumField label="TVs" value={draft.max_screens ?? request.max_screens}
+                        onChange={(v) => editReq(request.id, { max_screens: v })} />
+                      <NumField label="Clients" value={draft.max_clients ?? request.max_clients}
+                        onChange={(v) => editReq(request.id, { max_clients: v })} />
+                      <NumField label="Ad slots" value={draft.max_ad_slots ?? request.max_ad_slots}
+                        onChange={(v) => editReq(request.id, { max_ad_slots: v })} />
+                      <NumField label="Storage GB"
+                        value={Math.round((draft.max_storage_bytes ?? request.max_storage_bytes) / GIB)}
+                        onChange={(v) => editReq(request.id, { max_storage_bytes: v * GIB })} />
+                      <NumField label="Days" value={draft.duration_days ?? request.duration_days}
+                        onChange={(v) => editReq(request.id, { duration_days: v })} />
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-3">
+                      {FEATURES.map((f) => (
+                        <label key={f.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          <input
+                            type="checkbox"
+                            checked={draftFeatures[f.key] ?? false}
+                            onChange={(e) => editReq(request.id, { feature_flags: { ...draftFeatures, [f.key]: e.target.checked } })}
+                            className="h-3.5 w-3.5 accent-violet-500"
+                          />
+                          {f.label}
+                        </label>
+                      ))}
+                    </div>
+                    {dirty && (
+                      <button
+                        onClick={() => updateReq.mutate({ id: request.id, body: draft })}
+                        disabled={updateReq.isPending}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/10 px-3 py-1.5 text-xs text-violet-300 transition-all hover:bg-violet-500/20 disabled:opacity-40"
+                      >
+                        <Save className="h-3 w-3" />
+                        {request.status === 'paid' ? 'Save (applies now, no re-bill)' : 'Save changes'}
+                      </button>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">₹</span>
@@ -400,6 +456,21 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
         {label} {hint && <span className="font-normal text-muted-foreground">({hint})</span>}
       </span>
       {children}
+    </label>
+  )
+}
+
+function NumField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <input
+        type="number"
+        min={0}
+        value={value}
+        onChange={(e) => onChange(Math.max(0, Number(e.target.value) || 0))}
+        className={`${inputClass} w-20 px-2 py-1 text-xs`}
+      />
     </label>
   )
 }

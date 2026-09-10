@@ -620,16 +620,19 @@ def list_custom_requests(
     scope: TenantScope = Depends(require_super_admin),
     db: Session = Depends(database.get_db),
 ):
-    """Open bespoke-package requests awaiting a price or payment.
+    """Bespoke-package requests that are still live: awaiting a price, awaiting payment, or
+    already paid.
 
-    Paid and rejected ones drop off the queue; a paid one has already been turned into a
-    hidden plan and applied to its workspace.
+    Paid ones stay on the list rather than dropping off it. They are the ones an operator most
+    often needs to revise -- a tenant on a custom package who buys more screens is an edit to
+    the request they already paid for, and a row that is not returned here cannot be edited at
+    all. Only rejected ones disappear.
     """
     from .billing import serialize_custom_request
 
     requests = (
         db.query(models.CustomPlanRequest)
-        .filter(models.CustomPlanRequest.status.in_(("requested", "priced")))
+        .filter(models.CustomPlanRequest.status.in_(("requested", "priced", "paid")))
         .order_by(models.CustomPlanRequest.created_at.asc())
         .all()
     )
@@ -659,6 +662,78 @@ def price_custom_request(
     db.commit()
     db.refresh(request)
     logger.info("Custom request %s priced at %s paise by %s", request.id, payload.price_paise, scope.user.username)
+    return serialize_custom_request(request, include_org=True)
+
+
+@router.patch("/custom-requests/{request_id}", response_model=schemas.CustomPlanRequestResponse)
+def update_custom_request(
+    request_id: int,
+    payload: schemas.CustomPlanRequestUpdate,
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    """Revise a bespoke package: its caps, its features, its price -- at any status.
+
+    Before payment this just edits the row. After payment it must also move the plan that
+    payment minted, because that plan is what the workspace is actually running on:
+    `Organization.effective_max_*` reads screens/clients/ad-slots straight through
+    `org.plan`, so writing them onto `custom-<id>` moves the tenant immediately and without
+    a second charge. Storage is the exception -- `storage_quota_bytes` is a copied column,
+    not a derived one -- so it is re-synced explicitly here or the new allowance silently
+    would not apply.
+
+    Repricing a paid request does NOT re-bill and does not reopen it for payment; it
+    corrects the record of what was charged. `status` is deliberately untouched, since
+    dropping a paid request back to 'priced' would invite the tenant to pay for it twice.
+    """
+    from .billing import serialize_custom_request
+
+    request = db.query(models.CustomPlanRequest).filter(
+        models.CustomPlanRequest.id == request_id
+    ).first()
+    if not request:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if request.status == "rejected":
+        raise HTTPException(status_code=409, detail="A rejected request cannot be edited")
+
+    fields = payload.model_dump(exclude_unset=True)
+    if "feature_flags" in fields:
+        request.feature_flags_json = json.dumps(fields.pop("feature_flags") or {})
+    for name, value in fields.items():
+        setattr(request, name, value)
+    request.updated_at = models.utcnow()
+
+    if request.status == "paid":
+        plan = db.query(models.Plan).filter(models.Plan.slug == f"custom-{request.id}").first()
+        if plan is not None:
+            plan.max_screens = request.max_screens
+            plan.max_clients = request.max_clients
+            plan.max_ad_slots = request.max_ad_slots
+            plan.max_storage_bytes = request.max_storage_bytes
+            plan.duration_days = request.duration_days
+            plan.feature_flags_json = request.feature_flags_json
+            plan.price_paise = request.price_paise
+            org = db.query(models.Organization).filter(
+                models.Organization.id == request.organization_id
+            ).first()
+            if org is not None and org.plan_id == plan.id:
+                # The one cap that does not derive from the plan. Left alone, a tenant
+                # granted more space would keep hitting the old ceiling.
+                org.storage_quota_bytes = plan.max_storage_bytes
+                # A per-org override beats the plan (see Organization.effective_max_*), and
+                # several paths leave one behind. Revising the package the tenant is on is an
+                # explicit statement of what they now get, so clear the override for exactly
+                # the caps being revised -- otherwise the edit saves, reports success, and
+                # changes nothing the tenant can see, which is indistinguishable from broken.
+                for field in ("max_screens", "max_clients", "max_ad_slots"):
+                    if field in fields:
+                        setattr(org, field, 0)
+
+    db.commit()
+    db.refresh(request)
+    logger.info(
+        "Custom request %s revised by %s (status %s)", request.id, scope.user.username, request.status
+    )
     return serialize_custom_request(request, include_org=True)
 
 

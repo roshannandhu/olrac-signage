@@ -35,12 +35,21 @@ object UpdateManager {
             
             if (!response.isSuccessful) {
                 Log.e(TAG, "Failed to download update: ${response.code}")
+                recordStatus(context, "failed: download http ${response.code}")
                 return@withContext false
             }
 
             val apkFile = File(context.cacheDir, "update_${update.version_code}.apk")
             val body = response.body
-            if (body == null) return@withContext false
+            if (body == null) {
+                recordStatus(context, "failed: empty download")
+                return@withContext false
+            }
+
+            // Previous attempts' APKs are dead weight in a cache the TV never clears itself.
+            context.cacheDir.listFiles { f ->
+                f.name.startsWith("update_") && f.name != "update_${update.version_code}.apk"
+            }?.forEach { it.delete() }
 
             body.byteStream().use { input ->
                 FileOutputStream(apkFile).use { output ->
@@ -64,6 +73,7 @@ object UpdateManager {
             return@withContext true
         } catch (e: Exception) {
             Log.e(TAG, "Error downloading update", e)
+            recordStatus(context, "failed: ${e.javaClass.simpleName}")
             return@withContext false
         }
     }
@@ -91,6 +101,7 @@ object UpdateManager {
             )
 
             Log.d(TAG, "Committing session")
+            recordStatus(context, "installing")
             session.commit(pendingIntent.intentSender)
 
         } catch (e: SecurityException) {
@@ -101,6 +112,8 @@ object UpdateManager {
             Log.e(TAG, "Error during silent install", e)
             session?.abandon()
             fallbackToIntentInstall(context, apkFile)
+        } finally {
+            runCatching { session?.close() }
         }
     }
 
@@ -116,8 +129,11 @@ object UpdateManager {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
             }
             context.startActivity(intent)
+            // Not a success: this needs someone standing at the TV to confirm the prompt.
+            recordStatus(context, "awaiting manual install")
         } catch (e: Exception) {
             Log.e(TAG, "Error launching install intent", e)
+            recordStatus(context, "failed: no installer (${e.javaClass.simpleName})")
         }
     }
 

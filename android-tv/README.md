@@ -42,6 +42,21 @@ Configure a release signing key in the normal Android build/CI secret store befo
 distributing a release APK. Every future in-place update must use the same key and a
 higher `versionCode`.
 
+## Release signing
+
+Release builds are signed with the debug key unless `android-tv/keystore.properties` exists
+(see `keystore.properties.example`). That file and the `.jks` are gitignored — the key never
+enters the repo.
+
+Generate the key once, and keep the only copy backed up somewhere safe:
+
+    keytool -genkeypair -v -keystore android-tv/olrac-release.jks       -alias olrac -keyalg RSA -keysize 2048 -validity 10000
+
+**Losing this key means no existing install can ever be updated again** — Android refuses an
+update whose signature does not match. Switching to it from the debug key has the same effect
+once: every TV already in the field must be uninstalled and reinstalled by hand to cross over.
+Do that deliberately, not by accident.
+
 ## Install and pair
 
 1. Enable developer options/ADB on the TV and install the APK:

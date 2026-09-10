@@ -236,6 +236,35 @@ def run() -> None:
     slugs = [p["slug"] for p in catalogue.json()]
     check(f"custom-{req_id}" not in slugs, "bespoke custom plan leaked into the admin catalogue")
 
+    # --- ad-slot cap: a booking past the limit is refused by the shared guard -----------
+    # Direct check on ensure_ad_slot_quota (the guard create_placement calls). Screens and
+    # clients are covered above and in test_quotas; ad-slots had a count test but no N+1.
+    from datetime import timedelta as _td
+    from fastapi import HTTPException as _HTTPExc
+    from backend.tenancy import TenantScope as _Scope
+    from backend.routers.placements import ensure_ad_slot_quota as _ensure_ads
+    adb = TestingSessionLocal()
+    try:
+        org = adb.query(models.Organization).filter(models.Organization.slug == "acme").one()
+        owner_u = adb.query(models.User).filter(
+            models.User.organization_id == org.id, models.User.role == "owner"
+        ).first()
+        org.max_ad_slots = 1  # override: exactly one slot
+        filler = models.Content(organization_id=org.id, name="slot", type="image",
+                                file_url="/x", status="ready", file_size_bytes=1)
+        adb.add(filler); adb.flush()
+        nowt = models.utcnow()
+        adb.add(models.AdPlacement(organization_id=org.id, content_id=filler.id, advertiser="Filler",
+                                   price_paise=0, starts_at=nowt, ends_at=nowt + _td(days=30)))
+        adb.commit()
+        try:
+            _ensure_ads(_Scope(db=adb, user=owner_u))
+            check(False, "ad-slot cap: a booking past the limit was NOT blocked")
+        except _HTTPExc as exc:
+            check(exc.status_code == 409, f"ad-slot cap returned {exc.status_code}, expected 409")
+    finally:
+        adb.close()
+
     if failures:
         print("PLAN PURCHASE FAILURES:")
         for line in failures:

@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -55,6 +56,7 @@ import com.olrac.signage.data.AppDatabase
 import com.olrac.signage.data.DeviceState
 import com.olrac.signage.data.LaunchState
 import com.olrac.signage.data.LaunchStateResolver
+import com.olrac.signage.data.CornerTapCounter
 import com.olrac.signage.data.MaintenanceGesture
 import com.olrac.signage.data.RegistrationSnapshot
 import com.olrac.signage.network.ApiClient
@@ -240,6 +242,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val maintenanceGesture = MaintenanceGesture()
+    private val cornerTaps = CornerTapCounter()
     private val homePressTimes = ArrayDeque<Long>()
 
     override fun onNewIntent(intent: Intent?) {
@@ -276,6 +279,27 @@ class MainActivity : ComponentActivity() {
                 showPinPrompt = true
             }
         }
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        // Touch-only path to the maintenance PIN, for devices with no D-pad remote (touch
+        // panels, phones) where the Up-Up-Down-Down-OK gesture is unreachable: seven quick
+        // taps in the top-left corner reveal the same PIN prompt. Only over the player, and
+        // the pin behind it is still the real control.
+        if (ev.action == MotionEvent.ACTION_DOWN && !showPinPrompt && !showServerSetup) {
+            val w = window.decorView.width
+            val h = window.decorView.height
+            val inCorner = w > 0 && h > 0 && ev.rawX < w * 0.12f && ev.rawY < h * 0.12f
+            if (inCorner) {
+                if (cornerTaps.record(System.currentTimeMillis())) {
+                    showPinPrompt = true
+                    return true
+                }
+            } else {
+                cornerTaps.reset()
+            }
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {

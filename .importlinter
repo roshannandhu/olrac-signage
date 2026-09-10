@@ -1,0 +1,49 @@
+# Architecture fitness functions for the backend. Run: `lint-imports` (import-linter).
+# These lock the layering the code already follows so it cannot quietly drift back into
+# a tangle: HTTP controllers -> business services -> data repositories -> domain models,
+# dependencies pointing inward only.
+[importlinter]
+root_package = backend
+
+[importlinter:contract:domain-purity]
+name = Domain models stay pure (no HTTP, business, or data-access imports)
+type = forbidden
+source_modules =
+    backend.models
+forbidden_modules =
+    backend.routers
+    backend.services
+    backend.repositories
+    backend.tenancy
+
+[importlinter:contract:data-floor]
+name = Repositories are the data floor (never reach up into services or routers)
+type = forbidden
+source_modules =
+    backend.repositories
+forbidden_modules =
+    backend.routers
+    backend.services
+# Same known debt as the layers contract: a repo imports TenantScope from tenancy, and
+# tenancy reaches routers.auth for get_current_user. Pinned so no OTHER repo->router path
+# can appear; the clean fix is to move get_current_user out of routers.
+ignore_imports =
+    backend.tenancy -> backend.routers.auth
+
+[importlinter:contract:layers]
+name = Layered architecture: routers -> services -> repositories -> models
+type = layers
+layers =
+    backend.routers
+    backend.services
+    backend.repositories
+    backend.models
+# Known, pre-existing upward edges — documented debt, not licence for more. Each is a
+# helper that lives in a router and is reached by a lower layer; the clean fix is to move
+# them (password hashing -> a security module, the websocket trigger -> a realtime module,
+# get_current_user -> an auth module) so these lines can be deleted. Until then they are
+# pinned here so NEW upward imports still fail the build.
+ignore_imports =
+    backend.services.device_auth_service -> backend.routers.auth
+    backend.services.playlist_service -> backend.routers.websockets
+    backend.tenancy -> backend.routers.auth

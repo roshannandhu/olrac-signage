@@ -5,3 +5,6 @@ pytest==8.3.5
 # skip reads as a pass -- the same way a missing moto quietly retired every object-storage
 # check. Anything a test silently skips over belongs in here.
 pypdf==6.16.2
+# Architecture fitness function: enforces the layer boundaries in .importlinter
+# (routers -> services -> repositories -> models). Run locally with `lint-imports`.
+import-linter==2.15

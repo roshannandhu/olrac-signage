@@ -37,10 +37,11 @@ def storage_prefix(organization) -> str:
     return f"org-{organization.id}"
 
 
+# Location only. Credentials are deliberately absent: this file is public, and a key
+# committed here is a key that has to be rotated. Missing credentials must surface as
+# "object storage is not configured", never as a silent fall back to a baked-in one.
 _S3_DEFAULTS = {
     "S3_ENDPOINT_URL": "https://3fe4487a2b8fd1e2e541bf0e0f4c7c42.r2.cloudflarestorage.com",
-    "AWS_ACCESS_KEY_ID": "734d432aeb20a3f4bbd484ca83a8a82b",
-    "AWS_SECRET_ACCESS_KEY": "ef6c0c74667843ec08f396b12ab0e8929d409c8c8062713da09cd17c6c628acf",
     "S3_BUCKET_NAME": "olrac",
     "AWS_REGION": "auto",
 }
@@ -49,9 +50,9 @@ _S3_DEFAULTS = {
 def _setting(name: str) -> str:
     """One environment value, with a variable that is present but BLANK treated as unset.
 
-    In production/live deployments (like Render), if AWS_ACCESS_KEY_ID was set to 'mock'
-    as a placeholder, fall back to _S3_DEFAULTS so R2 object storage works out of the box.
-    Unit tests running under pytest preserve 'mock' to exercise the local storage fallback.
+    Non-credential settings fall back to `_S3_DEFAULTS`. Credentials never do -- there is
+    no default to fall back to, so an unset or placeholder key yields "" and object storage
+    reports itself disabled rather than authenticating as somebody.
     """
     val = (os.getenv(name) or "").strip()
     if not val:

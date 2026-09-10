@@ -59,7 +59,7 @@ export default function AdminProvisioningPage() {
             Super Admin
           </span>
         </div>
-        <h1 className="text-2xl font-bold text-white mt-1">Device Owner Provisioning (QR)</h1>
+        <h1 className="text-2xl font-bold text-foreground mt-1">Device Owner Provisioning (QR)</h1>
         <p className="text-sm text-slate-400 mt-1">
           Generate an Android Enterprise Device-Owner QR code to configure OLRAC Signage on fresh or factory-reset Android TVs.
         </p>
@@ -70,14 +70,14 @@ export default function AdminProvisioningPage() {
         <div className="lg:col-span-6">
           <form
             onSubmit={generateQr}
-            className="p-6 rounded-2xl bg-[#080d18] border border-white/5 shadow-xl space-y-5"
+            className="p-6 rounded-2xl bg-card border border-border shadow-xl space-y-5"
           >
-            <div className="flex items-center gap-2.5 pb-2 border-b border-white/5">
+            <div className="flex items-center gap-2.5 pb-2 border-b border-border">
               <div className="size-8 rounded-lg bg-violet-500/10 flex items-center justify-center text-violet-400">
                 <Wifi className="size-4" />
               </div>
               <div>
-                <h2 className="text-base font-semibold text-white">Target Wi-Fi & Site Config</h2>
+                <h2 className="text-base font-semibold text-foreground">Target Wi-Fi & Site Config</h2>
                 <p className="text-xs text-slate-400">Embedded into the QR code for automatic connection</p>
               </div>
             </div>
@@ -90,7 +90,7 @@ export default function AdminProvisioningPage() {
                 placeholder="e.g. Office-Guest or Store-WiFi"
                 value={wifiSsid}
                 onChange={(e) => setWifiSsid(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#0e1626] border border-white/10 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-muted border border-border text-foreground placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500"
               />
             </div>
 
@@ -101,7 +101,7 @@ export default function AdminProvisioningPage() {
                 placeholder="Network password (leave blank for open networks)"
                 value={wifiPassword}
                 onChange={(e) => setWifiPassword(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#0e1626] border border-white/10 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-muted border border-border text-foreground placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500"
               />
             </div>
 
@@ -111,7 +111,7 @@ export default function AdminProvisioningPage() {
                 <select
                   value={wifiSecurity}
                   onChange={(e) => setWifiSecurity(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0e1626] border border-white/10 text-white text-sm focus:outline-none focus:border-violet-500 cursor-pointer"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-muted border border-border text-foreground text-sm focus:outline-none focus:border-violet-500 cursor-pointer"
                 >
                   <option value="WPA">WPA / WPA2 / WPA3</option>
                   <option value="WEP">WEP</option>
@@ -127,7 +127,7 @@ export default function AdminProvisioningPage() {
                   required
                   value={maxUses}
                   onChange={(e) => setMaxUses(parseInt(e.target.value, 10) || 1)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#0e1626] border border-white/10 text-white text-sm focus:outline-none focus:border-violet-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-muted border border-border text-foreground text-sm focus:outline-none focus:border-violet-500"
                 />
               </div>
             </div>
@@ -142,7 +142,7 @@ export default function AdminProvisioningPage() {
             <button
               type="submit"
               disabled={loading || !wifiSsid.trim()}
-              className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-semibold shadow-lg shadow-violet-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-foreground text-sm font-semibold shadow-lg shadow-violet-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
               <QrCode className="size-4" />
               {loading ? 'Generating QR Code...' : 'Generate Device-Owner QR'}
@@ -153,13 +153,13 @@ export default function AdminProvisioningPage() {
         {/* QR Code Display Card */}
         <div className="lg:col-span-6 flex flex-col justify-center">
           {qrPayload ? (
-            <div className="p-6 rounded-2xl bg-[#080d18] border border-violet-500/30 shadow-2xl space-y-6 text-center animate-in fade-in duration-200">
+            <div className="p-6 rounded-2xl bg-card border border-violet-500/30 shadow-2xl space-y-6 text-center animate-in fade-in duration-200">
               <div className="inline-block p-4 bg-white rounded-2xl shadow-inner mx-auto">
                 <QRCodeSVG value={qrPayload} size={240} level="M" />
               </div>
 
               <div className="space-y-2">
-                <p className="text-sm font-semibold text-white">How to scan on Android TV:</p>
+                <p className="text-sm font-semibold text-foreground">How to scan on Android TV:</p>
                 <p className="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">
                   On a fresh Android TV / tablet setup screen (Welcome screen), tap the screen 6 times in the same spot to trigger the QR code scanner camera.
                 </p>
@@ -168,7 +168,7 @@ export default function AdminProvisioningPage() {
               <div className="flex justify-center gap-3 pt-2">
                 <button
                   onClick={copyPayload}
-                  className="px-4 py-2 rounded-xl bg-[#0e1626] border border-white/10 hover:border-white/20 text-xs font-semibold text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer"
+                  className="px-4 py-2 rounded-xl bg-muted border border-border hover:border-border text-xs font-semibold text-slate-300 hover:text-foreground transition flex items-center gap-1.5 cursor-pointer"
                 >
                   {copied ? <Check className="size-3.5 text-emerald-400" /> : <Copy className="size-3.5" />}
                   {copied ? 'Copied' : 'Copy JSON Payload'}
@@ -176,11 +176,11 @@ export default function AdminProvisioningPage() {
               </div>
             </div>
           ) : (
-            <div className="p-12 rounded-2xl bg-[#080d18] border border-white/5 text-center space-y-3">
+            <div className="p-12 rounded-2xl bg-card border border-border text-center space-y-3">
               <div className="size-12 rounded-2xl bg-violet-500/10 text-violet-400 flex items-center justify-center mx-auto">
                 <Shield className="size-6" />
               </div>
-              <p className="text-sm font-semibold text-white">Zero-Touch Automated Setup</p>
+              <p className="text-sm font-semibold text-foreground">Zero-Touch Automated Setup</p>
               <p className="text-xs text-slate-400 leading-relaxed max-w-sm mx-auto">
                 Enter your location Wi-Fi details on the left and click generate to create the provisioning QR code.
               </p>

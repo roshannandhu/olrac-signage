@@ -119,7 +119,7 @@ export default function AdminPackagesPage() {
     edit(pkg.id, 'feature_flags', { ...featuresOf(pkg), [key]: on })
 
   return (
-    <div className="space-y-6 p-6 text-white lg:p-8">
+    <div className="space-y-6 p-6 text-foreground lg:p-8">
       <PageHeader title="Packages" description="Price, access period, limits and features a workspace can be sold on">
         <button
           onClick={() => setDraft(draft ? null : blank)}
@@ -183,7 +183,7 @@ export default function AdminPackagesPage() {
           <Field label="Features">
             <div className="flex flex-wrap gap-3 pt-1">
               {FEATURES.map((f) => (
-                <label key={f.key} className="flex items-center gap-2 text-sm text-white/70">
+                <label key={f.key} className="flex items-center gap-2 text-sm text-muted-foreground">
                   <input
                     type="checkbox"
                     checked={Boolean(draft.feature_flags[f.key])}
@@ -197,27 +197,27 @@ export default function AdminPackagesPage() {
           </Field>
           <button
             type="submit" disabled={create.isPending}
-            className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-violet-500 disabled:opacity-50"
+            className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-foreground transition-all hover:bg-violet-500 disabled:opacity-50"
           >
             {create.isPending ? 'Creating…' : 'Create package'}
           </button>
         </form>
       )}
 
-      <section className="overflow-hidden rounded-2xl border border-white/8 bg-[#0a0f1e]">
-        <div className="flex items-center gap-2 border-b border-white/5 p-4 text-sm font-semibold">
+      <section className="overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="flex items-center gap-2 border-b border-border p-4 text-sm font-semibold">
           <PackageIcon className="size-4 text-violet-400" />
           {packages.length} packages
         </div>
 
         {isLoading ? (
-          <p className="p-10 text-center text-sm text-white/40">Loading…</p>
+          <p className="p-10 text-center text-sm text-muted-foreground">Loading…</p>
         ) : packages.length === 0 ? (
-          <p className="p-10 text-center text-sm text-white/40">No packages yet. Create one to sell workspaces onto it.</p>
+          <p className="p-10 text-center text-sm text-muted-foreground">No packages yet. Create one to sell workspaces onto it.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="border-b border-white/5 bg-white/[0.02] text-xs uppercase tracking-wider text-white/30">
+              <thead className="border-b border-border bg-muted text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="p-4 pl-5 text-left">Package</th>
                   <th className="p-4 text-left">Price (once)</th>
@@ -231,18 +231,18 @@ export default function AdminPackagesPage() {
                   <th className="p-4 pr-5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
+              <tbody className="divide-y divide-border">
                 {packages.map((pkg) => {
                   const dirty = Boolean(editing[pkg.id])
                   return (
-                    <tr key={pkg.id} className="transition-colors hover:bg-white/[0.02]">
+                    <tr key={pkg.id} className="transition-colors hover:bg-muted">
                       <td className="p-4 pl-5">
                         <input
                           value={fieldOf(pkg, 'name')}
                           onChange={(e) => edit(pkg.id, 'name', e.target.value)}
                           className={`${inputClass} w-36`}
                         />
-                        <p className="mt-1 font-mono text-xs text-white/30">{pkg.slug}</p>
+                        <p className="mt-1 font-mono text-xs text-muted-foreground">{pkg.slug}</p>
                       </td>
                       <td className="p-4">
                         <input
@@ -251,7 +251,7 @@ export default function AdminPackagesPage() {
                           onChange={(e) => edit(pkg.id, 'price_paise', Math.round(Number(e.target.value) * 100))}
                           className={`${inputClass} w-24`}
                         />
-                        <p className="mt-1 text-xs text-white/30">{formatPaise(pkg.price_paise)}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{formatPaise(pkg.price_paise)}</p>
                       </td>
                       <td className="p-4">
                         <input type="number" min={1} value={fieldOf(pkg, 'duration_days')} onChange={(e) => edit(pkg.id, 'duration_days', Number(e.target.value))} className={`${inputClass} w-16`} />
@@ -272,12 +272,12 @@ export default function AdminPackagesPage() {
                           onChange={(e) => edit(pkg.id, 'max_storage_bytes', Number(e.target.value) * GIB)}
                           className={`${inputClass} w-24`}
                         />
-                        <p className="mt-1 text-xs text-white/30">{formatBytes(pkg.max_storage_bytes)}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{formatBytes(pkg.max_storage_bytes)}</p>
                       </td>
                       <td className="p-4">
                         <div className="flex flex-col gap-1.5">
                           {FEATURES.map((f) => (
-                            <label key={f.key} className="flex items-center gap-2 whitespace-nowrap text-xs text-white/60">
+                            <label key={f.key} className="flex items-center gap-2 whitespace-nowrap text-xs text-muted-foreground">
                               <input
                                 type="checkbox"
                                 checked={Boolean(featuresOf(pkg)[f.key])}
@@ -329,15 +329,15 @@ export default function AdminPackagesPage() {
         )}
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-white/8 bg-[#0a0f1e]">
-        <div className="flex items-center gap-2 border-b border-white/5 p-4 text-sm font-semibold">
+      <section className="overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="flex items-center gap-2 border-b border-border p-4 text-sm font-semibold">
           <Sparkles className="size-4 text-emerald-400" />
           {customRequests.length} custom requests
         </div>
         {customRequests.length === 0 ? (
-          <p className="p-10 text-center text-sm text-white/40">No open custom requests. A workspace can send one from its storefront.</p>
+          <p className="p-10 text-center text-sm text-muted-foreground">No open custom requests. A workspace can send one from its storefront.</p>
         ) : (
-          <ul className="divide-y divide-white/[0.04]">
+          <ul className="divide-y divide-border">
             {customRequests.map((request: CustomPlanRequestItem) => {
               const features = Object.entries(request.feature_flags).filter(([, on]) => on).map(([f]) => f.replaceAll('_', ' '))
               return (
@@ -349,14 +349,14 @@ export default function AdminPackagesPage() {
                         {request.status}
                       </span>
                     </p>
-                    <p className="mt-1 text-xs text-white/50">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {(request.max_screens || '∞')} TVs · {(request.max_clients || '∞')} clients · {formatBytes(request.max_storage_bytes)} · {request.duration_days} days
                       {features.length > 0 && <> · {features.join(', ')}</>}
                     </p>
-                    {request.notes && <p className="mt-1 text-xs italic text-white/40">“{request.notes}”</p>}
+                    {request.notes && <p className="mt-1 text-xs italic text-muted-foreground">“{request.notes}”</p>}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-white/40">₹</span>
+                    <span className="text-xs text-muted-foreground">₹</span>
                     <input
                       type="number"
                       min={0}
@@ -391,13 +391,13 @@ export default function AdminPackagesPage() {
 }
 
 const inputClass =
-  'rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-violet-500/50'
+  'rounded-lg border border-border bg-muted px-3 py-2 text-sm text-foreground outline-none focus:border-violet-500/50'
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold text-white/60">
-        {label} {hint && <span className="font-normal text-white/30">({hint})</span>}
+      <span className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+        {label} {hint && <span className="font-normal text-muted-foreground">({hint})</span>}
       </span>
       {children}
     </label>

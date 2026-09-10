@@ -49,13 +49,13 @@ export function StatCard({
 }: { label: string; value: ReactNode; icon: React.ElementType; accent?: Accent }) {
   const style = accents[accent]
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+    <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
       <div className={`grid size-9 place-items-center rounded-xl border ${style.tile}`}>
         <Icon className={`size-4 ${style.icon}`} />
       </div>
       <div className="min-w-0">
-        <p className="text-xl font-bold text-white">{value}</p>
-        <p className="truncate text-xs text-white/40">{label}</p>
+        <p className="text-xl font-bold text-foreground">{value}</p>
+        <p className="truncate text-xs text-muted-foreground">{label}</p>
       </div>
     </div>
   )
@@ -69,15 +69,15 @@ export function QuotaBar({ used, max }: { used: number; max: number | null }) {
   const unlimited = max === null || max === undefined
   const pct = unlimited || max === 0 ? 100 : Math.min(100, Math.round((used / max) * 100))
   const barColor = pct >= 100 ? 'bg-rose-500' : pct >= 80 ? 'bg-amber-500' : 'bg-violet-500'
-  const textColor = pct >= 100 ? 'text-rose-400 font-semibold' : pct >= 80 ? 'text-amber-400' : 'text-white/60'
+  const textColor = pct >= 100 ? 'text-rose-400 font-semibold' : pct >= 80 ? 'text-amber-400' : 'text-muted-foreground'
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-xs">
         <span className={textColor}>{used} / {unlimited ? '∞' : max}</span>
-        {!unlimited && <span className="text-white/30">{pct}%</span>}
+        {!unlimited && <span className="text-muted-foreground">{pct}%</span>}
       </div>
       {!unlimited && (
-        <div className="h-1 overflow-hidden rounded-full bg-white/5">
+        <div className="h-1 overflow-hidden rounded-full bg-muted">
           <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
         </div>
       )}
@@ -106,8 +106,8 @@ export function PageHeader({ title, description, children }: { title: string; de
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-bold text-white">{title}</h1>
-        {description && <p className="mt-0.5 text-sm text-white/50">{description}</p>}
+        <h1 className="text-2xl font-bold text-foreground">{title}</h1>
+        {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
       </div>
       {children}
     </div>

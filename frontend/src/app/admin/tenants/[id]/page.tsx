@@ -46,8 +46,8 @@ export default function AdminTenantDetailPage({ params }: { params: Promise<{ id
   const tenant = tenantQuery.data
 
   return (
-    <div className="space-y-6 p-6 text-white lg:p-8">
-      <Link href="/admin/tenants" className="inline-flex items-center gap-2 text-xs text-white/40 hover:text-white/70">
+    <div className="space-y-6 p-6 text-foreground lg:p-8">
+      <Link href="/admin/tenants" className="inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-muted-foreground">
         <ArrowLeft className="size-3.5" />
         All tenants
       </Link>
@@ -55,9 +55,9 @@ export default function AdminTenantDetailPage({ params }: { params: Promise<{ id
       <Feedback error={tenantQuery.error ? (tenantQuery.error as Error).message : undefined} />
 
       {tenantQuery.isLoading ? (
-        <p className="text-sm text-white/40">Loading…</p>
+        <p className="text-sm text-muted-foreground">Loading…</p>
       ) : !tenant ? (
-        <p className="text-sm text-white/40">This workspace does not exist.</p>
+        <p className="text-sm text-muted-foreground">This workspace does not exist.</p>
       ) : (
         <>
           <PageHeader title={tenant.name} description={tenant.owner_email ?? 'No owner email on record'}>
@@ -71,29 +71,29 @@ export default function AdminTenantDetailPage({ params }: { params: Promise<{ id
           )}
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-              <p className="mb-2 text-xs text-white/40">TV screens</p>
+            <div className="rounded-2xl border border-border bg-muted p-4">
+              <p className="mb-2 text-xs text-muted-foreground">TV screens</p>
               <QuotaBar used={tenant.screens_count} max={tenant.max_screens} />
-              <p className="mt-2 text-xs text-white/30">{tenant.online_screens_count} online now</p>
+              <p className="mt-2 text-xs text-muted-foreground">{tenant.online_screens_count} online now</p>
             </div>
-            <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-              <p className="mb-2 text-xs text-white/40">Ad slots</p>
+            <div className="rounded-2xl border border-border bg-muted p-4">
+              <p className="mb-2 text-xs text-muted-foreground">Ad slots</p>
               <QuotaBar used={tenant.ad_slots_used} max={tenant.max_ad_slots} />
-              <p className="mt-2 text-xs text-white/30">{tenant.plan_name ?? 'No package'}</p>
+              <p className="mt-2 text-xs text-muted-foreground">{tenant.plan_name ?? 'No package'}</p>
             </div>
-            <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-              <p className="mb-2 text-xs text-white/40">Storage</p>
+            <div className="rounded-2xl border border-border bg-muted p-4">
+              <p className="mb-2 text-xs text-muted-foreground">Storage</p>
               <p className="text-sm font-semibold">
                 {formatBytes(tenant.storage_used_bytes)}{' '}
-                <span className="font-normal text-white/40">of {formatBytes(tenant.storage_quota_bytes)}</span>
+                <span className="font-normal text-muted-foreground">of {formatBytes(tenant.storage_quota_bytes)}</span>
               </p>
-              <p className="mt-2 text-xs text-white/30">
+              <p className="mt-2 text-xs text-muted-foreground">
                 Joined {tenant.created_at ? new Date(tenant.created_at).toLocaleDateString() : '—'}
               </p>
             </div>
           </div>
 
-          <div className="flex gap-1 border-b border-white/5">
+          <div className="flex gap-1 border-b border-border">
             {([
               ['screens', 'Screens', MonitorPlay],
               ['content', 'Content', FileVideo],
@@ -105,7 +105,7 @@ export default function AdminTenantDetailPage({ params }: { params: Promise<{ id
                 className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm transition-all ${
                   tab === key
                     ? 'border-violet-500 font-semibold text-violet-300'
-                    : 'border-transparent text-white/40 hover:text-white/70'
+                    : 'border-transparent text-muted-foreground hover:text-muted-foreground'
                 }`}
               >
                 <Icon className="size-4" />
@@ -114,7 +114,7 @@ export default function AdminTenantDetailPage({ params }: { params: Promise<{ id
             ))}
           </div>
 
-          <section className="overflow-hidden rounded-2xl border border-white/8 bg-[#0a0f1e]">
+          <section className="overflow-hidden rounded-2xl border border-border bg-card">
             {tab === 'screens' && (
               <Table
                 loading={screensQuery.isLoading}
@@ -158,7 +158,7 @@ export default function AdminTenantDetailPage({ params }: { params: Promise<{ id
                     className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold ${
                       u.role === 'super_admin'
                         ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
-                        : 'bg-white/5 text-white/70'
+                        : 'bg-muted text-muted-foreground'
                     }`}
                   >
                     {u.role}
@@ -202,21 +202,21 @@ export default function AdminTenantDetailPage({ params }: { params: Promise<{ id
 function Table({
   loading, empty, headers, rows,
 }: { loading: boolean; empty: string; headers: string[]; rows: React.ReactNode[][] }) {
-  if (loading) return <p className="p-10 text-center text-sm text-white/40">Loading…</p>
-  if (rows.length === 0) return <p className="p-10 text-center text-sm text-white/40">{empty}</p>
+  if (loading) return <p className="p-10 text-center text-sm text-muted-foreground">Loading…</p>
+  if (rows.length === 0) return <p className="p-10 text-center text-sm text-muted-foreground">{empty}</p>
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
-        <thead className="border-b border-white/5 bg-white/[0.02] text-xs uppercase tracking-wider text-white/30">
+        <thead className="border-b border-border bg-muted text-xs uppercase tracking-wider text-muted-foreground">
           <tr>
             {headers.map((h) => <th key={h} className="p-4 text-left first:pl-5">{h}</th>)}
           </tr>
         </thead>
-        <tbody className="divide-y divide-white/[0.04]">
+        <tbody className="divide-y divide-border">
           {rows.map((cells, i) => (
-            <tr key={i} className="transition-colors hover:bg-white/[0.02]">
+            <tr key={i} className="transition-colors hover:bg-muted">
               {cells.map((cell, j) => (
-                <td key={j} className="p-4 first:pl-5 first:font-medium first:text-white">{cell}</td>
+                <td key={j} className="p-4 first:pl-5 first:font-medium first:text-foreground">{cell}</td>
               ))}
             </tr>
           ))}

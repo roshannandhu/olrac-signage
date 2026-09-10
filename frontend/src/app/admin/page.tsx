@@ -29,7 +29,7 @@ export default function AdminOverviewPage() {
   const pending = tenants.filter((t) => t.status === 'pending_approval')
 
   return (
-    <div className="space-y-6 p-6 text-white lg:p-8">
+    <div className="space-y-6 p-6 text-foreground lg:p-8">
       <PageHeader title="Platform Overview" description="Every workspace, screen and booking on this deployment" />
 
       <Feedback error={error ? (error as Error).message : undefined} />
@@ -48,8 +48,8 @@ export default function AdminOverviewPage() {
         </div>
       )}
 
-      <section className="overflow-hidden rounded-2xl border border-white/8 bg-[#0a0f1e]">
-        <div className="flex items-center justify-between border-b border-white/5 p-4">
+      <section className="overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border p-4">
           <span className="flex items-center gap-2 text-sm font-semibold">
             <ShieldCheck className="size-4 text-amber-400" />
             Approvals queue
@@ -60,16 +60,16 @@ export default function AdminOverviewPage() {
         </div>
 
         {isLoading ? (
-          <p className="p-8 text-center text-sm text-white/40">Loading…</p>
+          <p className="p-8 text-center text-sm text-muted-foreground">Loading…</p>
         ) : pending.length === 0 ? (
-          <p className="p-8 text-center text-sm text-white/40">Nothing waiting. Every workspace has been reviewed.</p>
+          <p className="p-8 text-center text-sm text-muted-foreground">Nothing waiting. Every workspace has been reviewed.</p>
         ) : (
-          <ul className="divide-y divide-white/[0.04]">
+          <ul className="divide-y divide-border">
             {pending.slice(0, 5).map((tenant) => (
               <li key={tenant.id} className="flex items-center justify-between gap-4 p-4">
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{tenant.name}</p>
-                  <p className="truncate font-mono text-xs text-white/40">{tenant.owner_email ?? '—'}</p>
+                  <p className="truncate font-mono text-xs text-muted-foreground">{tenant.owner_email ?? '—'}</p>
                 </div>
                 <StatusPill status={tenant.status} />
               </li>
@@ -78,8 +78,8 @@ export default function AdminOverviewPage() {
         )}
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-white/8 bg-[#0a0f1e]">
-        <div className="flex items-center justify-between border-b border-white/5 p-4">
+      <section className="overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="flex items-center justify-between border-b border-border p-4">
           <span className="flex items-center gap-2 text-sm font-semibold">
             <Users className="size-4 text-violet-400" />
             {tenants.length} registered tenants
@@ -88,12 +88,12 @@ export default function AdminOverviewPage() {
             Manage all →
           </Link>
         </div>
-        <ul className="divide-y divide-white/[0.04]">
+        <ul className="divide-y divide-border">
           {tenants.slice(0, 6).map((tenant) => (
             <li key={tenant.id} className="flex items-center justify-between gap-4 p-4">
               <Link href={`/admin/tenants/${tenant.id}`} className="min-w-0 hover:underline">
                 <p className="truncate font-semibold">{tenant.name}</p>
-                <p className="truncate text-xs text-white/40">
+                <p className="truncate text-xs text-muted-foreground">
                   {tenant.plan_name ?? 'No package'} · {tenant.screens_count} screens
                 </p>
               </Link>

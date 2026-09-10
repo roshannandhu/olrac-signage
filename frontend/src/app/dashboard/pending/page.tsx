@@ -154,7 +154,7 @@ export default function ActivateWorkspacePage() {
   const requests = (requestsQuery.data ?? []).filter((r) => r.status !== 'paid')
 
   return (
-    <main className="relative min-h-screen bg-[#070a12] px-6 py-12 text-white">
+    <main className="relative min-h-screen bg-background px-6 py-12 text-foreground">
       <div className="pointer-events-none absolute -left-32 -top-32 size-[500px] rounded-full bg-emerald-500/10 blur-[140px]" />
       <div className="pointer-events-none absolute -bottom-32 -right-32 size-[500px] rounded-full bg-teal-500/10 blur-[140px]" />
 
@@ -167,10 +167,10 @@ export default function ActivateWorkspacePage() {
             <p className="text-lg font-bold tracking-wider">OLRAC <span className="font-medium text-emerald-400">SIGNAGE</span></p>
           </div>
           <div className="flex items-center gap-4">
-            <span className="hidden items-center gap-1.5 text-xs text-white/40 sm:flex">
+            <span className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">
               <RefreshCw className="size-3 text-emerald-400" /> Activates the moment you pay
             </span>
-            <Button onClick={logout} variant="outline" className="h-10 border-white/10 bg-white/5 text-white hover:bg-white/10">
+            <Button onClick={logout} variant="outline" className="h-10 border-border bg-muted text-foreground hover:bg-muted">
               <LogOut className="mr-2 size-4" /> Sign out
             </Button>
           </div>
@@ -178,8 +178,8 @@ export default function ActivateWorkspacePage() {
 
         <div className="mb-10 max-w-2xl">
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Choose a plan to activate your workspace</h1>
-          <p className="mt-3 text-sm leading-relaxed text-white/60">
-            Welcome <span className="font-semibold text-white">{user?.full_name || user?.username}</span>. Your workspace{' '}
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+            Welcome <span className="font-semibold text-foreground">{user?.full_name || user?.username}</span>. Your workspace{' '}
             <span className="font-semibold text-emerald-400">{user?.organization_name}</span> is ready — pick a package to unlock the
             dashboard. Each is a one-time charge for its access period; your TVs play the demo reel until you activate.
             {!isOwner && <span className="mt-2 block text-amber-300/80">Only the workspace owner can purchase a plan.</span>}
@@ -203,7 +203,7 @@ export default function ActivateWorkspacePage() {
 
         {plansQuery.isLoading ? (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-            {[0, 1, 2].map((i) => <div key={i} className="h-80 animate-pulse rounded-3xl bg-white/[0.04]" />)}
+            {[0, 1, 2].map((i) => <div key={i} className="h-80 animate-pulse rounded-3xl bg-muted" />)}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -211,13 +211,13 @@ export default function ActivateWorkspacePage() {
               const features = Object.entries(plan.feature_flags).filter(([, on]) => on).map(([f]) => f)
               const free = plan.price_paise <= 0
               return (
-                <div key={plan.id} className="flex flex-col rounded-3xl border border-white/10 bg-[#0d1322]/80 p-6 shadow-xl backdrop-blur-xl">
+                <div key={plan.id} className="flex flex-col rounded-3xl border border-border bg-card p-6 shadow-xl backdrop-blur-xl">
                   <h3 className="text-lg font-semibold">{plan.name}</h3>
                   <p className="mt-3 text-3xl font-bold">
                     {free ? 'Free' : rupees(plan.price_paise)}
-                    <span className="ml-1 text-sm font-normal text-white/50">/ {plan.duration_days} days</span>
+                    <span className="ml-1 text-sm font-normal text-muted-foreground">/ {plan.duration_days} days</span>
                   </p>
-                  <ul className="mt-6 space-y-2.5 text-sm text-white/70">
+                  <ul className="mt-6 space-y-2.5 text-sm text-muted-foreground">
                     <Line>{plan.max_screens > 0 ? `${plan.max_screens} TVs` : 'Unlimited TVs'}</Line>
                     <Line>{plan.max_clients > 0 ? `${plan.max_clients} clients` : 'Unlimited clients'}</Line>
                     <Line>{gb(plan.max_storage_bytes)} storage</Line>
@@ -235,12 +235,12 @@ export default function ActivateWorkspacePage() {
             })}
 
             {/* Custom card */}
-            <div className="flex flex-col rounded-3xl border border-dashed border-emerald-500/30 bg-[#0d1322]/60 p-6">
+            <div className="flex flex-col rounded-3xl border border-dashed border-emerald-500/30 bg-card p-6">
               <div className="flex items-center gap-2">
                 <Sparkles className="size-4 text-emerald-400" />
                 <h3 className="text-lg font-semibold">Custom</h3>
               </div>
-              <p className="mt-3 text-sm text-white/60">
+              <p className="mt-3 text-sm text-muted-foreground">
                 Need a specific number of TVs, clients or storage, or a particular set of features? Tell us the shape and a
                 manager prices it — you pay once and you are in.
               </p>
@@ -260,7 +260,7 @@ export default function ActivateWorkspacePage() {
         {showCustom && isOwner && (
           <form
             onSubmit={(e) => { e.preventDefault(); submitCustom() }}
-            className="mt-8 space-y-5 rounded-3xl border border-white/10 bg-[#0d1322]/80 p-6"
+            className="mt-8 space-y-5 rounded-3xl border border-border bg-card p-6"
           >
             <h3 className="font-semibold">Describe your custom plan</h3>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -270,10 +270,10 @@ export default function ActivateWorkspacePage() {
               <NumField label="Access period (days)" value={custom.days} onChange={(v) => setCustom({ ...custom, days: v })} min={1} />
             </div>
             <div>
-              <span className="mb-2 block text-xs font-semibold text-white/50">Features</span>
+              <span className="mb-2 block text-xs font-semibold text-muted-foreground">Features</span>
               <div className="flex flex-wrap gap-4">
                 {FEATURES.map((f) => (
-                  <label key={f.key} className="flex items-center gap-2 text-sm text-white/70">
+                  <label key={f.key} className="flex items-center gap-2 text-sm text-muted-foreground">
                     <input
                       type="checkbox"
                       checked={Boolean(customFeatures[f.key])}
@@ -286,12 +286,12 @@ export default function ActivateWorkspacePage() {
               </div>
             </div>
             <div>
-              <span className="mb-2 block text-xs font-semibold text-white/50">Anything else (optional)</span>
+              <span className="mb-2 block text-xs font-semibold text-muted-foreground">Anything else (optional)</span>
               <textarea
                 value={custom.notes}
                 onChange={(e) => setCustom({ ...custom, notes: e.target.value })}
                 rows={2}
-                className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500/50"
+                className="w-full rounded-xl border border-border bg-muted px-3 py-2 text-sm text-foreground outline-none focus:border-emerald-500/50"
                 placeholder="e.g. rollout across 3 airport terminals"
               />
             </div>
@@ -317,10 +317,10 @@ function CustomRequestRow({ request, canPay, busy, onPay }: {
 }) {
   const shape = `${request.max_screens || '∞'} TVs · ${request.max_clients || '∞'} clients · ${gb(request.max_storage_bytes)} · ${request.duration_days} days`
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-white/10 bg-[#0d1322]/80 p-5">
+    <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5">
       <div>
         <p className="text-sm font-semibold">Custom plan request</p>
-        <p className="mt-0.5 text-xs text-white/50">{shape}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{shape}</p>
       </div>
       <div className="flex items-center gap-4">
         {request.status === 'priced' ? (
@@ -351,13 +351,13 @@ function Line({ children }: { children: React.ReactNode }) {
 function NumField({ label, value, onChange, min = 0 }: { label: string; value: string; onChange: (v: string) => void; min?: number }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-semibold text-white/50">{label}</span>
+      <span className="mb-1.5 block text-xs font-semibold text-muted-foreground">{label}</span>
       <input
         type="number"
         min={min}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500/50"
+        className="w-full rounded-xl border border-border bg-muted px-3 py-2 text-sm text-foreground outline-none focus:border-emerald-500/50"
       />
     </label>
   )

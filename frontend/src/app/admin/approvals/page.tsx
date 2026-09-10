@@ -61,7 +61,7 @@ export default function AdminApprovalsPage() {
   }
 
   return (
-    <div className="space-y-6 p-6 text-white lg:p-8">
+    <div className="space-y-6 p-6 text-foreground lg:p-8">
       <PageHeader title="Approvals Queue" description="Companies waiting to be let onto the platform" />
 
       <Feedback ok={message} error={error} />
@@ -73,27 +73,27 @@ export default function AdminApprovalsPage() {
         </div>
       )}
 
-      <section className="overflow-hidden rounded-2xl border border-white/8 bg-[#0a0f1e]">
-        <div className="flex items-center gap-2 border-b border-white/5 p-4 text-sm font-semibold">
+      <section className="overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="flex items-center gap-2 border-b border-border p-4 text-sm font-semibold">
           <ShieldCheck className="size-4 text-amber-400" />
           {pending.length} awaiting review
         </div>
 
         {pendingQuery.isLoading ? (
-          <p className="p-10 text-center text-sm text-white/40">Loading…</p>
+          <p className="p-10 text-center text-sm text-muted-foreground">Loading…</p>
         ) : pending.length === 0 ? (
-          <p className="p-10 text-center text-sm text-white/40">
+          <p className="p-10 text-center text-sm text-muted-foreground">
             Nothing waiting. New signups appear here automatically.
           </p>
         ) : (
-          <ul className="divide-y divide-white/[0.04]">
+          <ul className="divide-y divide-border">
             {pending.map((tenant) => (
               <li key={tenant.id} className="space-y-3 p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold">{tenant.name}</p>
                     <p className="font-mono text-xs text-emerald-400">{tenant.owner_email ?? 'No owner email'}</p>
-                    <p className="mt-0.5 text-xs text-white/40">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       {tenant.owner_name ?? 'Unknown owner'} · registered{' '}
                       {tenant.created_at ? new Date(tenant.created_at).toLocaleDateString() : '—'}
                       {tenant.screens_count > 0 && ` · ${tenant.screens_count} screen(s) already connected`}
@@ -110,7 +110,7 @@ export default function AdminApprovalsPage() {
                           [tenant.id]: e.target.value === '' ? '' : Number(e.target.value),
                         }))
                       }
-                      className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white"
+                      className="rounded-lg border border-border bg-muted px-3 py-1.5 text-xs text-foreground"
                     >
                       <option value="">No package (unlimited)</option>
                       {packages.map((pkg) => (

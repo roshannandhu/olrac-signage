@@ -65,7 +65,7 @@ export default function AdminReleasesPage() {
               Super Admin
             </span>
           </div>
-          <h1 className="text-2xl font-bold text-white mt-1">App Releases & Fleet Rollout</h1>
+          <h1 className="text-2xl font-bold text-foreground mt-1">App Releases & Fleet Rollout</h1>
           <p className="text-sm text-slate-400 mt-1">
             Publish official Android TV player APK builds and manage fleet-wide rollout rings.
           </p>
@@ -73,7 +73,7 @@ export default function AdminReleasesPage() {
 
         <button
           onClick={() => setPublishOpen(!publishOpen)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold shadow-lg shadow-violet-600/20 transition-all cursor-pointer"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-foreground text-sm font-semibold shadow-lg shadow-violet-600/20 transition-all cursor-pointer"
         >
           <PackagePlus className="size-4" />
           {publishOpen ? 'Close Form' : 'Publish New Release'}
@@ -82,8 +82,8 @@ export default function AdminReleasesPage() {
 
       {/* Publish Form Modal/Card */}
       {publishOpen && (
-        <div className="p-6 rounded-2xl bg-[#0e1626] border border-violet-500/30 shadow-2xl space-y-4 animate-in fade-in slide-in-from-top-4 duration-200">
-          <div className="flex items-center gap-2 text-white font-semibold">
+        <div className="p-6 rounded-2xl bg-muted border border-violet-500/30 shadow-2xl space-y-4 animate-in fade-in slide-in-from-top-4 duration-200">
+          <div className="flex items-center gap-2 text-foreground font-semibold">
             <Rocket className="size-5 text-violet-400" />
             <span>Publish Android Player Binary</span>
           </div>
@@ -114,7 +114,7 @@ export default function AdminReleasesPage() {
                   placeholder="e.g. 10"
                   value={versionCode}
                   onChange={(e) => setVersionCode(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#080d18] border border-white/10 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-card border border-border text-foreground placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500"
                 />
               </div>
               <div>
@@ -125,7 +125,7 @@ export default function AdminReleasesPage() {
                   placeholder="e.g. 1.5.0"
                   value={versionName}
                   onChange={(e) => setVersionName(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#080d18] border border-white/10 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-card border border-border text-foreground placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500"
                 />
               </div>
             </div>
@@ -138,7 +138,7 @@ export default function AdminReleasesPage() {
                 placeholder="https://storage.example.com/apks/olrac-player-v1.5.0.apk"
                 value={apkUrl}
                 onChange={(e) => setApkUrl(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#080d18] border border-white/10 text-white placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-card border border-border text-foreground placeholder-slate-500 text-sm focus:outline-none focus:border-violet-500"
               />
             </div>
 
@@ -151,7 +151,7 @@ export default function AdminReleasesPage() {
                 placeholder="a1b2c3d4e5f6..."
                 value={sha256}
                 onChange={(e) => setSha256(e.target.value)}
-                className="w-full font-mono text-xs px-3.5 py-2.5 rounded-xl bg-[#080d18] border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:border-violet-500"
+                className="w-full font-mono text-xs px-3.5 py-2.5 rounded-xl bg-card border border-border text-foreground placeholder-slate-500 focus:outline-none focus:border-violet-500"
               />
             </div>
 
@@ -159,14 +159,14 @@ export default function AdminReleasesPage() {
               <button
                 type="button"
                 onClick={() => setPublishOpen(false)}
-                className="px-4 py-2 rounded-xl text-slate-400 hover:text-white text-sm font-medium transition cursor-pointer"
+                className="px-4 py-2 rounded-xl text-slate-400 hover:text-foreground text-sm font-medium transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={!versionCode || !versionName || !apkUrl || (!isShaValid && sha256.length > 0) || createMutation.isPending}
-                className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-semibold shadow-lg transition cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-foreground text-sm font-semibold shadow-lg transition cursor-pointer"
               >
                 {createMutation.isPending ? 'Publishing...' : 'Confirm & Publish'}
               </button>
@@ -176,14 +176,14 @@ export default function AdminReleasesPage() {
       )}
 
       {/* Releases Table */}
-      <div className="rounded-2xl bg-[#080d18] border border-white/5 overflow-hidden">
-        <div className="p-5 border-b border-white/5 flex items-center justify-between">
+      <div className="rounded-2xl bg-card border border-border overflow-hidden">
+        <div className="p-5 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="size-8 rounded-lg bg-violet-500/10 flex items-center justify-center text-violet-400">
               <Package className="size-4" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-white">Published Release History</h2>
+              <h2 className="text-base font-semibold text-foreground">Published Release History</h2>
               <p className="text-xs text-slate-400">Manage rollout stages for all deployed binaries</p>
             </div>
           </div>
@@ -203,7 +203,7 @@ export default function AdminReleasesPage() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-slate-300">
-              <thead className="text-xs text-slate-400 uppercase bg-white/[0.02] border-b border-white/5">
+              <thead className="text-xs text-slate-400 uppercase bg-muted border-b border-border">
                 <tr>
                   <th className="px-5 py-3.5 font-semibold">Version Code</th>
                   <th className="px-5 py-3.5 font-semibold">Version Name</th>
@@ -213,12 +213,12 @@ export default function AdminReleasesPage() {
                   <th className="px-5 py-3.5 font-semibold">Published</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/5">
+              <tbody className="divide-y divide-border">
                 {releases.map((rel) => {
                   const isLatest = rel.version_code === latest
                   return (
-                    <tr key={rel.id} className="hover:bg-white/[0.02] transition-colors">
-                      <td className="px-5 py-4 font-mono font-bold text-white flex items-center gap-2">
+                    <tr key={rel.id} className="hover:bg-muted transition-colors">
+                      <td className="px-5 py-4 font-mono font-bold text-foreground flex items-center gap-2">
                         <span>v{rel.version_code}</span>
                         {isLatest && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -237,7 +237,7 @@ export default function AdminReleasesPage() {
                             })
                           }
                           disabled={promoteMutation.isPending}
-                          className="px-3 py-1.5 rounded-lg bg-[#0e1626] border border-white/10 text-xs font-semibold text-white focus:outline-none focus:border-violet-500 cursor-pointer"
+                          className="px-3 py-1.5 rounded-lg bg-muted border border-border text-xs font-semibold text-foreground focus:outline-none focus:border-violet-500 cursor-pointer"
                         >
                           <option value="draft">Draft (Testing only)</option>
                           <option value="canary">Canary (Pilots only)</option>

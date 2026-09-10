@@ -134,9 +134,9 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-screen grid-cols-1 bg-[#090d16] text-white lg:grid-cols-[1.1fr_.9fr]">
+    <main className="grid min-h-screen grid-cols-1 bg-background text-foreground lg:grid-cols-[1.1fr_.9fr]">
       {/* Left Feature Showcase */}
-      <section className="relative hidden flex-col justify-between overflow-hidden border-r border-white/10 bg-gradient-to-br from-[#0c1222] via-[#090d16] to-[#050811] p-12 lg:flex xl:p-16">
+      <section className="relative hidden flex-col justify-between overflow-hidden border-r border-border bg-card p-12 lg:flex xl:p-16">
         {/* Glow ambient spots */}
         <div className="absolute -left-20 -top-20 size-96 rounded-full bg-emerald-500/15 blur-[120px] pointer-events-none" />
         <div className="absolute -bottom-20 right-0 size-96 rounded-full bg-cyan-500/10 blur-[140px] pointer-events-none" />
@@ -147,8 +147,8 @@ export default function LoginPage() {
             <RadioTower className="size-6 text-black" />
           </div>
           <div>
-            <p className="font-extrabold tracking-wider text-xl text-white">OLRAC <span className="text-emerald-400 font-medium">SIGNAGE</span></p>
-            <p className="text-xs uppercase tracking-[0.2em] text-white/40">Next-Gen TV Network Control</p>
+            <p className="font-extrabold tracking-wider text-xl text-foreground">OLRAC <span className="text-emerald-400 font-medium">SIGNAGE</span></p>
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Next-Gen TV Network Control</p>
           </div>
         </div>
 
@@ -159,43 +159,43 @@ export default function LoginPage() {
             Active Fleet Engine · Multi-Tenant Cloud
           </div>
 
-          <h1 className="text-balance text-5xl font-bold leading-[1.08] tracking-tight xl:text-6xl text-white">
+          <h1 className="text-balance text-5xl font-bold leading-[1.08] tracking-tight xl:text-6xl text-foreground">
             Manage 50+ Displays. <br />
             <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
               One Unified Signal.
             </span>
           </h1>
 
-          <p className="mt-6 text-lg leading-relaxed text-white/60">
+          <p className="mt-6 text-lg leading-relaxed text-muted-foreground">
             Schedule dynamic ad campaigns, stream commercial video loops, and keep your screens alive 24/7 with zero pairing codes.
           </p>
 
           {/* Feature Highlights Grid */}
           <div className="mt-10 grid grid-cols-2 gap-4">
-            <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
+            <div className="flex items-start gap-3 rounded-2xl border border-border bg-muted p-4 backdrop-blur-sm">
               <div className="rounded-xl bg-emerald-500/15 p-2 text-emerald-400">
                 <WifiOff className="size-5" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">100% Offline Resilient</p>
-                <p className="text-xs text-white/50 mt-0.5">Proof-of-play records locally & auto-syncs on Wi-Fi reconnect</p>
+                <p className="text-sm font-semibold text-foreground">100% Offline Resilient</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Proof-of-play records locally & auto-syncs on Wi-Fi reconnect</p>
               </div>
             </div>
 
-            <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm">
+            <div className="flex items-start gap-3 rounded-2xl border border-border bg-muted p-4 backdrop-blur-sm">
               <div className="rounded-xl bg-cyan-500/15 p-2 text-cyan-400">
                 <Tv className="size-5" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">Remote TV Control</p>
-                <p className="text-xs text-white/50 mt-0.5">Wake up screens & bring app to front with 1 click</p>
+                <p className="text-sm font-semibold text-foreground">Remote TV Control</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Wake up screens & bring app to front with 1 click</p>
               </div>
             </div>
           </div>
         </div>
 
         {/* Footer info */}
-        <div className="relative flex items-center justify-between text-xs text-white/35">
+        <div className="relative flex items-center justify-between text-xs text-muted-foreground">
           <p>© 2026 OLRAC Signage Systems Inc.</p>
           <div className="flex items-center gap-2">
             <ShieldCheck className="size-4 text-emerald-400" />
@@ -205,7 +205,7 @@ export default function LoginPage() {
       </section>
 
       {/* Right Login Section */}
-      <section className="flex items-center justify-center bg-[#070a12] px-6 py-12 sm:px-12">
+      <section className="flex items-center justify-center bg-background px-6 py-12 sm:px-12">
         <div className="w-full max-w-[440px]">
           {/* Mobile Brand Logo */}
           <div className="mb-8 flex items-center gap-3 lg:hidden">
@@ -217,17 +217,17 @@ export default function LoginPage() {
 
           <div className="mb-8">
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-400">Secure Access</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">Sign in to your account</h2>
-            <p className="mt-2 text-sm text-white/50">Manage your digital signage screens, playlists, and analytics.</p>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">Sign in to your account</h2>
+            <p className="mt-2 text-sm text-muted-foreground">Manage your digital signage screens, playlists, and analytics.</p>
           </div>
 
           {/* Active Session Notice */}
           {token && user && (
-            <div className="mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-white/90 shadow-lg">
+            <div className="mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-muted-foreground shadow-lg">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="font-semibold text-emerald-400">Active session: {user.username}</p>
-                  <p className="text-[11px] text-white/60">{user.organization_name || 'Organization'}</p>
+                  <p className="text-[11px] text-muted-foreground">{user.organization_name || 'Organization'}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Button
@@ -243,7 +243,7 @@ export default function LoginPage() {
                     size="sm"
                     variant="outline"
                     onClick={() => clearSession()}
-                    className="border-white/15 bg-white/5 hover:bg-white/10 text-white text-xs h-8 px-2.5 rounded-lg"
+                    className="border-border bg-muted hover:bg-muted text-foreground text-xs h-8 px-2.5 rounded-lg"
                   >
                     Sign Out
                   </Button>
@@ -271,9 +271,9 @@ export default function LoginPage() {
               </button>
 
               <div className="flex items-center gap-3">
-                <div className="h-px flex-1 bg-white/10" />
-                <span className="text-xs uppercase tracking-wider text-white/40 font-medium">or continue with email</span>
-                <div className="h-px flex-1 bg-white/10" />
+                <div className="h-px flex-1 bg-muted" />
+                <span className="text-xs uppercase tracking-wider text-muted-foreground font-medium">or continue with email</span>
+                <div className="h-px flex-1 bg-muted" />
               </div>
             </div>
           )}
@@ -281,9 +281,9 @@ export default function LoginPage() {
           {/* Form */}
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="username" className="text-xs font-semibold text-white/80">Email or Username</Label>
+              <Label htmlFor="username" className="text-xs font-semibold text-muted-foreground">Email or Username</Label>
               <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/40" />
+                <Mail className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="username"
                   name="username"
@@ -292,17 +292,17 @@ export default function LoginPage() {
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="you@company.com"
                   required
-                  className="h-12 border-white/15 bg-white/[0.04] pl-10 text-white placeholder:text-white/30 focus-visible:border-emerald-500 focus-visible:ring-emerald-500/20"
+                  className="h-12 border-border bg-muted pl-10 text-foreground placeholder:text-muted-foreground focus-visible:border-emerald-500 focus-visible:ring-emerald-500/20"
                 />
               </div>
             </div>
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label htmlFor="password" className="text-xs font-semibold text-white/80">Password</Label>
+                <Label htmlFor="password" className="text-xs font-semibold text-muted-foreground">Password</Label>
               </div>
               <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/40" />
+                <Lock className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="password"
                   name="password"
@@ -312,12 +312,12 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
                   required
-                  className="h-12 border-white/15 bg-white/[0.04] pl-10 pr-10 text-white placeholder:text-white/30 focus-visible:border-emerald-500 focus-visible:ring-emerald-500/20"
+                  className="h-12 border-border bg-muted pl-10 pr-10 text-foreground placeholder:text-muted-foreground focus-visible:border-emerald-500 focus-visible:ring-emerald-500/20"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/80"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground"
                   tabIndex={-1}
                 >
                   {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}

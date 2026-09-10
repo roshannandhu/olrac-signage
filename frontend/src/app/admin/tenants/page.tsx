@@ -70,11 +70,11 @@ export default function AdminTenantsPage() {
   }
 
   return (
-    <div className="space-y-6 p-6 text-white lg:p-8">
+    <div className="space-y-6 p-6 text-foreground lg:p-8">
       <PageHeader title="All Tenants" description="Limits, status and usage for every workspace">
         <button
           onClick={() => queryClient.invalidateQueries({ queryKey: ['admin', 'tenants'] })}
-          className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/70 transition-all hover:bg-white/10"
+          className="flex items-center gap-2 rounded-xl border border-border bg-muted px-4 py-2 text-sm text-muted-foreground transition-all hover:bg-muted"
         >
           <RefreshCw className={`size-3.5 ${isFetching ? 'animate-spin' : ''}`} />
           Refresh
@@ -94,23 +94,23 @@ export default function AdminTenantsPage() {
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Search by workspace, slug or owner email…"
-        className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-violet-500/50"
+        className="w-full rounded-xl border border-border bg-muted px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-violet-500/50"
       />
 
-      <section className="overflow-hidden rounded-2xl border border-white/8 bg-[#0a0f1e]">
-        <div className="flex items-center gap-2 border-b border-white/5 p-4 text-sm font-semibold">
+      <section className="overflow-hidden rounded-2xl border border-border bg-card">
+        <div className="flex items-center gap-2 border-b border-border p-4 text-sm font-semibold">
           <Users className="size-4 text-violet-400" />
           {filtered.length} of {tenants.length} tenants
         </div>
 
         {isLoading ? (
-          <p className="p-10 text-center text-sm text-white/40">Loading…</p>
+          <p className="p-10 text-center text-sm text-muted-foreground">Loading…</p>
         ) : (
           <div className="overflow-x-auto">
             {/* min-w keeps the eight columns readable and lets the wrapper scroll, rather
                 than squeezing them into 375px until every cell wraps to three lines. */}
             <table className="w-full min-w-[880px] text-sm">
-              <thead className="border-b border-white/5 bg-white/[0.02] text-xs uppercase tracking-wider text-white/30">
+              <thead className="border-b border-border bg-muted text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="p-4 pl-5 text-left">Workspace</th>
                   <th className="p-4 text-left">Owner</th>
@@ -122,21 +122,21 @@ export default function AdminTenantsPage() {
                   <th className="p-4 pr-5 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/[0.04]">
+              <tbody className="divide-y divide-border">
                 {filtered.map((tenant) => (
-                  <tr key={tenant.id} className="transition-colors hover:bg-white/[0.02]">
+                  <tr key={tenant.id} className="transition-colors hover:bg-muted">
                     <td className="p-4 pl-5">
-                      <Link href={`/admin/tenants/${tenant.id}`} className="font-semibold text-white hover:underline">
+                      <Link href={`/admin/tenants/${tenant.id}`} className="font-semibold text-foreground hover:underline">
                         {tenant.name}
                       </Link>
-                      <p className="font-mono text-xs text-white/30">{tenant.slug}</p>
+                      <p className="font-mono text-xs text-muted-foreground">{tenant.slug}</p>
                     </td>
                     <td className="p-4 font-mono text-xs text-emerald-400">{tenant.owner_email ?? '—'}</td>
-                    <td className="p-4 text-xs text-white/60">{tenant.plan_name ?? '—'}</td>
+                    <td className="p-4 text-xs text-muted-foreground">{tenant.plan_name ?? '—'}</td>
                     <td className="p-4"><StatusPill status={tenant.status} /></td>
                     <td className="w-32 p-4"><QuotaBar used={tenant.screens_count} max={tenant.max_screens} /></td>
                     <td className="w-32 p-4"><QuotaBar used={tenant.ad_slots_used} max={tenant.max_ad_slots} /></td>
-                    <td className="p-4 text-xs text-white/50">
+                    <td className="p-4 text-xs text-muted-foreground">
                       {formatBytes(tenant.storage_used_bytes)} / {formatBytes(tenant.storage_quota_bytes)}
                     </td>
                     <td className="p-4 pr-5">
@@ -218,23 +218,23 @@ function QuotaDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={onCancel}>
-      <div className="w-full max-w-md space-y-5 rounded-3xl border border-white/10 bg-[#0a0f1e] p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md space-y-5 rounded-3xl border border-border bg-card p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-3">
           <div className="grid size-10 place-items-center rounded-2xl border border-violet-500/20 bg-violet-500/10">
             <Gauge className="size-5 text-violet-400" />
           </div>
           <div>
-            <h2 className="font-bold text-white">Edit limits</h2>
-            <p className="text-xs text-white/50">{tenant.name}</p>
+            <h2 className="font-bold text-foreground">Edit limits</h2>
+            <p className="text-xs text-muted-foreground">{tenant.name}</p>
           </div>
         </div>
 
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-white/60">Package</span>
+          <span className="mb-1.5 block text-xs font-semibold text-muted-foreground">Package</span>
           <select
             value={planId}
             onChange={(e) => choosePackage(e.target.value === '' ? '' : Number(e.target.value))}
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-violet-500/50"
+            className="w-full rounded-xl border border-border bg-muted px-4 py-2.5 text-sm text-foreground outline-none focus:border-violet-500/50"
           >
             <option value="">No package</option>
             {packages.filter((p) => p.is_active || p.id === tenant.plan_id).map((p) => (
@@ -244,36 +244,36 @@ function QuotaDialog({
         </label>
 
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-white/60">
-            Max TV screens <span className="font-normal text-white/30">(0 = unlimited)</span>
+          <span className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+            Max TV screens <span className="font-normal text-muted-foreground">(0 = unlimited)</span>
           </span>
           <input
             type="number" min={0} value={screens} onChange={(e) => setScreens(Number(e.target.value) || 0)}
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-violet-500/50"
+            className="w-full rounded-xl border border-border bg-muted px-4 py-2.5 text-sm text-foreground outline-none focus:border-violet-500/50"
           />
-          <p className="mt-1 text-xs text-white/30">Currently using {tenant.screens_count}.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Currently using {tenant.screens_count}.</p>
         </label>
 
         <label className="block">
-          <span className="mb-1.5 block text-xs font-semibold text-white/60">
-            Max ad slots <span className="font-normal text-white/30">(0 = unlimited)</span>
+          <span className="mb-1.5 block text-xs font-semibold text-muted-foreground">
+            Max ad slots <span className="font-normal text-muted-foreground">(0 = unlimited)</span>
           </span>
           <input
             type="number" min={0} value={ads} onChange={(e) => setAds(Number(e.target.value) || 0)}
-            className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm text-white outline-none focus:border-cyan-500/50"
+            className="w-full rounded-xl border border-border bg-muted px-4 py-2.5 text-sm text-foreground outline-none focus:border-cyan-500/50"
           />
-          <p className="mt-1 text-xs text-white/30">Currently using {tenant.ad_slots_used}.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Currently using {tenant.ad_slots_used}.</p>
         </label>
 
         <div className="flex gap-3 pt-1">
           <button
             onClick={() => onSave({ ...(planId === '' ? {} : { plan_id: planId }), max_screens: screens, max_ad_slots: ads })}
             disabled={saving}
-            className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition-all hover:bg-violet-500 disabled:opacity-50"
+            className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-foreground transition-all hover:bg-violet-500 disabled:opacity-50"
           >
             {saving ? 'Saving…' : 'Save limits'}
           </button>
-          <button onClick={onCancel} className="rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm text-white/70 transition-all hover:bg-white/10">
+          <button onClick={onCancel} className="rounded-xl border border-border bg-muted px-5 py-2.5 text-sm text-muted-foreground transition-all hover:bg-muted">
             Cancel
           </button>
         </div>

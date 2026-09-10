@@ -124,9 +124,17 @@ class MainActivity : ComponentActivity() {
                     expectedPin = deviceState.maintenancePin,
                     onUnlocked = {
                         showPinPrompt = false
+                        // Correct pin: only now is it safe to drop kiosk pinning so the
+                        // setup screen's system dialogs can open.
+                        enterMaintenance()
                         showServerSetup = true
                     },
-                    onCancel = { showPinPrompt = false }
+                    onCancel = {
+                        showPinPrompt = false
+                        // Nothing was unpinned (the gesture no longer does that), but re-arm
+                        // defensively in case the lock was dropped by an earlier path.
+                        rearmLockTask()
+                    }
                 )
             } else if (showServerSetup) {
                 ServerSetupScreen(
@@ -139,8 +147,12 @@ class MainActivity : ComponentActivity() {
                         deviceState.clearPairing()
                         showServerSetup = false
                         launchState = LaunchState.SignIn()
+                        rearmLockTask()
                     },
-                    onClose = { showServerSetup = false }
+                    onClose = {
+                        showServerSetup = false
+                        rearmLockTask()
+                    }
                 )
             } else {
                 when (val state = launchState) {
@@ -195,10 +207,31 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /** Drop kiosk pinning so the setup screen's system dialogs (launcher-role chooser,
+     *  sign-in browser) can open. Called only AFTER a correct maintenance pin. */
+    private fun enterMaintenance() {
+        if (DeviceOwnerManager.isDeviceOwner(this)) {
+            try { stopLockTask() } catch (e: Exception) {}
+        }
+    }
+
+    /** Re-pin the kiosk once no maintenance surface is open. Safe to call when already
+     *  pinned (a no-op). This is what closes the hole where the gesture alone, or a
+     *  cancelled/failed pin, left the TV un-pinned until the next reboot. */
+    private fun rearmLockTask() {
+        if (DeviceOwnerManager.isDeviceOwner(this) && !showPinPrompt && !showServerSetup) {
+            try { startLockTask() } catch (e: Exception) {}
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         defaultHome = isDefaultHomeLauncher()
         hideSystemBars()
+        // Backstop: re-pin whenever we are back on the player with no maintenance surface
+        // open -- covers a cancelled pin, a wrong pin, and returning from the system
+        // launcher-role chooser.
+        rearmLockTask()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -238,10 +271,8 @@ class MainActivity : ComponentActivity() {
             }
             if (homePressTimes.size >= 3) {
                 homePressTimes.clear()
-                // Stop LockTask mode if it was active, so the user can interact with system dialogs
-                if (DeviceOwnerManager.isDeviceOwner(this)) {
-                    try { stopLockTask() } catch (e: Exception) {}
-                }
+                // Reveal the PIN prompt only; lock-task is dropped after a correct pin
+                // (onUnlocked), not here -- otherwise three HOME presses defeat the kiosk.
                 showPinPrompt = true
             }
         }
@@ -253,10 +284,9 @@ class MainActivity : ComponentActivity() {
         // Auto-repeat from a held key would otherwise flood the gesture buffer.
         if (!showPinPrompt && !showServerSetup && (event == null || event.repeatCount == 0)) {
             if (maintenanceGesture.record(keyCode, System.currentTimeMillis())) {
-                // The gesture only asks the question; DeviceState's pin answers it.
-                if (DeviceOwnerManager.isDeviceOwner(this)) {
-                    try { stopLockTask() } catch (e: Exception) {}
-                }
+                // Reveal the PIN prompt only. The kiosk stays pinned until a CORRECT pin is
+                // entered (see onUnlocked). Dropping lock-task here let the gesture alone
+                // un-pin the TV, and cancelling then left it open until the next reboot.
                 showPinPrompt = true
                 return true
             }

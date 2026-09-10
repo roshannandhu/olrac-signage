@@ -59,6 +59,11 @@ PLAN_BG = colors.HexColor("#f5f3ff")
 PLAN_INK = colors.HexColor("#6d28d9")
 OK_BG = colors.HexColor("#f0fdf4")
 OK_INK = colors.HexColor("#16a34a")
+# Amber "needs attention" pair, for a part-paid invoice: distinct from both the green of
+# paid and the violet of unpaid, so a partially-settled booking cannot be mistaken for
+# either at a glance.
+WARN_BG = colors.HexColor("#fffbeb")
+WARN_INK = colors.HexColor("#b45309")
 
 PAGE_W, PAGE_H = A4
 MARGIN = 14 * mm

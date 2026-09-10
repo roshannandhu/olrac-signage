@@ -30,6 +30,8 @@ from .booking_report import (
     PLAN_INK,
     TILE_BG,
     TOTAL_BG,
+    WARN_BG,
+    WARN_INK,
     _band_color,
     _card,
     _date,
@@ -222,7 +224,7 @@ def build_pdf(report: dict) -> bytes:
     if status == "paid":
         status_label, status_ink, status_bg = "Paid", OK_INK, OK_BG
     elif status == "part_paid":
-        status_label, status_ink, status_bg = "Part paid", PLAN_INK, PLAN_BG
+        status_label, status_ink, status_bg = "Part paid", WARN_INK, WARN_BG
     else:
         status_label, status_ink, status_bg = "Unpaid", PLAN_INK, PLAN_BG
 

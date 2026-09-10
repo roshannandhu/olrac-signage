@@ -9,7 +9,7 @@ import logging
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy import func, text
+from sqlalchemy import func
 
 from .. import models, schemas
 from ..tenancy import TenantScope, require_tenant_roles
@@ -1165,10 +1165,20 @@ def build_booking_report(scope: TenantScope, placement: models.AdPlacement) -> d
         place["days_elapsed"] = max(1, min(commercials["days_elapsed"], round(elapsed)))
         place["plays_per_day_avg"] = round(place["total_plays"] / place["days_elapsed"], 1)
 
-    daily_rows = scope.db.query(
-        func.date_trunc("day", models.PlayLogHourlyRollup.date_hour).label("day"),
-        func.coalesce(func.sum(models.PlayLogHourlyRollup.total_plays), 0).label("plays"),
-    ).filter(*window).group_by(text("1")).order_by(text("1")).all()
+    # Daily trend. Grouped by the hour column (portable) and bucketed to calendar days in
+    # Python -- date_trunc is Postgres-only and this path must also run on the SQLite the
+    # test suite and local dev use, the same reason effective_ends_at avoids GREATEST. On
+    # Postgres the previous date_trunc worked; on SQLite it raised "no such function" and
+    # 500'd the whole report.
+    from collections import defaultdict
+
+    daily_totals: dict = defaultdict(int)
+    per_hour = scope.db.query(
+        models.PlayLogHourlyRollup.date_hour,
+        func.coalesce(func.sum(models.PlayLogHourlyRollup.total_plays), 0),
+    ).filter(*window).group_by(models.PlayLogHourlyRollup.date_hour).all()
+    for date_hour, plays in per_hour:
+        daily_totals[date_hour.date()] += plays
 
     return {
         "placement_id": placement.id,
@@ -1199,7 +1209,7 @@ def build_booking_report(scope: TenantScope, placement: models.AdPlacement) -> d
             placement.plan and len(places) > placement.plan.max_locations
         ),
         "plan_max_locations": placement.plan.max_locations if placement.plan else None,
-        "daily": [{"date": r.day.date().isoformat(), "total_plays": r.plays} for r in daily_rows],
+        "daily": [{"date": d.isoformat(), "total_plays": n} for d, n in sorted(daily_totals.items())],
         "stale_screens": stale,
     }
 

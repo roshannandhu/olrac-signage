@@ -37,6 +37,12 @@ object ApiClient {
 
     private const val TOKEN_LIFETIME_MS = 45 * 60 * 1000L
 
+    // Distinct monitors on purpose. These used to share `this`, so a token exchange -- a
+    // network round trip -- blocked every caller of service(), including the ones on the
+    // main thread, which is an ANR rather than a slow frame.
+    private val serviceLock = Any()
+    private val tokenLock = Any()
+
     fun clearToken() {
         cachedToken = null
         tokenExpiresAt = 0L
@@ -46,7 +52,10 @@ object ApiClient {
         val baseUrl = effectiveBaseUrl(context)
         cachedService?.takeIf { cachedBaseUrl == baseUrl }?.let { return it }
 
-        return synchronized(this) {
+        return synchronized(serviceLock) {
+            // The cached token authenticates this screen to ONE server. Pointing the TV at a
+            // different one must not send the previous server's bearer token to it.
+            if (cachedBaseUrl != null && cachedBaseUrl != baseUrl) clearToken()
             cachedService?.takeIf { cachedBaseUrl == baseUrl } ?: Retrofit.Builder()
                 .baseUrl(baseUrl)
                 .client(buildClient(context.applicationContext))
@@ -106,24 +115,30 @@ object ApiClient {
         val secret = DeviceState(appContext).deviceSecret ?: return null
         cachedToken?.takeIf { System.currentTimeMillis() < tokenExpiresAt }?.let { return it }
 
-        return synchronized(this) {
-            cachedToken?.takeIf { System.currentTimeMillis() < tokenExpiresAt } ?: runCatching {
-                val deviceId = DeviceState(appContext).deviceId
-                // Deliberately a bare Retrofit instance with no interceptor: see above.
-                val plain = Retrofit.Builder()
-                    .baseUrl(effectiveBaseUrl(appContext))
-                    .addConverterFactory(GsonConverterFactory.create())
-                    .build()
-                    .create(ApiService::class.java)
-                val response = kotlinx.coroutines.runBlocking {
-                    plain.authDevice(DeviceAuthRequest(device_id = deviceId, device_secret = secret))
-                }
-                response.body()?.access_token?.also {
-                    cachedToken = it
-                    tokenExpiresAt = System.currentTimeMillis() + TOKEN_LIFETIME_MS
-                }
-            }.getOrNull()
+        // Exchanged outside any lock. Two threads racing here both mint a token and the
+        // later one wins, which is harmless -- whereas holding a monitor across the round
+        // trip stalls every other request behind one slow network call.
+        val fresh = runCatching {
+            val deviceId = DeviceState(appContext).deviceId
+            // Deliberately a bare Retrofit instance with no interceptor: see above.
+            val plain = Retrofit.Builder()
+                .baseUrl(effectiveBaseUrl(appContext))
+                .addConverterFactory(GsonConverterFactory.create())
+                .build()
+                .create(ApiService::class.java)
+            // ponytail: blocking call inside a synchronous interceptor; an OkHttp
+            // Authenticator would make it properly async if this ever shows up in traces.
+            val response = kotlinx.coroutines.runBlocking {
+                plain.authDevice(DeviceAuthRequest(device_id = deviceId, device_secret = secret))
+            }
+            response.body()?.access_token
+        }.getOrNull() ?: return null
+
+        synchronized(tokenLock) {
+            cachedToken = fresh
+            tokenExpiresAt = System.currentTimeMillis() + TOKEN_LIFETIME_MS
         }
+        return fresh
     }
 
     fun normalizeBaseUrl(value: String): String {
@@ -152,24 +167,25 @@ object ApiClient {
             .toASCIIString()
     }
 
-    fun resolveMediaUrl(context: Context, value: String): String {
-        if (value.startsWith("s3://") || value.startsWith("r2://")) {
-            return R2Presigner.presign(value)
-        }
-        if (value.contains("/api/media/")) {
-            val key = value.substringAfter("/api/media/").trimStart('/')
-            return R2Presigner.presign(key)
-        }
-        return rewriteLoopbackMediaUrl(value, effectiveBaseUrl(context))
-    }
+    fun resolveMediaUrl(context: Context, value: String): String =
+        rewriteLoopbackMediaUrl(value, effectiveBaseUrl(context))
 
+    /**
+     * Absolute, fetchable URL for a stored media location.
+     *
+     * An object-storage key resolves to the API's own `/api/media/<key>`, which redirects to
+     * a freshly signed URL each time it is followed. This app deliberately signs nothing and
+     * holds no storage credentials: a second signer here has to agree with the backend on
+     * bucket, endpoint, region, key prefix and clock, and any drift between them comes back
+     * as an opaque 403 that renders as a blank screen. The backend retired its own presigner
+     * for exactly that reason -- see `resolve_media_url` in backend/media_urls.py.
+     */
     fun rewriteLoopbackMediaUrl(mediaUrl: String, baseUrl: String): String {
         if (mediaUrl.startsWith("s3://") || mediaUrl.startsWith("r2://")) {
-            return R2Presigner.presign(mediaUrl)
-        }
-        if (mediaUrl.contains("/api/media/")) {
-            val key = mediaUrl.substringAfter("/api/media/").trimStart('/')
-            return R2Presigner.presign(key)
+            val key = mediaUrl.substringAfter("://").trimStart('/')
+            val base = try { URI(normalizeBaseUrl(baseUrl)) } catch (_: Exception) { return mediaUrl }
+            return URI(base.scheme, null, base.host, base.port, "/api/media/$key", null, null)
+                .toASCIIString()
         }
         val media = try {
             URI(mediaUrl)

@@ -1,5 +1,5 @@
 import { useAuthStore } from './store'
-import type { Package, PackageWrite, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, Placement, PaymentMethod, PlanOption, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, PurchaseResponse, CustomPlanRequestInput, CustomPlanRequestItem, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
+import type { Package, PackageWrite, FleetOverview, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, Placement, PaymentMethod, PlanOption, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, PurchaseResponse, CustomPlanRequestInput, CustomPlanRequestItem, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
 
 const PROD_API_URL = 'https://olrac-signage-32lh.onrender.com'
 const configuredUrl = (process.env.NEXT_PUBLIC_API_URL || PROD_API_URL).replace(/\/$/, '')
@@ -644,6 +644,7 @@ export const adminApi = {
     fetchWithAuth<{ status: string; detail?: string }>(`/admin/plans/${id}`, { method: 'DELETE' }),
 
   // Custom-plan request queue.
+  getFleet: () => fetchWithAuth<FleetOverview>('/admin/fleet'),
   listCustomRequests: () => fetchWithAuth<CustomPlanRequestItem[]>('/admin/custom-requests'),
   priceCustomRequest: (id: number, pricePaise: number) =>
     fetchWithAuth<CustomPlanRequestItem>(`/admin/custom-requests/${id}/price`, {

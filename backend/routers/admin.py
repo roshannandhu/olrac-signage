@@ -17,6 +17,7 @@ import os
 import pathlib
 import shutil
 import uuid
+from datetime import timedelta
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -681,6 +682,123 @@ def reject_custom_request(
     db.commit()
     db.refresh(request)
     return serialize_custom_request(request, include_org=True)
+
+
+# ------------------------------------------------------------------ fleet version monitor
+
+# A TV is counted online if it has been heard from within this window. Derived from
+# last_seen rather than Screen.status, which the heartbeat rewrites to "online" and nothing
+# flips back, so a TV that dropped still reads "online" until it happens to be touched.
+FLEET_ONLINE_WINDOW = timedelta(seconds=150)
+
+
+class FleetScreenOut(BaseModel):
+    id: int
+    name: Optional[str] = None
+    organization_id: int
+    organization_name: str
+    online: bool
+    app_version: Optional[str] = None
+    # A pinned build (canary ring); null means the screen follows the global released build.
+    target_version_code: Optional[int] = None
+    update_status: Optional[str] = None
+    update_failure_count: int = 0
+    last_seen: Optional[str] = None
+
+
+class FleetOverviewOut(BaseModel):
+    total: int
+    online: int
+    # The highest RELEASED build — what an unpinned screen should converge to.
+    latest_version_name: Optional[str] = None
+    latest_version_code: Optional[int] = None
+    # Online screens already reporting the latest released version_name.
+    on_latest: int
+    # Screens mid-update or rolled back, so an operator can watch a rollout land.
+    updating: int
+    failed: int
+    # app_version -> count, so the console can show the version spread at a glance.
+    versions: Dict[str, int]
+    screens: List[FleetScreenOut]
+
+
+@router.get("/fleet", response_model=FleetOverviewOut)
+def fleet_overview(
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    """Every TV across every tenant, with the version it is on and its update state.
+
+    The per-tenant screen lists already show a screen's version; this is the one place the
+    platform operator can see the whole fleet's version spread and watch a release roll out.
+    """
+    latest = (
+        db.query(models.AppRelease)
+        .filter(models.AppRelease.rollout_state == "released")
+        .order_by(models.AppRelease.version_code.desc())
+        .first()
+    )
+    org_names = {org.id: org.name for org in db.query(models.Organization).all()}
+
+    # Real fleet screens only: archived rows and never-paired registrations are not TVs an
+    # operator is monitoring.
+    screens = (
+        db.query(models.Screen)
+        .filter(
+            models.Screen.deleted_at.is_(None),
+            models.Screen.organization_id.isnot(None),
+            models.Screen.status != "waiting_pairing",
+        )
+        .all()
+    )
+
+    now = models.utcnow()
+    rows: List[FleetScreenOut] = []
+    versions: Dict[str, int] = {}
+    online = on_latest = updating = failed = 0
+
+    for screen in screens:
+        is_online = screen.last_seen is not None and (now - screen.last_seen) <= FLEET_ONLINE_WINDOW
+        if is_online:
+            online += 1
+        label = screen.app_version or "unknown"
+        versions[label] = versions.get(label, 0) + 1
+        if latest and screen.app_version and screen.app_version == latest.version_name and is_online:
+            on_latest += 1
+        if screen.update_status in ("pending", "downloading", "installing"):
+            updating += 1
+        if screen.update_status in ("failed", "rolled_back") or screen.update_failure_count > 0:
+            failed += 1
+        rows.append(
+            FleetScreenOut(
+                id=screen.id,
+                name=screen.name,
+                organization_id=screen.organization_id,
+                organization_name=org_names.get(screen.organization_id, "—"),
+                online=is_online,
+                app_version=screen.app_version,
+                target_version_code=screen.target_version_code,
+                update_status=screen.update_status,
+                update_failure_count=screen.update_failure_count or 0,
+                last_seen=_iso(screen.last_seen),
+            )
+        )
+
+    # Offline first, then furthest behind — the screens an operator needs to look at sit on
+    # top rather than being buried under the healthy majority.
+    rows.sort(key=lambda r: (r.online, r.app_version or ""))
+
+    return FleetOverviewOut(
+        total=len(rows),
+        online=online,
+        latest_version_name=latest.version_name if latest else None,
+        latest_version_code=latest.version_code if latest else None,
+        on_latest=on_latest,
+        updating=updating,
+        failed=failed,
+        versions=versions,
+        screens=rows,
+    )
 
 
 # --------------------------------------------------------------------------- demo reel

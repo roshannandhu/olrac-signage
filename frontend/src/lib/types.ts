@@ -587,6 +587,31 @@ export interface TenantUser {
   is_active: boolean
 }
 
+export interface FleetScreen {
+  id: number
+  name: string | null
+  organization_id: number
+  organization_name: string
+  online: boolean
+  app_version: string | null
+  target_version_code: number | null
+  update_status: string | null
+  update_failure_count: number
+  last_seen: string | null
+}
+
+export interface FleetOverview {
+  total: number
+  online: number
+  latest_version_name: string | null
+  latest_version_code: number | null
+  on_latest: number
+  updating: number
+  failed: number
+  versions: Record<string, number>
+  screens: FleetScreen[]
+}
+
 export interface Package {
   id: number
   name: string

@@ -88,7 +88,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </button>
         <div className="flex items-center gap-2">
           <div className="grid size-7 place-items-center rounded-lg bg-gradient-to-br from-violet-500 to-purple-700">
-            <ShieldCheck className="size-3.5 text-foreground" />
+            <ShieldCheck className="size-3.5 text-white" />
           </div>
           <p className="text-sm font-bold text-foreground">OLRAC Admin</p>
         </div>
@@ -131,7 +131,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="p-5 border-b border-border">
           <div className="flex items-center gap-3">
             <div className="size-8 rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 flex items-center justify-center">
-              <ShieldCheck className="size-4 text-foreground" />
+              <ShieldCheck className="size-4 text-white" />
             </div>
             <div>
               <p className="text-sm font-bold text-foreground">OLRAC Admin</p>

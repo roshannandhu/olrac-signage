@@ -197,7 +197,7 @@ export default function AdminPackagesPage() {
           </Field>
           <button
             type="submit" disabled={create.isPending}
-            className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-foreground transition-all hover:bg-violet-500 disabled:opacity-50"
+            className="rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-violet-500 disabled:opacity-50"
           >
             {create.isPending ? 'Creating…' : 'Create package'}
           </button>

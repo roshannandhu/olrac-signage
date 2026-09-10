@@ -269,7 +269,7 @@ function QuotaDialog({
           <button
             onClick={() => onSave({ ...(planId === '' ? {} : { plan_id: planId }), max_screens: screens, max_ad_slots: ads })}
             disabled={saving}
-            className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-foreground transition-all hover:bg-violet-500 disabled:opacity-50"
+            className="flex-1 rounded-xl bg-violet-600 py-2.5 text-sm font-semibold text-white transition-all hover:bg-violet-500 disabled:opacity-50"
           >
             {saving ? 'Saving…' : 'Save limits'}
           </button>

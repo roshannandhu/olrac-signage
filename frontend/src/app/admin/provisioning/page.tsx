@@ -142,7 +142,7 @@ export default function AdminProvisioningPage() {
             <button
               type="submit"
               disabled={loading || !wifiSsid.trim()}
-              className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-foreground text-sm font-semibold shadow-lg shadow-violet-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
+              className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-semibold shadow-lg shadow-violet-600/20 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
               <QrCode className="size-4" />
               {loading ? 'Generating QR Code...' : 'Generate Device-Owner QR'}

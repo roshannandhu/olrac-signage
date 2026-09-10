@@ -71,7 +71,7 @@ export default function AdminDemoVideoPage() {
             <button
               onClick={() => save.mutate(url.trim())}
               disabled={save.isPending || !url.trim()}
-              className="flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-foreground transition-all hover:bg-violet-500 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-xl bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white transition-all hover:bg-violet-500 disabled:opacity-50"
             >
               <Save className="size-4" />
               {save.isPending ? 'Saving…' : 'Save'}

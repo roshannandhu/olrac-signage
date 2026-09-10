@@ -73,7 +73,7 @@ export default function AdminReleasesPage() {
 
         <button
           onClick={() => setPublishOpen(!publishOpen)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-foreground text-sm font-semibold shadow-lg shadow-violet-600/20 transition-all cursor-pointer"
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold shadow-lg shadow-violet-600/20 transition-all cursor-pointer"
         >
           <PackagePlus className="size-4" />
           {publishOpen ? 'Close Form' : 'Publish New Release'}
@@ -166,7 +166,7 @@ export default function AdminReleasesPage() {
               <button
                 type="submit"
                 disabled={!versionCode || !versionName || !apkUrl || (!isShaValid && sha256.length > 0) || createMutation.isPending}
-                className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-foreground text-sm font-semibold shadow-lg transition cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-semibold shadow-lg transition cursor-pointer"
               >
                 {createMutation.isPending ? 'Publishing...' : 'Confirm & Publish'}
               </button>

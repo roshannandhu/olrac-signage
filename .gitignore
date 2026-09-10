@@ -58,3 +58,8 @@ scratch/
 android-tv/window_dump*.xml
 
 
+
+# Android release signing (never commit the key or its passwords)
+keystore.properties
+*.jks
+*.keystore

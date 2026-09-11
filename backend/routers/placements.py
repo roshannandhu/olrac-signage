@@ -570,7 +570,13 @@ def plan_options(
 
     used = len(_booking_screen_ids(scope, placement))
     current = placement.plan
-    current_price = current.price_paise if current else 0
+    # What the client is ALREADY paying for this booking, which is the only honest thing to
+    # quote a difference against. Reading it off `placement.plan` treated a booking sold at
+    # a negotiated price as worth nothing, so every package was offered at its full price as
+    # though the client had paid nothing -- and the same fallback in `upgrade_plan` then
+    # billed them for it. It is also wrong for a booking on a plan whose price was edited by
+    # hand afterwards: the client owes their agreed figure, not the plan's list price.
+    current_price = placement.price_paise
     plans = scope.query(models.TenantPlan).filter(
         models.TenantPlan.is_active.is_(True)
     ).order_by(models.TenantPlan.price_paise).all()
@@ -644,8 +650,11 @@ def upgrade_plan(
 
     difference = payload.price_difference_paise
     if difference is None:
-        difference = max(0, (plan.price_paise if plan else 0)
-                         - (placement.plan.price_paise if placement.plan else 0))
+        # Against what the booking already costs the client -- the same figure
+        # `get_plan_options` quotes, so the dialog and the charge cannot disagree. Still
+        # floored at zero: moving to a cheaper package does not auto-credit, and an operator
+        # who has agreed a refund states it through `price_difference_paise`.
+        difference = max(0, (plan.price_paise if plan else 0) - placement.price_paise)
 
     placement.plan_id = plan.id if plan else None
 

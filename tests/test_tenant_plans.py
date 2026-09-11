@@ -425,6 +425,43 @@ try:
     )
     print("  ok  the upgrade reaches the screens, not just the database")
 
+    # --- a booking sold at a custom price is not worth zero ------------------------------
+    # Moving a negotiated booking onto a package quoted the package's FULL price as the
+    # difference, because both the option list and the upgrade itself read the price off
+    # placement.plan -- which is None for a custom sale -- and fell back to 0. The client
+    # was billed the whole package again on top of what they had already agreed to pay.
+    basic_now = http.get(f"/api/tenant-plans/{small_plan['id']}", headers=auth).json()["price_paise"]
+    negotiated = http.post("/api/placements/", headers=auth, json={
+        "content_id": ad.id, "advertiser": "Handshake Ltd",
+        "starts_at": now.isoformat(), "ends_at": (now + timedelta(days=30)).isoformat(),
+        "price_paise": basic_now,
+        "targets": [{"screen_id": fleet[0].id}],
+    })
+    assert negotiated.status_code == 201, negotiated.text
+    nego_id = negotiated.json()["id"]
+    assert negotiated.json()["plan"] is None, "this booking is deliberately on no package"
+
+    nego_options = http.get(f"/api/placements/{nego_id}/plan-options", headers=auth)
+    assert nego_options.status_code == 200, nego_options.text
+    quoted = {o["plan"]["name"]: o["price_difference_paise"] for o in nego_options.json()}
+    assert quoted["Basic"] == 0, (
+        f"moving a booking already paying {basic_now} onto an equally priced package quoted "
+        f"{quoted['Basic']} -- the client is being charged the package a second time"
+    )
+    roomy_price = http.get(f"/api/tenant-plans/{roomy['id']}", headers=auth).json()["price_paise"]
+    assert quoted["Roomy"] == roomy_price - basic_now, (
+        f"a dearer package should quote only the difference, got {quoted['Roomy']}"
+    )
+
+    moved = http.post(f"/api/placements/{nego_id}/upgrade", headers=auth,
+                      json={"plan_id": small_plan["id"]})
+    assert moved.status_code == 200, moved.text
+    charged = sum(e["additional_price_paise"] for e in moved.json()["extensions"])
+    assert charged == 0, (
+        f"moving onto an equally priced package billed the client {charged} extra"
+    )
+    print("  ok  moving a custom-priced booking onto a package bills only the real difference")
+
     # An upgrade that would leave the booking over the new plan's cap is refused, the same
     # as any other route to that breach. Three screens on the roomy plan first, so that
     # moving DOWN to the two-screen plan is a real breach and not merely a tight fit.

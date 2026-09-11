@@ -1031,9 +1031,11 @@ class AdPayment(Base):
     campaign overwrote the first and filed the client as having paid half. What the client
     has handed over is now the SUM of these rows; see placements.settlement().
 
-    Rows are never edited to correct an amount. A wrong receipt is deleted and the right
-    one recorded, so the ledger reads as what actually happened rather than as whatever it
-    was last saved as.
+    A row can be corrected in place (PATCH) when the money arrived but was typed wrong --
+    an amount, a method, a missing UTR. That replaced delete-and-retype, which forced an
+    operator to re-enter a receipt that was mostly right and discarded `recorded_by` and
+    the original entry time with it. Money that never arrived is still DELETED, not edited
+    down to zero, so the ledger never shows a payment that did not happen.
 
     `method` is validated in the schema against PAYMENT_METHODS rather than by a database
     enum, so accepting a new one is a deploy and not a migration.

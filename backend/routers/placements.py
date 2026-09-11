@@ -779,9 +779,10 @@ def delete_payment(
 ):
     """Remove ONE receipt -- a duplicate entry, or a cheque that bounced.
 
-    How a wrong amount gets corrected, since a receipt is never edited in place: delete it
-    and record the right one. The remaining receipts still count, so pulling a mistaken
-    second instalment does not un-pay the deposit that really was taken.
+    For money that never arrived. A receipt that arrived but was typed wrong is corrected
+    with PATCH instead, which keeps who took it and when. The remaining receipts still
+    count, so pulling a mistaken second instalment does not un-pay the deposit that really
+    was taken.
     """
     placement = scope.get(models.AdPlacement, placement_id)
     if not placement:
@@ -797,6 +798,45 @@ def delete_payment(
     # Straight off the remaining receipts. refresh_paid_state would return early once the
     # last one is gone and leave the flag reading paid over a booking with no money on it.
     placement.is_paid = bool(placement.payments) and settlement(placement)["balance"] == 0
+
+    scope.db.commit()
+    scope.db.refresh(placement)
+    return _serialize(scope, placement)
+
+
+@router.patch("/{placement_id}/payments/{payment_id}", response_model=schemas.PlacementResponse)
+def edit_payment(
+    placement_id: int,
+    payment_id: int,
+    payload: schemas.PaymentEdit,
+    scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
+):
+    """Correct ONE receipt in place: a mistyped amount, the wrong method, a missing UTR.
+
+    The money DID arrive -- only the record of it is wrong. Deleting and retyping was the
+    only route before, which made an operator re-enter a row that was mostly right and threw
+    away `recorded_by` and the original entry time in the process. Money that never arrived
+    is still a DELETE.
+
+    Only the fields actually sent are touched, so correcting a reference cannot blank a date
+    by omission.
+    """
+    placement = scope.get(models.AdPlacement, placement_id)
+    if not placement:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    payment = next((p for p in placement.payments if p.id == payment_id), None)
+    if payment is None:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(payment, field, value)
+
+    scope.db.flush()
+    scope.db.refresh(placement)
+    # The amount may have moved, so what the client still owes moved with it. At least one
+    # receipt exists by definition here, which is the case refresh_paid_state handles.
+    refresh_paid_state(placement)
 
     scope.db.commit()
     scope.db.refresh(placement)

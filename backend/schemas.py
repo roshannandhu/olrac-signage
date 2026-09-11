@@ -1257,6 +1257,31 @@ class PaymentWrite(BaseModel):
         return normalised
 
 
+class PaymentEdit(BaseModel):
+    """Corrections to a receipt already recorded: a mistyped amount, the wrong method, a
+    missing UTR, the date it actually landed.
+
+    Every field optional -- a PATCH states only what changed. Correcting one used to mean
+    deleting the receipt and retyping it whole, so an operator re-entered a row that was
+    mostly right and lost the record of who had taken it.
+    """
+    amount_paise: Optional[int] = Field(default=None, gt=0)
+    method: Optional[str] = None
+    reference: Optional[str] = Field(default=None, max_length=80)
+    paid_at: Optional[datetime] = None
+    notes: Optional[str] = None
+
+    @field_validator("method")
+    @classmethod
+    def known_method(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return value
+        normalised = value.strip().lower()
+        if normalised not in PAYMENT_METHODS:
+            raise ValueError(f"Payment method must be one of: {', '.join(PAYMENT_METHODS)}")
+        return normalised
+
+
 class PaymentResponse(BaseModel):
     id: int
     amount_paise: int

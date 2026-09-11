@@ -380,6 +380,17 @@ export const api = {
     fetchWithAuth<Placement>(`/placements/${placementId}/payments/${paymentId}`,
       { method: 'DELETE' }),
 
+  /** Correct a receipt in place: the money arrived, the record of it was wrong. Only the
+   *  fields sent are touched. Money that never arrived is deletePayment instead. */
+  updatePayment: (placementId: number, paymentId: number, body: {
+    amount_paise?: number
+    method?: PaymentMethod
+    reference?: string | null
+    paid_at?: string
+  }) => fetchWithAuth<Placement>(`/placements/${placementId}/payments/${paymentId}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }),
+
   /** Every receipt out: none of this was ever paid. Also the only way to clear a booking
    *  flagged paid before payments were recorded, which has no receipt to remove. */
   clearPayment: (placementId: number) =>

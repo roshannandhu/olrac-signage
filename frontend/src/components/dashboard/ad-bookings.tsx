@@ -166,6 +166,11 @@ export function AdBookings({ contentId }: { contentId: number }) {
   const [payReference, setPayReference] = useState('')
   const [payDate, setPayDate] = useState('')
 
+  // The dialog renders the LIVE booking, not the snapshot it was opened with. Correcting a
+  // receipt refreshes the list underneath; reading the captured object would leave the
+  // operator staring at the figure they just fixed, wondering whether it saved.
+  const payingLive = paying ? (placements.find((p) => p.id === paying.id) ?? paying) : null
+
   const openPayment = (placement: Placement) => {
     setPaying(placement)
     // THIS receipt, not the running total: payments are a ledger and saving adds a row.
@@ -197,11 +202,41 @@ export function AdBookings({ contentId }: { contentId: number }) {
   })
 
   // One receipt out. The rest stand, so pulling a duplicate does not un-pay the deposit
-  // that really was taken -- and it is how a mistyped amount gets corrected, since a
-  // receipt is never edited in place.
+  // that really was taken. For money that never arrived -- a typo is corrected in place
+  // below instead, which keeps who took it.
   const deletePayment = useMutation({
     mutationFn: (paymentId: number) => api.deletePayment(paying!.id, paymentId),
     onSuccess: () => { refresh(); toast.success('Receipt removed'); setPaying(null) },
+    onError: fail,
+  })
+
+  // --- Correcting a receipt already taken ----------------------------------------------
+  // The row turns into its own little form rather than opening another dialog: the operator
+  // is looking straight at the wrong figure, and the fix should happen where they are.
+  const [editingReceipt, setEditingReceipt] = useState<number | null>(null)
+  const [editAmount, setEditAmount] = useState('')
+  const [editMethod, setEditMethod] = useState<PaymentMethod>('upi')
+  const [editReference, setEditReference] = useState('')
+  const [editDate, setEditDate] = useState('')
+
+  const openReceiptEdit = (receipt: Placement['payments'][number]) => {
+    setEditingReceipt(receipt.id)
+    setEditAmount(String(receipt.amount_paise / 100))
+    setEditMethod(receipt.method)
+    setEditReference(receipt.reference ?? '')
+    setEditDate(dateInput(new Date(receipt.paid_at)))
+  }
+
+  const updatePayment = useMutation({
+    mutationFn: () => api.updatePayment(paying!.id, editingReceipt!, {
+      amount_paise: Math.round(Number(editAmount || 0) * 100),
+      method: editMethod,
+      reference: editReference.trim() || null,
+      paid_at: new Date(`${editDate}T12:00:00`).toISOString(),
+    }),
+    // The dialog stays open: a correction is usually one of several being checked, and
+    // closing it would make the operator reopen the booking to see the result.
+    onSuccess: () => { refresh(); toast.success('Receipt corrected'); setEditingReceipt(null) },
     onError: fail,
   })
 
@@ -818,8 +853,8 @@ export function AdBookings({ contentId }: { contentId: number }) {
           </DialogHeader>
 
           <div className="space-y-3">
-            {paying && (() => {
-              const bill = money(paying)
+            {payingLive && (() => {
+              const bill = money(payingLive)
               const entered = Math.round(Number(payAmount || 0) * 100)
               // Against the BALANCE, not the contract: this instalment lands on top of
               // what has already been received rather than replacing it.
@@ -852,13 +887,13 @@ export function AdBookings({ contentId }: { contentId: number }) {
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <Label htmlFor="pay-amount">Amount received now (₹)</Label>
-                {paying && money(paying).balance > 0 && (
+                {payingLive && money(payingLive).balance > 0 && (
                   // One click for the case the box is most often filled by hand for: the
                   // client has now settled the lot.
                   <Button
                     size="xs"
                     variant="ghost"
-                    onClick={() => setPayAmount(String(money(paying).balance / 100))}
+                    onClick={() => setPayAmount(String(money(payingLive).balance / 100))}
                   >
                     Settles the balance
                   </Button>
@@ -902,38 +937,109 @@ export function AdBookings({ contentId }: { contentId: number }) {
             {/* The receipts already taken, in the order the money arrived. An operator
                 asking "did we already enter that transfer?" was answering it from a single
                 prefilled box, which is exactly how the same payment got typed twice. */}
-            {paying && paying.payments.length > 0 && (
+            {payingLive && payingLive.payments.length > 0 && (
               <div className="space-y-1.5">
                 <Label>Already received</Label>
                 <ul className="border-hairline divide-hairline divide-y rounded-xl border">
-                  {paying.payments.map((receipt) => (
-                    <li key={receipt.id} className="flex items-center justify-between gap-3 p-2.5 text-sm">
-                      <div className="min-w-0">
-                        <p className="text-foreground font-medium tabular-nums">
-                          {rupees(receipt.amount_paise)}
-                          <span className="text-muted-foreground font-normal">
-                            {' · '}{METHOD_LABELS[receipt.method]}{' · '}{asDate(receipt.paid_at)}
-                          </span>
-                        </p>
-                        {(receipt.reference || receipt.recorded_by) && (
-                          <p className="text-muted-foreground truncate text-xs">
-                            {receipt.reference && `Ref ${receipt.reference}`}
-                            {receipt.reference && receipt.recorded_by && ' · '}
-                            {receipt.recorded_by && `recorded by ${receipt.recorded_by}`}
-                          </p>
-                        )}
-                      </div>
-                      {/* A wrong amount is corrected by removing the receipt and entering
-                          the right one, so the ledger reads as what happened. */}
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        className="text-destructive shrink-0"
-                        disabled={deletePayment.isPending}
-                        onClick={() => deletePayment.mutate(receipt.id)}
-                      >
-                        Remove
-                      </Button>
+                  {payingLive.payments.map((receipt) => (
+                    <li key={receipt.id} className="p-2.5 text-sm">
+                      {editingReceipt === receipt.id ? (
+                        /* Corrected where it is wrong, rather than in a second dialog. The
+                           money arrived; only the record of it was mistyped. */
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <Label htmlFor={`edit-amount-${receipt.id}`} className="text-xs">Amount (₹)</Label>
+                              <Input
+                                id={`edit-amount-${receipt.id}`}
+                                type="number"
+                                min={0}
+                                value={editAmount}
+                                onChange={(event) => setEditAmount(event.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor={`edit-date-${receipt.id}`} className="text-xs">Received on</Label>
+                              <Input
+                                id={`edit-date-${receipt.id}`}
+                                type="date"
+                                value={editDate}
+                                onChange={(event) => setEditDate(event.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <Label htmlFor={`edit-method-${receipt.id}`} className="text-xs">Method</Label>
+                              <select
+                                id={`edit-method-${receipt.id}`}
+                                className="border-input bg-background h-9 w-full rounded-lg border px-2 text-sm"
+                                value={editMethod}
+                                onChange={(event) => setEditMethod(event.target.value as PaymentMethod)}
+                              >
+                                {Object.entries(METHOD_LABELS).map(([value, label]) => (
+                                  <option key={value} value={value}>{label}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor={`edit-ref-${receipt.id}`} className="text-xs">Reference</Label>
+                              <Input
+                                id={`edit-ref-${receipt.id}`}
+                                value={editReference}
+                                onChange={(event) => setEditReference(event.target.value)}
+                                placeholder="UTR / cheque no."
+                              />
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button size="xs" variant="ghost" onClick={() => setEditingReceipt(null)}>
+                              Cancel
+                            </Button>
+                            <Button
+                              size="xs"
+                              disabled={updatePayment.isPending || !(Number(editAmount) > 0)}
+                              onClick={() => updatePayment.mutate()}
+                            >
+                              {updatePayment.isPending ? 'Saving…' : 'Save'}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-foreground font-medium tabular-nums">
+                              {rupees(receipt.amount_paise)}
+                              <span className="text-muted-foreground font-normal">
+                                {' · '}{METHOD_LABELS[receipt.method]}{' · '}{asDate(receipt.paid_at)}
+                              </span>
+                            </p>
+                            {(receipt.reference || receipt.recorded_by) && (
+                              <p className="text-muted-foreground truncate text-xs">
+                                {receipt.reference && `Ref ${receipt.reference}`}
+                                {receipt.reference && receipt.recorded_by && ' · '}
+                                {receipt.recorded_by && `recorded by ${receipt.recorded_by}`}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            {/* Edit for a typo -- the money arrived. Remove for money that
+                                never did, which must leave no receipt behind. */}
+                            <Button size="xs" variant="ghost" onClick={() => openReceiptEdit(receipt)}>
+                              Edit
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="ghost"
+                              className="text-destructive"
+                              disabled={deletePayment.isPending}
+                              onClick={() => deletePayment.mutate(receipt.id)}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -944,7 +1050,7 @@ export function AdBookings({ contentId }: { contentId: number }) {
           <DialogFooter showCloseButton>
             {/* Everything off at once. Also the only way to clear a booking flagged paid
                 before payments were recorded: it has no receipt to remove. */}
-            {(paying?.payments.length || paying?.is_paid) ? (
+            {(payingLive?.payments.length || payingLive?.is_paid) ? (
               <Button variant="ghost" className="text-destructive" disabled={clearPayment.isPending}
                       onClick={() => clearPayment.mutate()}>
                 Clear all

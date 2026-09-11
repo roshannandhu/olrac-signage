@@ -140,8 +140,45 @@ try:
     assert zero.status_code == 422, zero.text
     print("  ok  a zero-rupee receipt is refused")
 
+    # --- a receipt typed wrong is corrected in place -------------------------------------
+    # The money arrived; only the record of it was wrong. Correcting it used to mean
+    # deleting the row and retyping it whole, which threw away who had taken it.
+    target = receipts[1]
+    before_who = target.get("recorded_by")
+    fixed = http.patch(f"/api/placements/{booking_id}/payments/{target['id']}", headers=auth,
+                       json={"amount_paise": 123456, "reference": "UTR-CORRECTED"})
+    assert fixed.status_code == 200, fixed.text
+    corrected = next(r for r in fixed.json()["payments"] if r["id"] == target["id"])
+    assert corrected["amount_paise"] == 123456, corrected
+    assert corrected["reference"] == "UTR-CORRECTED", corrected
+    # Untouched by omission: a PATCH states only what changed, so fixing a reference must
+    # not blank the date or silently reset the method.
+    assert corrected["method"] == target["method"], (
+        f"correcting the amount changed the method: {corrected['method']} was {target['method']}"
+    )
+    assert corrected["paid_at"] == target["paid_at"], "correcting the amount moved the date"
+    assert corrected["recorded_by"] == before_who, "the correction lost who took the money"
+    # The total moved, so what is still owed moved with it.
+    assert fixed.json()["amount_paid_paise"] == sum(
+        r["amount_paise"] for r in fixed.json()["payments"]
+    ), fixed.json()
+
+    # A zero is not a correction -- that is a deletion, and there is a route for it.
+    assert http.patch(f"/api/placements/{booking_id}/payments/{target['id']}", headers=auth,
+                      json={"amount_paise": 0}).status_code == 422
+    assert http.patch(f"/api/placements/{booking_id}/payments/{target['id']}", headers=auth,
+                      json={"method": "crypto"}).status_code == 422
+    assert http.patch(f"/api/placements/{booking_id}/payments/999999", headers=auth,
+                      json={"amount_paise": 100}).status_code == 404
+    # Put it back, so the checks below still read against the amounts they were written for.
+    restored = http.patch(f"/api/placements/{booking_id}/payments/{target['id']}", headers=auth,
+                          json={"amount_paise": target["amount_paise"],
+                                "reference": target.get("reference")})
+    assert restored.status_code == 200, restored.text
+    print("  ok  a receipt is corrected in place, keeping its method, date and who took it")
+
     # --- one wrong receipt comes out, the rest stand -------------------------------------
-    # How a mistyped amount is corrected, since a receipt is never edited in place.
+    # For money that never arrived at all -- a duplicate, or a cheque that bounced.
     dropped = http.delete(
         f"/api/placements/{booking_id}/payments/{receipts[1]['id']}", headers=auth)
     assert dropped.status_code == 200, dropped.text

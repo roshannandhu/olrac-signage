@@ -229,19 +229,34 @@ class PlaylistSynchronizer(context: Context) {
                 // Files the player may be reading right now, plus everything this sync
                 // intends to activate. Eviction must never touch these, or a playlist
                 // switch under storage pressure deletes the ad currently on screen.
+                val existingItems = dao.getAllItems()
                 val protectedNames = buildSet {
-                    dao.getAllItems().forEach { existing ->
+                    existingItems.forEach { existing ->
                         existing.localPath?.let { add(File(it).name) }
                     }
                     targets.forEach { add(it.finalFile.name) }
                 }
+                // What we last verified on disk for each content id, so a changed digest
+                // can be told from an unchanged one without re-hashing whole videos on
+                // every sync. See MediaCacheFreshness.
+                val recordedSha = existingItems.associate { it.contentId to it.sha256 }
 
                 val staged = mutableListOf<StagedDownload>()
                 val readyTargets = mutableListOf<ActivationTarget>()
                 for (target in targets) {
-                    if (target.finalFile.isFile && target.finalFile.length() > 0L) {
+                    val cachedIsCurrent = MediaCacheFreshness.canReuseCachedFile(
+                        recordedSha256 = recordedSha[target.entity.contentId],
+                        advertisedSha256 = target.entity.sha256
+                    )
+                    if (target.finalFile.isFile && target.finalFile.length() > 0L && cachedIsCurrent) {
                         readyTargets.add(target)
                     } else {
+                        if (!cachedIsCurrent && target.finalFile.isFile) {
+                            android.util.Log.i(
+                                "PlaylistSynchronizer",
+                                "Content ${target.entity.contentId} changed on the server; re-fetching"
+                            )
+                        }
                         val tempFile = storageManager.downloadWithIntegrityCheck(
                             client = client,
                             url = ApiClient.resolveMediaUrl(appContext, target.entity.fileUrl),

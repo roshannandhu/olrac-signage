@@ -30,7 +30,11 @@ def run():
         db.query(models.User).filter(models.User.email == "btf_admin@olrac.com").delete()
         org_to_clean = db.query(models.Organization).filter(models.Organization.name == "BTF Test Org").first()
         if org_to_clean:
-            db.query(models.Subscription).filter(models.Subscription.organization_id == org_to_clean.id).delete()
+            # Every child table that holds a NOT NULL organization_id. Only subscriptions
+            # were cleared, so an alert raised by an earlier run blocked the delete and the
+            # test failed in its own setup. The FKs carry no ON DELETE, so nothing cascades.
+            for child in (models.Alert, models.Subscription):
+                db.query(child).filter(child.organization_id == org_to_clean.id).delete()
             db.delete(org_to_clean)
         db.commit()
 

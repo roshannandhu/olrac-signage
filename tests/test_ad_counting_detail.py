@@ -32,7 +32,14 @@ def run():
         db.query(models.Screen).filter(models.Screen.name.like("Ad Screen%")).delete()
         db.query(models.Content).filter(models.Content.name == "Test Morning Ad").delete()
         db.query(models.User).filter(models.User.email == "ad_owner@olrac.com").delete()
-        db.query(models.Organization).filter(models.Organization.name == "Ad Test Org").delete()
+        # Child rows first: the organization FKs carry no ON DELETE, so an alert or a
+        # subscription left by an earlier run blocks the delete and fails this test in its
+        # own setup rather than in anything it is checking.
+        stale_org = db.query(models.Organization).filter(models.Organization.name == "Ad Test Org").first()
+        if stale_org:
+            for child in (models.Alert, models.Subscription):
+                db.query(child).filter(child.organization_id == stale_org.id).delete()
+            db.delete(stale_org)
         db.commit()
 
         org = models.Organization(name="Ad Test Org", slug="ad-test-org", status="active")

@@ -386,6 +386,9 @@ export default function AdminPackagesPage() {
                         onChange={(v) => editReq(request.id, { max_storage_bytes: v * GIB })} />
                       <NumField label="Days" value={draft.duration_days ?? request.duration_days}
                         onChange={(v) => editReq(request.id, { duration_days: v })} />
+                      <NumField label="Price ₹"
+                        value={Math.round((draft.price_paise ?? request.price_paise) / 100)}
+                        onChange={(v) => editReq(request.id, { price_paise: v * 100 })} />
                     </div>
                     <div className="mt-2 flex flex-wrap gap-3">
                       {FEATURES.map((f) => (
@@ -412,22 +415,26 @@ export default function AdminPackagesPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">₹</span>
-                    <input
-                      type="number"
-                      min={0}
-                      placeholder={request.price_paise ? String(request.price_paise / 100) : 'price'}
-                      value={prices[request.id] ?? ''}
-                      onChange={(e) => setPrices((p) => ({ ...p, [request.id]: e.target.value }))}
-                      className={`${inputClass} w-28`}
-                    />
-                    <button
-                      onClick={() => priceReq.mutate({ id: request.id, pricePaise: Math.round(Number(prices[request.id] || 0) * 100) })}
-                      disabled={priceReq.isPending || !prices[request.id]}
-                      className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300 transition-all hover:bg-emerald-500/20 disabled:opacity-30"
-                    >
-                      Set price
-                    </button>
+                    {request.status !== 'paid' && (
+                      <>
+                        <span className="text-xs text-muted-foreground">₹</span>
+                        <input
+                          type="number"
+                          min={0}
+                          placeholder={request.price_paise ? String(request.price_paise / 100) : 'price'}
+                          value={prices[request.id] ?? ''}
+                          onChange={(e) => setPrices((p) => ({ ...p, [request.id]: e.target.value }))}
+                          className={`${inputClass} w-28`}
+                        />
+                        <button
+                          onClick={() => priceReq.mutate({ id: request.id, pricePaise: Math.round(Number(prices[request.id] || 0) * 100) })}
+                          disabled={priceReq.isPending || !prices[request.id]}
+                          className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300 transition-all hover:bg-emerald-500/20 disabled:opacity-30"
+                        >
+                          Set price &amp; release
+                        </button>
+                      </>
+                    )}
                     <button
                       onClick={() => rejectReq.mutate(request.id)}
                       disabled={rejectReq.isPending}

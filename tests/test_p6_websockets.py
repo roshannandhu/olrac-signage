@@ -44,7 +44,7 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 from backend.database import Base, get_db  # noqa: E402
 from backend.main import app
-from backend.models import User, Organization, Screen, ScreenGroup, Playlist, EmergencyBroadcast, utcnow
+from backend.models import User, Organization, Screen, ScreenGroup, Playlist, EmergencyBroadcast, Plan, utcnow
 from backend.routers.auth import get_password_hash, create_access_token
 from backend.routers.screens import verify_device_auth
 
@@ -67,7 +67,22 @@ def setup_db():
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
     
-    org = Organization(name="Test Org", slug="test-org")
+    # Emergency broadcast is behind a plan feature gate, so the org needs a plan that
+    # grants it. Without one the broadcast 403s and this test fails on billing rather than
+    # on the playlist resolution it is actually about -- the gate itself is covered by
+    # test_plan_purchase.
+    plan = Plan(
+        name="Test Plan",
+        slug="p6-test-plan",
+        max_screens=10,
+        max_storage_bytes=10 * 1024 ** 3,
+        feature_flags_json='{"emergency_alert": true}',
+    )
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+
+    org = Organization(name="Test Org", slug="test-org", plan_id=plan.id)
     db.add(org)
     db.commit()
     db.refresh(org)

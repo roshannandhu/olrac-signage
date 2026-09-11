@@ -78,6 +78,8 @@ ISOLATED_SCRIPTS = {
     "test_ws_connection_pool.py",
     # Exercises the S3 branch that test_storage_cleanup disables.
     "test_r2_cleanup.py",
+    # Rollups on a non-Postgres dialect. Owns a database, so it belongs here.
+    "test_play_log_aggregation.py",
     "test_storage_budget.py",
     "test_bring_to_front.py",
     "test_ad_counting_detail.py",
@@ -112,6 +114,9 @@ PURE_MODULES = {
     "test_tv_deep_link.py",
     # Pricing a custom run in screen-days; arithmetic over a fake plan, no session.
     "test_plan_quote.py",
+    # Airtime formatting on the client report. Committed without being registered in
+    # either place, so it had never run -- the exact state this guard exists to catch.
+    "test_report_airtime.py",
 }
 
 

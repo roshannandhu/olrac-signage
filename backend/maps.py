@@ -75,14 +75,19 @@ def static_map_url(points: list[dict], width: int = 640, height: int = 360) -> s
         "scale=2",  # retina, so the pins are not mushy when printed
         "maptype=roadmap",
     ]
-    # Online and offline are separate marker groups so a client can see at a glance that
-    # every screen they paid for was actually reporting in.
-    for colour, wanted in (("0x16a34a", True), ("0x64748b", False)):
-        group = [p for p in located if bool(p.get("online")) is wanted]
-        if not group:
-            continue
-        pins = "|".join(f"{p['latitude']:.6f},{p['longitude']:.6f}" for p in group)
-        params.append(f"markers=color:{colour}%7C{pins}")
+    # One marker per screen, each carrying its location's number so a pin reads back to a
+    # row in the report's performance table. Green = reporting in, slate = not -- so a client
+    # sees at a glance that every screen they paid for was live. Google labels take a single
+    # character, so 1-9 show their number and the rest fall back to a plain coloured pin (the
+    # legend in the report still names every location, and the self-drawn map numbers them all).
+    for p in located:
+        colour = "0x16a34a" if p.get("online") else "0x64748b"
+        marker = f"markers=color:{colour}"
+        label = (p.get("label") or "").strip()
+        if len(label) == 1 and label.isalnum():
+            marker += f"%7Clabel:{label}"
+        marker += f"%7C{p['latitude']:.6f},{p['longitude']:.6f}"
+        params.append(marker)
 
     params.append(f"key={key}")
     return f"{STATIC_MAPS_URL}?{'&'.join(params)}"
@@ -117,6 +122,21 @@ def _choose_zoom(located: list[dict], width: int, height: int) -> int:
         if (bottom_right_x - top_left_x) < width * 0.82 and (bottom_right_y - top_left_y) < height * 0.82:
             return zoom
     return 2
+
+
+@lru_cache(maxsize=4)
+def _marker_font(size: int):
+    """Bold TTF for the number drawn inside a pin. Falls back to PIL's bitmap font (which
+    ignores size) if the bundled face is missing, so a map still draws."""
+    import pathlib
+
+    from PIL import ImageFont
+
+    path = pathlib.Path(__file__).parent / "reports" / "fonts" / "Arial-Bold.ttf"
+    try:
+        return ImageFont.truetype(str(path), size)
+    except Exception:  # noqa: BLE001 - a missing font degrades the label, not the map
+        return ImageFont.load_default()
 
 
 @lru_cache(maxsize=512)
@@ -185,17 +205,28 @@ def render_osm_map(points: list[dict], width: int = 640, height: int = 360) -> b
                 canvas.paste(tile, (int(tile_x * TILE_PX - origin_x), int(tile_y * TILE_PX - origin_y)))
 
         draw = ImageDraw.Draw(canvas)
-        for point in located:
+        label_font = _marker_font(15)
+        # Draw furthest-south pins first so nearer-the-viewer (lower) pins overlap on top,
+        # and label numbers stay legible where locations cluster.
+        for point in sorted(located, key=lambda p: p["latitude"], reverse=True):
             px, py = _project(point["latitude"], point["longitude"], zoom)
             x, y = px - origin_x, py - origin_y
-            if not (-20 <= x <= width + 20 and -20 <= y <= height + 20):
+            if not (-30 <= x <= width + 30 and -30 <= y <= height + 30):
                 continue
             # Green for a screen that is reporting in, slate for one that is not -- the same
             # distinction the Google markers drew, so a client can see at a glance that
             # every screen they paid for was actually live.
             fill = (22, 163, 74) if point.get("online") else (100, 116, 139)
-            draw.ellipse((x - 7, y - 7, x + 7, y + 7), fill=fill, outline=(255, 255, 255), width=2)
-            draw.polygon([(x - 4, y + 5), (x + 4, y + 5), (x, y + 13)], fill=fill)
+            r = 12
+            draw.polygon([(x - 7, y + r - 3), (x + 7, y + r - 3), (x, y + r + 11)], fill=fill)
+            draw.ellipse((x - r, y - r, x + r, y + r), fill=fill, outline=(255, 255, 255), width=3)
+            # The location number, matching the report's performance table and legend.
+            label = str(point.get("label") or "").strip()
+            if label:
+                box = draw.textbbox((0, 0), label, font=label_font)
+                tw, th = box[2] - box[0], box[3] - box[1]
+                draw.text((x - tw / 2 - box[0], y - th / 2 - box[1]), label,
+                          fill=(255, 255, 255), font=label_font)
 
         # Required by the tile terms, and a client-facing document should carry it anyway.
         note = "(C) OpenStreetMap contributors"

@@ -331,7 +331,6 @@ def _verification_card(style, report: dict, width: float):
     """Scannable Proof-of-Performance audit certificate with native vector QR code."""
     cert_id = report.get("certificate_id") or f"POP-{report.get('placement_id', 0):04d}-AUDIT"
     verify_url = report.get("verification_url") or f"https://olrac-signage.abhinavsanthosh221.workers.dev/verify/pop?cert={cert_id}"
-    verify_url_escaped = verify_url.replace("&", "&amp;")
 
     qr_widget = qr.QrCodeWidget(verify_url)
     bounds = qr_widget.getBounds()
@@ -345,7 +344,6 @@ def _verification_card(style, report: dict, width: float):
         [Paragraph('<font color="#16a34a"><b>OFFICIAL AUDIT &amp; VERIFICATION CERTIFICATE</b></font>', style["label"])],
         [Table([
             [Paragraph("Certificate ID:", style["label"]), Paragraph(f'<b>{cert_id}</b>', style["value_sm"])],
-            [Paragraph("Verification Link:", style["label"]), Paragraph(f'<font size="6" color="#2563eb">{verify_url_escaped}</font>', style["note"])],
             [Paragraph("Delivery Audit:", style["label"]), Paragraph('<font color="#16a34a"><b>Cryptographically Verified &amp; Deduplicated</b></font>', style["body"])],
             [Paragraph("Scan with phone:", style["label"]), Paragraph('Scan the QR code to verify live logs, screen health, and audit stamps.', style["note"])],
         ], colWidths=[24 * mm, width - 24 * mm - qr_size - 18 * mm],
@@ -506,24 +504,46 @@ def build_pdf(report: dict) -> bytes:
     ]))
     story.append(Spacer(1, 4 * mm))
 
-    # --- The creative, and where it ran (PRESERVED UNTOUCHED) -------------------------
+    # --- The creative, and where it ran -----------------------------------------------
     creative = _fetch_image(report.get("content_thumbnail"))
-    located = [s for s in report["per_screen"] if s.get("latitude") and s.get("longitude")]
-    map_bytes = fetch_static_map(located, width=760, height=420) if located else None
+
+    # Number each location the way the performance table does (1..N, ordered by plays) and
+    # stamp that number onto its screens' map pins, so a pin on the map and a row in the
+    # table below are unmistakably the same place. The legend under the map reads the numbers
+    # out and says what the pin colours mean -- that is what turns a field of dots into
+    # something a client can actually understand.
+    loc_order = [p["location"] for p in report["per_location"]]
+    loc_index = {name: i for i, name in enumerate(loc_order, 1)}
+    located = []
+    for s in report["per_screen"]:
+        if s.get("latitude") is not None and s.get("longitude") is not None:
+            pin = dict(s)
+            pin["label"] = str(loc_index.get(s.get("location") or "Location not set", ""))
+            located.append(pin)
+    map_bytes = fetch_static_map(located, width=900, height=500) if located else None
 
     left = (Image(BytesIO(creative), width=58 * mm, height=58 * mm, kind="proportional")
             if creative else Paragraph("Creative preview unavailable.", style["note"]))
+
+    map_rows = [[Paragraph("LOCATIONS IN MAP", style["label"])]]
     if map_bytes:
-        right = Image(BytesIO(map_bytes), width=104 * mm, height=57 * mm)
+        map_rows.append([Image(BytesIO(map_bytes), width=104 * mm, height=57 * mm)])
+        legend = " &nbsp;&#183;&nbsp; ".join(
+            f'<b>{loc_index[name]}.</b> {_safe(name)}' for name in loc_order if name in loc_index
+        )
+        map_rows.append([Paragraph(legend, style["note"])])
+        map_rows.append([Paragraph(
+            '<font color="#16a34a"><b>&#9679;</b></font> Live &nbsp;&nbsp; '
+            '<font color="#64748b"><b>&#9679;</b></font> Not reporting in', style["note"])])
     elif located:
-        right = Paragraph("Map could not be drawn just now. The locations are listed below.", style["note"])
+        map_rows.append([Paragraph("Map could not be drawn just now. The locations are listed below.", style["note"])])
     else:
-        right = Paragraph("No coordinates set for these screens, so no map can be drawn.", style["note"])
+        map_rows.append([Paragraph("No coordinates set for these screens, so no map can be drawn.", style["note"])])
 
     story.append(Table(
         [[
             _card([[Paragraph("AD THUMBNAIL", style["label"])], [left]], [64 * mm]),
-            _card([[Paragraph("LOCATIONS IN MAP", style["label"])], [right]], [112 * mm]),
+            _card(map_rows, [112 * mm]),
         ]],
         colWidths=[66 * mm, content_w - 66 * mm],
         style=TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"),

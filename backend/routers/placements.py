@@ -56,6 +56,56 @@ def resolve_tenant_plan(scope: TenantScope, plan_id: int | None) -> models.Tenan
     return plan
 
 
+def _sell_more_time(
+    scope: TenantScope,
+    placement: models.AdPlacement,
+    *,
+    extended_to,
+    additional_price_paise: int,
+    extended_from=None,
+    is_paid: bool = False,
+    notes: str | None = None,
+) -> models.AdPlacementExtension:
+    """The one implementation of "more time was sold against this booking".
+
+    Both routes here that sell time -- an outright extension and a plan change that carries
+    the run forward -- used to build the row and then repeat the same two follow-ups, each
+    with its own copy of the comment explaining why they are not optional. Two copies of a
+    step that must never be skipped is how one of them eventually gets skipped; content.py
+    documents that exact outcome elsewhere in this codebase.
+
+    Deliberately does NOT commit. The callers own the transaction, because a plan change
+    writes `plan_id` in the same one.
+    """
+    # Defaults to continuing from wherever the run currently finishes, so back-to-back
+    # extensions cannot leave an unpaid gap the advert would go dark in.
+    starts = extended_from or effective_ends_at(placement)
+    if extended_to <= starts:
+        raise HTTPException(
+            status_code=422,
+            detail="The extension must end after it begins",
+        )
+
+    extension = models.AdPlacementExtension(
+        placement_id=placement.id,
+        extended_from=starts,
+        extended_to=extended_to,
+        additional_price_paise=additional_price_paise,
+        is_paid=is_paid,
+        notes=notes,
+    )
+    scope.db.add(extension)
+    scope.db.flush()
+    scope.db.refresh(placement)
+
+    # Without this the extension is a database row and nothing else: the player stops the
+    # advert on PlaylistItem.end_at, which is still the original date.
+    sync_placement_window(scope, placement)
+    # More was sold, so a settled booking is settled no longer.
+    refresh_paid_state(placement)
+    return extension
+
+
 def sync_placement_window(scope: TenantScope, placement: models.AdPlacement) -> None:
     """Push each location's run window onto the playlist item it placed.
 
@@ -488,32 +538,15 @@ def add_extension(
     if not placement:
         raise HTTPException(status_code=404, detail="Booking not found")
 
-    # Defaults to continuing from wherever the run currently finishes, so back-to-back
-    # extensions cannot leave an unpaid gap the advert would go dark in.
-    starts = payload.extended_from or effective_ends_at(placement)
-    if payload.extended_to <= starts:
-        raise HTTPException(
-            status_code=422,
-            detail="The extension must end after it begins",
-        )
-
-    extension = models.AdPlacementExtension(
-        placement_id=placement.id,
-        extended_from=starts,
+    _sell_more_time(
+        scope,
+        placement,
         extended_to=payload.extended_to,
         additional_price_paise=payload.additional_price_paise,
+        extended_from=payload.extended_from,
         is_paid=payload.is_paid,
         notes=payload.notes,
     )
-    scope.db.add(extension)
-    scope.db.flush()
-    scope.db.refresh(placement)
-
-    # Without this the extension is a database row and nothing else: the player stops the
-    # advert on PlaylistItem.end_at, which is still the original date.
-    sync_placement_window(scope, placement)
-    # More was sold, so a settled booking is settled no longer.
-    refresh_paid_state(placement)
 
     scope.db.commit()
     scope.db.refresh(placement)
@@ -662,23 +695,18 @@ def upgrade_plan(
     # its own length, and inventing one here would sell the client time nobody agreed.
     if payload.extend and plan is not None:
         # From the current effective end, not from today: back-to-back, so the advert never
-        # goes dark between the old plan finishing and the new one starting.
+        # goes dark between the old plan finishing and the new one starting. That default,
+        # and everything that has to follow the row being written, lives in _sell_more_time.
         starts = effective_ends_at(placement)
-        scope.db.add(models.AdPlacementExtension(
-            placement_id=placement.id,
+        _sell_more_time(
+            scope,
+            placement,
             extended_from=starts,
             extended_to=starts + timedelta(days=plan.duration_days),
             additional_price_paise=difference,
             is_paid=False,
             notes=f"Upgraded to {plan.name}",
-        ))
-        scope.db.flush()
-        scope.db.refresh(placement)
-        # Without this the extension is a row and nothing else -- every placed item still
-        # carries the old end date and the player stops the advert on it.
-        sync_placement_window(scope, placement)
-        # The difference is owed, so a booking that was settled is part paid again.
-        refresh_paid_state(placement)
+        )
 
     scope.db.commit()
     scope.db.refresh(placement)

@@ -94,32 +94,51 @@ export function AdBookings({ contentId }: { contentId: number }) {
   const refresh = () => invalidateBookingViews(queryClient)
   const fail = (error: Error) => toast.error(error.message)
 
-  const [extending, setExtending] = useState<Placement | null>(null)
+  // One dialog, two modes. The two behaviours stay separately implemented -- own state, own
+  // mutation, own footer -- because "move this booking onto a package" and "sell this client
+  // more time" are different sales. Only the surface is shared.
+  const [revising, setRevising] = useState<Placement | null>(null)
+  const [mode, setMode] = useState<'plan' | 'time'>('plan')
+
   const [extendTo, setExtendTo] = useState('')
   const [extendPrice, setExtendPrice] = useState('')
 
   const [deleting, setDeleting] = useState<Placement | null>(null)
 
   // --- Changing a client's plan -------------------------------------------------------
-  const [upgrading, setUpgrading] = useState<Placement | null>(null)
+  // Aliases, so everything each mode renders keeps reading the name that describes what it
+  // is doing, and neither can see the other's placement while it is not the open mode.
+  const extending = mode === 'time' ? revising : null
+  const upgrading = mode === 'plan' ? revising : null
   // `null` is now a plan choice of its own -- "off the package, on a negotiated price" --
   // so "nothing chosen yet" cannot also be null. undefined is that.
   const [chosenPlan, setChosenPlan] = useState<number | null | undefined>(undefined)
   const [alsoExtend, setAlsoExtend] = useState(true)
   const planOptionsQuery = useQuery({
-    queryKey: ['plan-options', upgrading?.id],
-    queryFn: () => api.getPlanOptions(upgrading!.id),
+    queryKey: ['plan-options', revising?.id],
+    queryFn: () => api.getPlanOptions(revising!.id),
     enabled: Boolean(upgrading),
   })
 
-  const openUpgrade = (placement: Placement) => {
-    setUpgrading(placement)
+  // Both modes are primed on open, so switching between them mid-dialog never lands on a
+  // blank date or a stale plan choice from the last booking.
+  const openRevise = (placement: Placement, initial: 'plan' | 'time') => {
+    setRevising(placement)
+    setMode(initial)
     setChosenPlan(undefined)
     setAlsoExtend(true)
+    // Default to a fortnight past wherever the run currently finishes, so the common case
+    // is one click and a price. extended_from defaults server side to the same point,
+    // which is what stops an unpaid gap opening mid-campaign.
+    const from = Date.parse(placement.effective_ends_at || placement.ends_at)
+    setExtendTo(dateInput(from + 15 * 864e5))
+    setExtendPrice('')
   }
+  const openUpgrade = (placement: Placement) => openRevise(placement, 'plan')
+  const openExtend = (placement: Placement) => openRevise(placement, 'time')
 
   const upgrade = useMutation({
-    mutationFn: () => api.upgradePlan(upgrading!.id, {
+    mutationFn: () => api.upgradePlan(revising!.id, {
       plan_id: chosenPlan ?? null,
       // Meaningless when coming off a package: there is no plan length to extend BY, and
       // the server ignores it, so the checkbox is hidden rather than sent as a lie.
@@ -132,7 +151,7 @@ export function AdBookings({ contentId }: { contentId: number }) {
           ? 'Moved off the package; the price is yours to set'
           : alsoExtend ? 'Plan changed and the run extended' : 'Plan changed',
       )
-      setUpgrading(null)
+      setRevising(null)
     },
     onError: fail,
   })
@@ -183,23 +202,13 @@ export function AdBookings({ contentId }: { contentId: number }) {
     onError: fail,
   })
 
-  const openExtend = (placement: Placement) => {
-    setExtending(placement)
-    // Default to a fortnight past wherever the run currently finishes, so the common case
-    // is one click and a price. extended_from defaults server side to the same point,
-    // which is what stops an unpaid gap opening mid-campaign.
-    const from = Date.parse(placement.effective_ends_at || placement.ends_at)
-    setExtendTo(dateInput(from + 15 * 864e5))
-    setExtendPrice('')
-  }
-
   const extend = useMutation({
-    mutationFn: () => api.addPlacementExtension(extending!.id, {
+    mutationFn: () => api.addPlacementExtension(revising!.id, {
       extended_to: new Date(`${extendTo}T23:59:59`).toISOString(),
       additional_price_paise: Math.round(Number(extendPrice || 0) * 100),
       is_paid: false,
     }),
-    onSuccess: () => { refresh(); toast.success('Booking extended'); setExtending(null) },
+    onSuccess: () => { refresh(); toast.success('Booking extended'); setRevising(null) },
     onError: fail,
   })
 
@@ -504,70 +513,6 @@ export function AdBookings({ contentId }: { contentId: number }) {
         initialAdvertiser={contentQuery.data?.client_name ?? placements[0]?.advertiser ?? ''}
       />
 
-      {/* Sell more time on an existing booking */}
-      <Dialog open={Boolean(extending)} onOpenChange={(open) => !open && setExtending(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Extend booking</DialogTitle>
-            <DialogDescription>
-              Sell more time on this campaign. It carries on from where the run currently
-              finishes, so there is no unpaid gap, and the screens are told straight away.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="space-y-2">
-              <Label htmlFor="extend-to">Extend until</Label>
-              <Input id="extend-to" type="date" value={extendTo} onChange={(e) => setExtendTo(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="extend-price">Additional amount (₹)</Label>
-              <Input id="extend-price" type="number" min={0} value={extendPrice} onChange={(e) => setExtendPrice(e.target.value)} placeholder="12500" />
-            </div>
-            {Boolean(extending?.extensions.length) && (
-              <div className="space-y-2">
-                <Label>Existing extensions</Label>
-                <div className="space-y-1">
-                  {extending?.extensions.map((extension) => (
-                    <div key={extension.id} className="bg-muted/40 flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm">
-                      <span>
-                        {asDate(extension.extended_from)} → {asDate(extension.extended_to)} · {rupees(extension.additional_price_paise)}
-                      </span>
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        className="text-destructive"
-                        onClick={() => dropExtension.mutate({ id: extending.id, extensionId: extension.id })}
-                        aria-label="Remove this extension"
-                      >
-                        <X />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setExtending(null)}>Cancel</Button>
-            <Button
-              onClick={() => extend.mutate()}
-              // An end before the current one is a 422 from the server, and a blank price
-              // booked a free extension without saying so. A typed 0 is still allowed --
-              // goodwill extensions are real, silent ones are not.
-              disabled={
-                extend.isPending
-                || !extendTo
-                || !extendPrice.trim()
-                || (extending != null
-                    && Date.parse(`${extendTo}T23:59:59`)
-                       <= Date.parse(extending.effective_ends_at || extending.ends_at))
-              }
-            >
-              Extend
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <Dialog open={Boolean(addTo)} onOpenChange={(open) => !open && setAddTo(null)}>
         <DialogContent className="sm:max-w-md">
@@ -632,124 +577,146 @@ export function AdBookings({ contentId }: { contentId: number }) {
       </Dialog>
 
       {/* --- Change plan ------------------------------------------------------------ */}
-      <Dialog open={Boolean(upgrading)} onOpenChange={(open) => { if (!open) setUpgrading(null) }}>
+      {/* Revising a booking: move it onto a package, or sell it more time. One surface,
+          two deliberately separate behaviours -- each keeps its own fields, its own submit
+          and its own rules. */}
+      <Dialog open={Boolean(revising)} onOpenChange={(open) => { if (!open) setRevising(null) }}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>Change {upgrading?.advertiser}&apos;s plan</DialogTitle>
+            <DialogTitle>Revise {revising?.advertiser}&apos;s booking</DialogTitle>
             <DialogDescription>
-              The booking keeps its history and its report. The difference in price is added
-              as an extension, so one client stays one campaign and one invoice.
+              The booking keeps its history and its report either way. Anything charged is
+              added as an extension, so one client stays one campaign and one invoice.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="max-h-[50vh] space-y-2 overflow-y-auto py-1">
-            {/* What the booking is on TODAY, stated before the list of what it could move
-                to. The list alone answered it only when the plan was still being sold: a
-                campaign on a retired package, or one sold without a package at all, opened
-                this dialog with nothing marked current and no way to tell what the client
-                had actually bought. */}
-            <p className="text-muted-foreground text-sm">
-              Currently on{' '}
-              <span className="text-foreground font-medium">
-                {upgrading?.plan ? upgrading.plan.name : 'no package — a custom price'}
-              </span>
-              {upgrading && ` · ${rupees(upgrading.total_price_paise ?? upgrading.price_paise)} · runs on ${upgrading.screens_used} screen${upgrading.screens_used === 1 ? '' : 's'}`}
-            </p>
-
-            {planOptionsQuery.isPending && <Skeleton className="h-24 w-full" />}
-            {planOptionsQuery.isError && (
-              <ErrorState
-                message="The plans this booking could move to could not be loaded."
-                onRetry={() => planOptionsQuery.refetch()}
-              />
-            )}
-
-            {/* Off the package entirely. Every plan was offered and this was not, so a
-                booking put on the wrong plan could be moved between plans but never taken
-                off one -- and a client renegotiated onto an agreed figure had nowhere to
-                be recorded. */}
-            <button
-              type="button"
-              disabled={!upgrading?.plan}
-              onClick={() => setChosenPlan(null)}
-              className={`w-full rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                chosenPlan === null ? 'border-primary bg-primary/10 shadow-sm' : 'border-input hover:bg-muted/50'
-              }`}
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium">Custom — no package</span>
-                {!upgrading?.plan && <Badge variant="outline">Current</Badge>}
-              </div>
-              <p className="text-muted-foreground mt-1 text-sm">
-                Keeps the price and the run as they are, with no location cap. Edit the
-                figure in &ldquo;Edit client &amp; ad details&rdquo;.
-              </p>
-            </button>
-
-            {planOptionsQuery.isSuccess && !planOptionsQuery.data?.length && (
-              <p className="text-muted-foreground text-sm">
-                No packages have been set up yet, so custom pricing is the only option.
-                Create one under Plans to sell by package.
-              </p>
-            )}
-
-            {planOptionsQuery.data?.map((option: PlanOption) => {
-              const selected = chosenPlan === option.plan.id
-              // Retired plans are listed so the current one is always visible, but a plan
-              // the tenant has stopped selling must not be sellable again from here.
-              const retired = !option.plan.is_active
-              return (
-                <button
-                  key={option.plan.id}
-                  type="button"
-                  disabled={option.is_current || !option.fits || retired}
-                  onClick={() => setChosenPlan(option.plan.id)}
-                  className={`w-full rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
-                    selected ? 'border-primary bg-primary/10 shadow-sm' : 'border-input hover:bg-muted/50'
-                  }`}
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{option.plan.name}</span>
-                    {option.recommended && <Badge variant="success">Recommended</Badge>}
-                    {option.is_current && <Badge variant="outline">Current plan</Badge>}
-                    {retired && <Badge variant="warning">No longer sold</Badge>}
-                    {/* Said plainly rather than just disabled: "why can I not pick this?"
-                        is the question a greyed-out row always provokes. */}
-                    {!option.fits && (
-                      <Badge variant="danger">
-                        Covers {option.plan.max_locations}, this booking runs on {upgrading?.screens_used}
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-muted-foreground mt-1 text-sm">
-                    {rupees(option.plan.price_paise)} · {option.plan.duration_days} days · up to{' '}
-                    {option.plan.max_locations} screen{option.plan.max_locations === 1 ? '' : 's'}
-                    {!option.is_current && option.price_difference_paise > 0 && (
-                      <span className="text-foreground"> · +{rupees(option.price_difference_paise)} to move</span>
-                    )}
-                  </p>
-                </button>
-              )
-            })}
+          <div role="tablist" aria-label="What to revise" className="bg-muted/50 grid grid-cols-2 gap-1 rounded-lg p-1">
+            {([['plan', 'Move to a plan'], ['time', 'Add time']] as const).map(([value, label]) => (
+              <button
+                key={value}
+                role="tab"
+                type="button"
+                aria-selected={mode === value}
+                onClick={() => setMode(value)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  mode === value ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
           </div>
 
-          {/* Hidden when moving off a package: there is no plan length to extend by, so
-              offering the choice would promise something the change cannot do. */}
-          {chosenPlan != null && (
+          {mode === 'plan' && (
             <>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="accent-primary size-4"
-                  checked={alsoExtend}
-                  onChange={(event) => setAlsoExtend(event.target.checked)}
-                />
-                Extend the run by the new plan&apos;s length and charge the difference
-              </label>
-              <p className="text-muted-foreground text-xs">
-                Leave this off to correct a booking that is on the wrong plan without selling
-                any extra time. Anything charged is added to what the client owes.
+            <div className="max-h-[50vh] space-y-2 overflow-y-auto py-1">
+              {/* What the booking is on TODAY, stated before the list of what it could move
+                  to. The list alone answered it only when the plan was still being sold: a
+                  campaign on a retired package, or one sold without a package at all, opened
+                  this dialog with nothing marked current and no way to tell what the client
+                  had actually bought. */}
+              <p className="text-muted-foreground text-sm">
+                Currently on{' '}
+                <span className="text-foreground font-medium">
+                  {upgrading?.plan ? upgrading.plan.name : 'no package — a custom price'}
+                </span>
+                {upgrading && ` · ${rupees(upgrading.total_price_paise ?? upgrading.price_paise)} · runs on ${upgrading.screens_used} screen${upgrading.screens_used === 1 ? '' : 's'}`}
               </p>
+
+              {planOptionsQuery.isPending && <Skeleton className="h-24 w-full" />}
+              {planOptionsQuery.isError && (
+                <ErrorState
+                  message="The plans this booking could move to could not be loaded."
+                  onRetry={() => planOptionsQuery.refetch()}
+                />
+              )}
+
+              {/* Off the package entirely. Every plan was offered and this was not, so a
+                  booking put on the wrong plan could be moved between plans but never taken
+                  off one -- and a client renegotiated onto an agreed figure had nowhere to
+                  be recorded. */}
+              <button
+                type="button"
+                disabled={!upgrading?.plan}
+                onClick={() => setChosenPlan(null)}
+                className={`w-full rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                  chosenPlan === null ? 'border-primary bg-primary/10 shadow-sm' : 'border-input hover:bg-muted/50'
+                }`}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">Custom — no package</span>
+                  {!upgrading?.plan && <Badge variant="outline">Current</Badge>}
+                </div>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  Keeps the price and the run as they are, with no location cap. Edit the
+                  figure in &ldquo;Edit client &amp; ad details&rdquo;.
+                </p>
+              </button>
+
+              {planOptionsQuery.isSuccess && !planOptionsQuery.data?.length && (
+                <p className="text-muted-foreground text-sm">
+                  No packages have been set up yet, so custom pricing is the only option.
+                  Create one under Plans to sell by package.
+                </p>
+              )}
+
+              {planOptionsQuery.data?.map((option: PlanOption) => {
+                const selected = chosenPlan === option.plan.id
+                // Retired plans are listed so the current one is always visible, but a plan
+                // the tenant has stopped selling must not be sellable again from here.
+                const retired = !option.plan.is_active
+                return (
+                  <button
+                    key={option.plan.id}
+                    type="button"
+                    disabled={option.is_current || !option.fits || retired}
+                    onClick={() => setChosenPlan(option.plan.id)}
+                    className={`w-full rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                      selected ? 'border-primary bg-primary/10 shadow-sm' : 'border-input hover:bg-muted/50'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{option.plan.name}</span>
+                      {option.recommended && <Badge variant="success">Recommended</Badge>}
+                      {option.is_current && <Badge variant="outline">Current plan</Badge>}
+                      {retired && <Badge variant="warning">No longer sold</Badge>}
+                      {/* Said plainly rather than just disabled: "why can I not pick this?"
+                          is the question a greyed-out row always provokes. */}
+                      {!option.fits && (
+                        <Badge variant="danger">
+                          Covers {option.plan.max_locations}, this booking runs on {upgrading?.screens_used}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-muted-foreground mt-1 text-sm">
+                      {rupees(option.plan.price_paise)} · {option.plan.duration_days} days · up to{' '}
+                      {option.plan.max_locations} screen{option.plan.max_locations === 1 ? '' : 's'}
+                      {!option.is_current && option.price_difference_paise > 0 && (
+                        <span className="text-foreground"> · +{rupees(option.price_difference_paise)} to move</span>
+                      )}
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Hidden when moving off a package: there is no plan length to extend by, so
+                offering the choice would promise something the change cannot do. */}
+            {chosenPlan != null && (
+            <>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="accent-primary size-4"
+                    checked={alsoExtend}
+                    onChange={(event) => setAlsoExtend(event.target.checked)}
+                  />
+                  Extend the run by the new plan&apos;s length and charge the difference
+                </label>
+                <p className="text-muted-foreground text-xs">
+                  Leave this off to correct a booking that is on the wrong plan without selling
+                  any extra time. Anything charged is added to what the client owes.
+                </p>
             </>
           )}
 
@@ -761,6 +728,65 @@ export function AdBookings({ contentId }: { contentId: number }) {
               {upgrade.isPending ? 'Changing…' : chosenPlan === null ? 'Move off the package' : 'Change plan'}
             </Button>
           </DialogFooter>
+            </>
+          )}
+
+          {mode === 'time' && (
+            <>
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label htmlFor="extend-to">Extend until</Label>
+                <Input id="extend-to" type="date" value={extendTo} onChange={(e) => setExtendTo(e.target.value)} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="extend-price">Additional amount (₹)</Label>
+                <Input id="extend-price" type="number" min={0} value={extendPrice} onChange={(e) => setExtendPrice(e.target.value)} placeholder="12500" />
+              </div>
+              {Boolean(extending?.extensions.length) && (
+                <div className="space-y-2">
+                  <Label>Existing extensions</Label>
+                  <div className="space-y-1">
+                    {extending?.extensions.map((extension) => (
+                      <div key={extension.id} className="bg-muted/40 flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm">
+                        <span>
+                          {asDate(extension.extended_from)} → {asDate(extension.extended_to)} · {rupees(extension.additional_price_paise)}
+                        </span>
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => dropExtension.mutate({ id: extending.id, extensionId: extension.id })}
+                          aria-label="Remove this extension"
+                        >
+                          <X />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setRevising(null)}>Cancel</Button>
+              <Button
+                onClick={() => extend.mutate()}
+                // An end before the current one is a 422 from the server, and a blank price
+                // booked a free extension without saying so. A typed 0 is still allowed --
+                // goodwill extensions are real, silent ones are not.
+                disabled={
+                  extend.isPending
+                  || !extendTo
+                  || !extendPrice.trim()
+                  || (extending != null
+                      && Date.parse(`${extendTo}T23:59:59`)
+                         <= Date.parse(extending.effective_ends_at || extending.ends_at))
+                }
+              >
+                Extend
+              </Button>
+            </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

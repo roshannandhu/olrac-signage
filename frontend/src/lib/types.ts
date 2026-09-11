@@ -514,8 +514,6 @@ export interface PlanOption {
   is_current: boolean
   /** Whether it covers the screens the booking ALREADY runs on. */
   fits: boolean
-  price_difference_paise: number
-  extra_days: number
   /** Exactly one option carries this: the cheapest that fits the screens in use. */
   recommended: boolean
 }

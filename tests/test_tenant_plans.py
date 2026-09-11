@@ -14,7 +14,7 @@ Throwaway Postgres database. Run directly:  python tests/test_tenant_plans.py
 import os
 import sys
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -379,40 +379,58 @@ try:
         "the cheapest active plan that covers the screens already assigned should be the "
         f"recommendation, got {recommended[0]['plan']['name']}"
     )
-    # Against the plan's CURRENT price, not the figure it was created with -- an earlier
-    # check in this file repriced Roomy, and the difference is quoted from today's list.
+    # The plan's CURRENT price, not the figure it was created with -- an earlier check in
+    # this file repriced Roomy, and a change hands over today's list price.
     roomy_now = http.get(f"/api/tenant-plans/{roomy['id']}", headers=auth).json()["price_paise"]
-    assert recommended[0]["price_difference_paise"] == roomy_now - small_plan["price_paise"], (
-        recommended[0]
-    )
     assert by_name["Basic"]["fits"] is True and by_name["Basic"]["recommended"] is False, (
         "the plan they are already on is never the recommendation"
     )
     print("  ok  plan options recommend exactly one plan: the cheapest that fits the screens in use")
 
-    upgraded = http.post(f"/api/placements/{grow_id}/upgrade", headers=auth,
-                         json={"plan_id": roomy["id"]})
-    assert upgraded.status_code == 200, upgraded.text
-    after_upgrade = upgraded.json()
-    assert after_upgrade["plan"]["id"] == roomy["id"], after_upgrade["plan"]
-    assert len(after_upgrade["extensions"]) == 1, (
-        "the price difference should be recorded as an extension, keeping one booking"
+    # Changing a plan REPLACES. It is a correction, not a sale: the price becomes the new
+    # plan's, nothing is billed on top and no date moves. This used to charge the difference
+    # as an extension AND push the end date out by the new plan's length, so a booking put
+    # on the right plan was billed old price + difference over a run nobody had agreed.
+    was_extensions = len(outgrown.json()["extensions"])
+    changed = http.post(f"/api/placements/{grow_id}/change-plan", headers=auth,
+                        json={"plan_id": roomy["id"]})
+    assert changed.status_code == 200, changed.text
+    after = changed.json()
+    assert after["plan"]["id"] == roomy["id"], after["plan"]
+    assert after["price_paise"] == roomy_now, (
+        "the price must BE the new plan's, never the old one plus a difference: "
+        f"{after['price_paise']} (plan lists {roomy_now})"
     )
-    extension = after_upgrade["extensions"][0]
-    assert extension["additional_price_paise"] == roomy_now - small_plan["price_paise"], extension
-    assert extension["is_paid"] is False, "an upgrade is owed until it is paid"
-    assert after_upgrade["effective_ends_at"] > sold_ends_at, (
-        "upgrading with extend should carry the run forward, not leave it ending on the "
-        "old plan's date"
+    assert len(after["extensions"]) == was_extensions, (
+        "changing a plan must bill no extension -- that is what turned a correction into an upsell"
     )
-    assert after_upgrade["ends_at"] == outgrown.json()["ends_at"], (
+    assert after["effective_ends_at"] == sold_ends_at, (
+        "changing a plan must not move the run; selling more time is a separate action"
+    )
+    assert after["ends_at"] == outgrown.json()["ends_at"], (
         "the SOLD window must not be rewritten -- an invoice still has to show the original deal"
     )
-    assert after_upgrade["plan_max_locations"] == 3, after_upgrade
-    print("  ok  upgrading swaps the plan, bills the difference as an extension, and extends the run")
+    assert after["plan_max_locations"] == 3, after
+    print("  ok  changing plan replaces the plan and the price, bills nothing and moves no date")
 
-    # The item on the screen has to carry the new end, or the player stops the advert on
-    # the old plan's date and the upgrade was sold for nothing.
+    # And back off a package onto a bargained figure -- the commonest change there is, and
+    # the one the endpoint used to refuse outright.
+    custom = http.post(f"/api/placements/{grow_id}/change-plan", headers=auth,
+                       json={"plan_id": None, "price_paise": 777_00})
+    assert custom.status_code == 200, custom.text
+    off = custom.json()
+    assert off["plan"] is None, off["plan"]
+    assert off["price_paise"] == 777_00, off
+    assert off["total_price_paise"] == 777_00 + sum(
+        e["additional_price_paise"] for e in off["extensions"]
+    ), "the negotiated figure replaces the price outright"
+    assert len(off["extensions"]) == was_extensions, "moving to a custom price bills nothing either"
+    assert off["effective_ends_at"] == sold_ends_at, "and still moves no date"
+    print("  ok  a booking moves back off its package onto a negotiated price, nothing added")
+
+    # And the screens must NOT have been re-windowed by any of that. A plan change touches
+    # the plan and the price only; the run a client bought moves when time is actually sold
+    # (an extension), never as a side effect of correcting the package.
     db.expire_all()
     placed_ends = [
         t.playlist_item_id for t in db.query(models.AdPlacementTarget).filter(
@@ -420,69 +438,65 @@ try:
         ).all()
     ]
     items = db.query(models.PlaylistItem).filter(models.PlaylistItem.id.in_(placed_ends)).all()
-    assert items and all(i.end_at.isoformat() > sold_ends_at for i in items), (
-        "the placed items still end on the old plan's date -- the upgrade never reached the screens"
+    sold_end_dt = datetime.fromisoformat(sold_ends_at)
+    assert items and all(i.end_at <= sold_end_dt for i in items), (
+        "a plan change pushed the screens' run past what was sold -- it must change only "
+        "the plan and the price"
     )
-    print("  ok  the upgrade reaches the screens, not just the database")
+    print("  ok  a plan change leaves the screens' run exactly as it was sold")
 
-    # --- a booking sold at a custom price is not worth zero ------------------------------
-    # Moving a negotiated booking onto a package quoted the package's FULL price as the
-    # difference, because both the option list and the upgrade itself read the price off
-    # placement.plan -- which is None for a custom sale -- and fell back to 0. The client
-    # was billed the whole package again on top of what they had already agreed to pay.
+    # --- a custom-priced booking moved onto a package ------------------------------------
+    # The package's price simply becomes the booking's. The old code quoted and billed a
+    # "difference" against placement.plan -- None for a custom sale, so it fell back to 0
+    # and charged the whole package again on top of the figure already agreed.
     basic_now = http.get(f"/api/tenant-plans/{small_plan['id']}", headers=auth).json()["price_paise"]
     negotiated = http.post("/api/placements/", headers=auth, json={
         "content_id": ad.id, "advertiser": "Handshake Ltd",
         "starts_at": now.isoformat(), "ends_at": (now + timedelta(days=30)).isoformat(),
-        "price_paise": basic_now,
+        # Deliberately unlike the package price, so "replaced" and "added" cannot look alike.
+        "price_paise": 90_00,
         "targets": [{"screen_id": fleet[0].id}],
     })
     assert negotiated.status_code == 201, negotiated.text
     nego_id = negotiated.json()["id"]
     assert negotiated.json()["plan"] is None, "this booking is deliberately on no package"
 
-    nego_options = http.get(f"/api/placements/{nego_id}/plan-options", headers=auth)
-    assert nego_options.status_code == 200, nego_options.text
-    quoted = {o["plan"]["name"]: o["price_difference_paise"] for o in nego_options.json()}
-    assert quoted["Basic"] == 0, (
-        f"moving a booking already paying {basic_now} onto an equally priced package quoted "
-        f"{quoted['Basic']} -- the client is being charged the package a second time"
-    )
-    roomy_price = http.get(f"/api/tenant-plans/{roomy['id']}", headers=auth).json()["price_paise"]
-    assert quoted["Roomy"] == roomy_price - basic_now, (
-        f"a dearer package should quote only the difference, got {quoted['Roomy']}"
-    )
-
-    moved = http.post(f"/api/placements/{nego_id}/upgrade", headers=auth,
+    moved = http.post(f"/api/placements/{nego_id}/change-plan", headers=auth,
                       json={"plan_id": small_plan["id"]})
     assert moved.status_code == 200, moved.text
-    charged = sum(e["additional_price_paise"] for e in moved.json()["extensions"])
-    assert charged == 0, (
-        f"moving onto an equally priced package billed the client {charged} extra"
+    after_move = moved.json()
+    assert after_move["price_paise"] == basic_now, (
+        "the package's price should replace the negotiated one outright, got "
+        f"{after_move['price_paise']} against a list price of {basic_now}"
     )
-    print("  ok  moving a custom-priced booking onto a package bills only the real difference")
+    assert after_move["extensions"] == [], (
+        "moving a custom booking onto a package must bill nothing extra"
+    )
+    assert after_move["total_price_paise"] == basic_now, (
+        f"the total must be the package price, not 9000 + it: {after_move['total_price_paise']}"
+    )
+    print("  ok  a custom-priced booking moved onto a package takes the package price, nothing added")
 
-    # An upgrade that would leave the booking over the new plan's cap is refused, the same
-    # as any other route to that breach. Three screens on the roomy plan first, so that
-    # moving DOWN to the two-screen plan is a real breach and not merely a tight fit.
+    # The figure is bargained, so an explicit price overrules the package's list price.
+    haggled = http.post(f"/api/placements/{nego_id}/change-plan", headers=auth,
+                        json={"plan_id": small_plan["id"], "price_paise": 555_00})
+    assert haggled.status_code == 200, haggled.text
+    assert haggled.json()["price_paise"] == 555_00, haggled.json()
+    assert haggled.json()["plan"]["id"] == small_plan["id"], haggled.json()
+    print("  ok  a negotiated figure overrules the package's list price")
+
+    # A change that would leave the booking over the new plan's cap is refused, the same as
+    # any other route to that breach. Three screens on the roomy plan first, so that moving
+    # DOWN to the two-screen plan is a real breach and not merely a tight fit.
     assert http.post(f"/api/placements/{grow_id}/targets", headers=auth,
                      json={"screen_id": fleet[2].id}).status_code == 201
-    over_cap = http.post(f"/api/placements/{grow_id}/upgrade", headers=auth,
+    over_cap = http.post(f"/api/placements/{grow_id}/change-plan", headers=auth,
                          json={"plan_id": small_plan["id"]})
     assert over_cap.status_code == 409, (
         "a booking running on three screens was moved onto a two-screen plan through the "
-        f"upgrade route, which is the cap breached by a third door: {over_cap.text}"
+        f"change-plan route, which is the cap breached by a third door: {over_cap.text}"
     )
-    print("  ok  an upgrade cannot be used to sneak a booking onto a plan that does not cover it")
-
-    # extend=false is a correction, not a sale: no extension, no extra time.
-    correcting = http.post(f"/api/placements/{grow_id}/upgrade", headers=auth,
-                           json={"plan_id": roomy["id"], "extend": False})
-    assert correcting.status_code == 200, correcting.text
-    assert len(correcting.json()["extensions"]) == 1, (
-        "extend=false must not add a second extension -- it corrects the plan, it does not sell time"
-    )
-    print("  ok  correcting the plan without extending sells nothing")
+    print("  ok  a plan change cannot sneak a booking onto a plan that does not cover it")
 
     # --- the plan a booking is ON is always listed, even after it is retired -------------
     # Active-only was right for what a booking can move TO and wrong for what it is moving
@@ -519,22 +533,23 @@ try:
     # Every plan was offered and "no plan" was not, so a booking put on the wrong plan
     # could be moved between plans but never taken off one, and a client renegotiated onto
     # an agreed figure had nowhere to be recorded.
-    off = http.post(f"/api/placements/{legacy_id}/upgrade", headers=auth, json={"plan_id": None})
+    off = http.post(f"/api/placements/{legacy_id}/change-plan", headers=auth,
+                    json={"plan_id": None})
     assert off.status_code == 200, off.text
     assert off.json()["plan"] is None, off.json()
     assert off.json()["plan_max_locations"] == 0, "a custom sale caps no locations"
     assert off.json()["price_paise"] == retired["price_paise"], (
-        "moving off a package must not rewrite what the client was billed"
+        "naming no price must keep what the client was already billed, not zero it"
     )
     assert not off.json()["extensions"], (
-        "there is no plan length to extend by, so moving off a package must sell no time"
+        "moving off a package sells no time and bills nothing"
     )
     print("  ok  a booking can be moved off its package onto a custom price")
 
-    # A bare upgrade with no plan named at all is still a mistake, not a move to custom.
-    assert http.post(f"/api/placements/{legacy_id}/upgrade", headers=auth,
-                     json={"extend": False}).status_code == 422
-    print("  ok  an upgrade that names no plan at all is still refused")
+    # A bare call naming no plan at all is a mistake, not a silent move to custom.
+    assert http.post(f"/api/placements/{legacy_id}/change-plan", headers=auth,
+                     json={}).status_code == 422
+    print("  ok  a plan change that names no plan at all is still refused")
 
     print("tenant plans: all checks passed")
 finally:

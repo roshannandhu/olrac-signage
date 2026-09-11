@@ -389,13 +389,15 @@ export const api = {
   getPlanOptions: (placementId: number) =>
     fetchWithAuth<PlanOption[]>(`/placements/${placementId}/plan-options`),
 
-  upgradePlan: (placementId: number, body: {
+  // REPLACES the booking's plan and price. Nothing is billed on top and no date moves --
+  // selling more time is addPlacementExtension, which is a different sale.
+  changePlan: (placementId: number, body: {
     // Null moves the booking OFF its package onto a negotiated price. Sending it is the
     // only way back to a custom sale; the endpoint used to refuse it.
     plan_id: number | null
-    extend?: boolean
-    price_difference_paise?: number | null
-  }) => fetchWithAuth<Placement>(`/placements/${placementId}/upgrade`, {
+    // The new TOTAL price, not a difference. Omitted takes the plan's list price.
+    price_paise?: number | null
+  }) => fetchWithAuth<Placement>(`/placements/${placementId}/change-plan`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   }),
   createPlacement: (data: {

@@ -603,13 +603,6 @@ def plan_options(
 
     used = len(_booking_screen_ids(scope, placement))
     current = placement.plan
-    # What the client is ALREADY paying for this booking, which is the only honest thing to
-    # quote a difference against. Reading it off `placement.plan` treated a booking sold at
-    # a negotiated price as worth nothing, so every package was offered at its full price as
-    # though the client had paid nothing -- and the same fallback in `upgrade_plan` then
-    # billed them for it. It is also wrong for a booking on a plan whose price was edited by
-    # hand afterwards: the client owes their agreed figure, not the plan's list price.
-    current_price = placement.price_paise
     plans = scope.query(models.TenantPlan).filter(
         models.TenantPlan.is_active.is_(True)
     ).order_by(models.TenantPlan.price_paise).all()
@@ -631,8 +624,6 @@ def plan_options(
             # the screen count: a retired plan is unsellable for a different reason, which
             # `plan.is_active` says on its own and the UI reports in its own words.
             fits=plan.max_locations <= 0 or plan.max_locations >= used,
-            price_difference_paise=max(0, plan.price_paise - current_price),
-            extra_days=plan.duration_days,
         )
         for plan in plans
     ]
@@ -649,64 +640,59 @@ def plan_options(
     return options
 
 
-@router.post("/{placement_id}/upgrade", response_model=schemas.PlacementResponse)
-def upgrade_plan(
+@router.post("/{placement_id}/change-plan", response_model=schemas.PlacementResponse)
+def change_plan(
     placement_id: int,
-    payload: schemas.PlanUpgrade,
+    payload: schemas.PlanChange,
     scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
 ):
-    """Move a booking onto a different plan and bill the difference.
+    """Move a booking onto a different plan, or off one onto a custom price. REPLACES.
+
+    The plan and the price become what was chosen. Nothing is added and no date moves:
+    selling the client more time is a separate action (`/extensions`), and conflating the
+    two is what made a correction bill twice. This used to charge the price *difference* as
+    an extension AND push the end date out by the new plan's length, so "put this booking on
+    the right plan" quietly sold the client another campaign -- their total read
+    old price + difference over a run nobody agreed.
+
+    Both directions, and back to itself: custom -> package, package -> custom, and custom ->
+    custom to re-cut an agreed figure.
 
     One booking throughout, deliberately. Closing the old sale and opening a new one would
     split a single client's campaign across two records, two reports and two invoices, and
     the proof-of-play a client receives should cover the campaign they think they bought.
-    The price difference becomes an extension, which is the shape the codebase already has
-    for "more time was sold against this booking".
     """
     placement = scope.get(models.AdPlacement, placement_id)
     if not placement:
         raise HTTPException(status_code=404, detail="Booking not found")
 
+    if payload.plan_id is None and "plan_id" not in payload.model_fields_set:
+        raise HTTPException(
+            status_code=422,
+            detail="Name the plan to change to, or send plan_id: null for a custom price",
+        )
+
     plan = resolve_tenant_plan(scope, payload.plan_id)
-    if plan is None and "plan_id" not in payload.model_fields_set:
-        raise HTTPException(status_code=422, detail="An upgrade needs a plan to move to")
 
-    # An explicit null means "off the package": the booking keeps its price, its run and
-    # its history and is billed on a negotiated figure from here. Refusing it was why a
-    # booking put on the wrong plan could be moved between plans but never taken off one --
-    # the same gap PUT /placements/{id} closed for the generic edit.
-    #
-    # An upgrade must never leave the booking delivering more screens than the plan it is
-    # now billed on -- that is the same breach as adding a screen, arrived at sideways.
-    # A null plan caps nothing, which plan_screen_usage already answers.
+    # A change must never leave the booking delivering more screens than the plan it is now
+    # billed on -- the same breach as adding a screen, arrived at sideways. A null plan
+    # (custom) caps nothing, which plan_screen_usage already answers.
     ensure_plan_locations(scope, plan, set(_booking_screen_ids(scope, placement)), set())
-
-    difference = payload.price_difference_paise
-    if difference is None:
-        # Against what the booking already costs the client -- the same figure
-        # `get_plan_options` quotes, so the dialog and the charge cannot disagree. Still
-        # floored at zero: moving to a cheaper package does not auto-credit, and an operator
-        # who has agreed a refund states it through `price_difference_paise`.
-        difference = max(0, (plan.price_paise if plan else 0) - placement.price_paise)
 
     placement.plan_id = plan.id if plan else None
 
-    # Nothing to extend BY when the booking is coming off its package: a custom sale states
-    # its own length, and inventing one here would sell the client time nobody agreed.
-    if payload.extend and plan is not None:
-        # From the current effective end, not from today: back-to-back, so the advert never
-        # goes dark between the old plan finishing and the new one starting. That default,
-        # and everything that has to follow the row being written, lives in _sell_more_time.
-        starts = effective_ends_at(placement)
-        _sell_more_time(
-            scope,
-            placement,
-            extended_from=starts,
-            extended_to=starts + timedelta(days=plan.duration_days),
-            additional_price_paise=difference,
-            is_paid=False,
-            notes=f"Upgraded to {plan.name}",
-        )
+    # Replaced, never added. An explicit figure wins -- that is the negotiated price the
+    # tenant fixed. Otherwise a package hands over its list price, and moving to custom
+    # without naming one keeps what the booking already costs rather than zeroing it.
+    if payload.price_paise is not None:
+        placement.price_paise = payload.price_paise
+    elif plan is not None:
+        placement.price_paise = plan.price_paise
+
+    # The total just moved, so what the client still owes moved with it. Without this a
+    # booking settled at the old price keeps reading "paid" over a balance it no longer
+    # covers -- the gap this endpoint had from the day it was written.
+    refresh_paid_state(placement)
 
     scope.db.commit()
     scope.db.refresh(placement)

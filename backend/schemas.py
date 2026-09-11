@@ -1202,24 +1202,31 @@ class PlanOption(BaseModel):
     # is still listed -- the operator may intend to drop a screen -- but it cannot be
     # applied without the cap refusing it, so the UI can say why up front.
     fits: bool
-    # Floored at zero: moving to a cheaper plan does not credit the client money, it just
-    # changes what they get next. A refund is a conversation, not an arithmetic result.
-    price_difference_paise: int
-    extra_days: int
+    # No "price difference" and no "extra days". Changing a plan replaces the price outright
+    # and moves no dates, so a difference is not a thing that gets billed -- quoting one was
+    # what framed a correction as an upsell. The plan's own price and duration are on `plan`.
     recommended: bool = False
 
 
-class PlanUpgrade(BaseModel):
-    # Nullable so a booking can come OFF a package onto a negotiated price, which is a real
-    # correction and had no route: the endpoint refused a null and the dashboard therefore
+class PlanChange(BaseModel):
+    """Move a booking onto a different plan, or off one onto a custom price.
+
+    A change REPLACES. The booking's plan and price become what is named here; nothing is
+    billed on top and no date moves. Selling the client more time is a different sale and
+    goes through `PlacementExtension`.
+
+    This used to charge the price *difference* as an extension and push the end date out by
+    the new plan's length, so correcting a booking onto the right plan quietly became an
+    upsell: the client's total read old price + difference over a run nobody had agreed.
+    """
+    # Nullable so a booking can come OFF a package onto a negotiated price -- a real
+    # correction that had no route: the endpoint refused a null and the dashboard therefore
     # offered no way back to a custom sale.
     plan_id: Optional[int] = None
-    # Whether to add the new plan's duration to the run. On by default because "upgrade"
-    # normally means "sell them the bigger package from here", but a mid-term correction of
-    # the wrong plan should not silently extend the campaign.
-    extend: bool = True
-    # Overrides the computed difference, for a discount or a negotiated figure.
-    price_difference_paise: Optional[int] = Field(default=None, ge=0)
+    # The booking's new TOTAL price, replacing what it cost. Negotiable, because that is how
+    # these are actually sold -- tenant and client agree a figure and the tenant fixes it.
+    # Omitted means the plan's list price, or, moving to custom, whatever it already costs.
+    price_paise: Optional[int] = Field(default=None, ge=0)
 
 
 # Validated here rather than as a database enum so adding one is a deploy, not a migration.

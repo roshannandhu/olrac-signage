@@ -113,7 +113,14 @@ export function AdBookings({ contentId }: { contentId: number }) {
   // `null` is now a plan choice of its own -- "off the package, on a negotiated price" --
   // so "nothing chosen yet" cannot also be null. undefined is that.
   const [chosenPlan, setChosenPlan] = useState<number | null | undefined>(undefined)
-  const [alsoExtend, setAlsoExtend] = useState(true)
+  // The new TOTAL, in rupees, editable because the figure is negotiated. Seeded from
+  // whatever was just picked: a package hands over its list price, custom keeps what the
+  // booking already costs.
+  const [planPrice, setPlanPrice] = useState('')
+  const pickPlan = (planId: number | null, pricePaise: number) => {
+    setChosenPlan(planId)
+    setPlanPrice(String(pricePaise / 100))
+  }
   const planOptionsQuery = useQuery({
     queryKey: ['plan-options', revising?.id],
     queryFn: () => api.getPlanOptions(revising!.id),
@@ -126,7 +133,7 @@ export function AdBookings({ contentId }: { contentId: number }) {
     setRevising(placement)
     setMode(initial)
     setChosenPlan(undefined)
-    setAlsoExtend(true)
+    setPlanPrice('')
     // Default to a fortnight past wherever the run currently finishes, so the common case
     // is one click and a price. extended_from defaults server side to the same point,
     // which is what stops an unpaid gap opening mid-campaign.
@@ -138,19 +145,15 @@ export function AdBookings({ contentId }: { contentId: number }) {
   const openExtend = (placement: Placement) => openRevise(placement, 'time')
 
   const upgrade = useMutation({
-    mutationFn: () => api.upgradePlan(revising!.id, {
+    // Replaces the plan and the price. Nothing is added, no date moves -- "Add time" is the
+    // other tab for that.
+    mutationFn: () => api.changePlan(revising!.id, {
       plan_id: chosenPlan ?? null,
-      // Meaningless when coming off a package: there is no plan length to extend BY, and
-      // the server ignores it, so the checkbox is hidden rather than sent as a lie.
-      extend: chosenPlan != null && alsoExtend,
+      price_paise: Math.round(Number(planPrice || 0) * 100),
     }),
     onSuccess: () => {
       refresh()
-      toast.success(
-        chosenPlan == null
-          ? 'Moved off the package; the price is yours to set'
-          : alsoExtend ? 'Plan changed and the run extended' : 'Plan changed',
-      )
+      toast.success(chosenPlan == null ? 'Moved to a custom price' : 'Plan changed')
       setRevising(null)
     },
     onError: fail,
@@ -585,8 +588,11 @@ export function AdBookings({ contentId }: { contentId: number }) {
           <DialogHeader>
             <DialogTitle>Revise {revising?.advertiser}&apos;s booking</DialogTitle>
             <DialogDescription>
-              The booking keeps its history and its report either way. Anything charged is
-              added as an extension, so one client stays one campaign and one invoice.
+              <span className="text-foreground font-medium">Move to a plan</span> replaces the
+              plan and the price — nothing is added.{' '}
+              <span className="text-foreground font-medium">Add time</span> sells more and is
+              charged on top. Either way the booking keeps its history, so one client stays
+              one campaign and one invoice.
             </DialogDescription>
           </DialogHeader>
 
@@ -635,11 +641,13 @@ export function AdBookings({ contentId }: { contentId: number }) {
                   booking put on the wrong plan could be moved between plans but never taken
                   off one -- and a client renegotiated onto an agreed figure had nowhere to
                   be recorded. */}
+              {/* Always selectable, including when the booking is ALREADY custom: re-cutting
+                  an agreed figure is the commonest change of all, and disabling it here sent
+                  the tenant off to another dialog to do it. */}
               <button
                 type="button"
-                disabled={!upgrading?.plan}
-                onClick={() => setChosenPlan(null)}
-                className={`w-full rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
+                onClick={() => pickPlan(null, upgrading?.price_paise ?? 0)}
+                className={`w-full rounded-xl border p-3 text-left transition-colors ${
                   chosenPlan === null ? 'border-primary bg-primary/10 shadow-sm' : 'border-input hover:bg-muted/50'
                 }`}
               >
@@ -648,8 +656,8 @@ export function AdBookings({ contentId }: { contentId: number }) {
                   {!upgrading?.plan && <Badge variant="outline">Current</Badge>}
                 </div>
                 <p className="text-muted-foreground mt-1 text-sm">
-                  Keeps the price and the run as they are, with no location cap. Edit the
-                  figure in &ldquo;Edit client &amp; ad details&rdquo;.
+                  You set the price. No location cap, and the per-screen days stay exactly as
+                  you sold them.
                 </p>
               </button>
 
@@ -669,8 +677,8 @@ export function AdBookings({ contentId }: { contentId: number }) {
                   <button
                     key={option.plan.id}
                     type="button"
-                    disabled={option.is_current || !option.fits || retired}
-                    onClick={() => setChosenPlan(option.plan.id)}
+                    disabled={!option.fits || retired}
+                    onClick={() => pickPlan(option.plan.id, option.plan.price_paise)}
                     className={`w-full rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                       selected ? 'border-primary bg-primary/10 shadow-sm' : 'border-input hover:bg-muted/50'
                     }`}
@@ -689,43 +697,46 @@ export function AdBookings({ contentId }: { contentId: number }) {
                       )}
                     </div>
                     <p className="text-muted-foreground mt-1 text-sm">
+                      {/* The plan's own price, which simply BECOMES the booking's price.
+                          The old "+X to move" difference is gone with the billing that
+                          produced it -- a change replaces, it never tops up. */}
                       {rupees(option.plan.price_paise)} · {option.plan.duration_days} days · up to{' '}
                       {option.plan.max_locations} screen{option.plan.max_locations === 1 ? '' : 's'}
-                      {!option.is_current && option.price_difference_paise > 0 && (
-                        <span className="text-foreground"> · +{rupees(option.price_difference_paise)} to move</span>
-                      )}
                     </p>
                   </button>
                 )
               })}
             </div>
 
-            {/* Hidden when moving off a package: there is no plan length to extend by, so
-                offering the choice would promise something the change cannot do. */}
-            {chosenPlan != null && (
-            <>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="accent-primary size-4"
-                    checked={alsoExtend}
-                    onChange={(event) => setAlsoExtend(event.target.checked)}
-                  />
-                  Extend the run by the new plan&apos;s length and charge the difference
-                </label>
+            {/* The agreed figure, shown only once something is picked. Seeded from the
+                choice and editable, because the price is bargained -- and it REPLACES what
+                the booking costs rather than being added to it. */}
+            {chosenPlan !== undefined && (
+              <div className="space-y-2 pt-1">
+                <Label htmlFor="plan-price">New total price (₹)</Label>
+                <Input
+                  id="plan-price"
+                  type="number"
+                  min={0}
+                  value={planPrice}
+                  onChange={(event) => setPlanPrice(event.target.value)}
+                  placeholder="12500"
+                />
                 <p className="text-muted-foreground text-xs">
-                  Leave this off to correct a booking that is on the wrong plan without selling
-                  any extra time. Anything charged is added to what the client owes.
+                  Replaces what this booking costs — nothing is added on top and no date
+                  moves. Negotiate freely; this is what the client owes.
+                  {upgrading && ` Currently ${rupees(upgrading.price_paise)}.`}
+                  {' '}To sell extra time instead, use <span className="text-foreground">Add time</span>.
                 </p>
-            </>
-          )}
+              </div>
+            )}
 
           <DialogFooter showCloseButton>
             <Button
-              disabled={chosenPlan === undefined || upgrade.isPending}
+              disabled={chosenPlan === undefined || !planPrice.trim() || upgrade.isPending}
               onClick={() => upgrade.mutate()}
             >
-              {upgrade.isPending ? 'Changing…' : chosenPlan === null ? 'Move off the package' : 'Change plan'}
+              {upgrade.isPending ? 'Changing…' : 'Change plan'}
             </Button>
           </DialogFooter>
             </>

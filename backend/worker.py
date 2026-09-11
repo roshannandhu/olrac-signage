@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import logging
 import json
 import os
 import subprocess
@@ -12,6 +13,8 @@ from dotenv import load_dotenv
 
 from .database import SessionLocal, REDIS_SETTINGS
 from . import models
+
+logger = logging.getLogger(__name__)
 from .models import Content, MediaRendition
 from . import media_storage
 from .routers.content import UPLOAD_DIR  # noqa: F401  (re-exported for scripts)
@@ -485,9 +488,102 @@ async def _publish_alert(redis, organization_id: int, event: str, alert) -> None
         print(f"Failed to publish alert to redis: {e}")
 
 
+def _aggregate_play_logs_portable(db) -> None:
+    """Aggregation for any dialect, done in Python.
+
+    The fast path below is one Postgres statement built on `date_trunc`, `UPDATE …
+    RETURNING` and `IS NOT DISTINCT FROM` -- none of which SQLite has. On SQLite the whole
+    statement raised, the failure was swallowed, and every play log stayed unaggregated
+    forever: proof of play, the booking report and the per-advert tiles all read zero on a
+    database that was full of plays. Same portability rule build_booking_report already
+    follows for its daily trend, and effective_ends_at for CASE over GREATEST.
+
+    Slower, so Postgres keeps its single-statement path.
+    """
+    pending = db.query(models.PlayLog).filter(models.PlayLog.aggregated.is_(False)).all()
+    if not pending:
+        return
+
+    buckets: dict[tuple, dict[str, int]] = {}
+    for log in pending:
+        started = log.corrected_started_at
+        if started is None:
+            # Nothing to bucket it into. Left unaggregated it would be retried forever, so
+            # mark it done and let it be excluded rather than block the queue behind it.
+            log.aggregated = True
+            continue
+        hour = started.replace(minute=0, second=0, microsecond=0)
+        key = (log.organization_id, log.campaign_id, log.screen_id, log.media_id, hour)
+        # A plain dict key is already NULL-safe, which is what IS NOT DISTINCT FROM buys
+        # on the Postgres path.
+        totals = buckets.setdefault(
+            key, {"total": 0, "completed": 0, "partial": 0, "error": 0, "duration": 0}
+        )
+        totals["total"] += 1
+        if log.status == "completed":
+            totals["completed"] += 1
+        elif log.status == "partial":
+            totals["partial"] += 1
+        elif log.status == "error":
+            totals["error"] += 1
+        totals["duration"] += log.duration_ms or 0
+        log.aggregated = True
+
+    for (org_id, campaign_id, screen_id, media_id, hour), totals in buckets.items():
+        row = (
+            db.query(models.PlayLogHourlyRollup)
+            .filter(
+                models.PlayLogHourlyRollup.organization_id == org_id,
+                models.PlayLogHourlyRollup.campaign_id.is_(None) if campaign_id is None
+                else models.PlayLogHourlyRollup.campaign_id == campaign_id,
+                models.PlayLogHourlyRollup.screen_id == screen_id,
+                models.PlayLogHourlyRollup.media_id.is_(None) if media_id is None
+                else models.PlayLogHourlyRollup.media_id == media_id,
+                models.PlayLogHourlyRollup.date_hour == hour,
+            )
+            .first()
+        )
+        if row is None:
+            db.add(models.PlayLogHourlyRollup(
+                organization_id=org_id,
+                campaign_id=campaign_id,
+                screen_id=screen_id,
+                media_id=media_id,
+                date_hour=hour,
+                total_plays=totals["total"],
+                completed_plays=totals["completed"],
+                partial_plays=totals["partial"],
+                error_plays=totals["error"],
+                duration_ms=totals["duration"],
+            ))
+        else:
+            row.total_plays += totals["total"]
+            row.completed_plays += totals["completed"]
+            row.partial_plays += totals["partial"]
+            row.error_plays += totals["error"]
+            row.duration_ms = (row.duration_ms or 0) + totals["duration"]
+
+
 def aggregate_play_logs_sync(db: SessionLocal) -> int:
-    """Atomic aggregation of unaggregated play_logs into play_log_hourly_rollups."""
+    """Aggregate unaggregated play_logs into play_log_hourly_rollups.
+
+    Every proof-of-play figure in the product is read from the rollups, so a failure here
+    is indistinguishable from "this advert never played" -- which is why it is no longer
+    reported by a print to stdout that nobody reads.
+    """
     from sqlalchemy import text
+
+    dialect = getattr(getattr(db, "bind", None), "dialect", None)
+    if dialect is not None and dialect.name != "postgresql":
+        try:
+            _aggregate_play_logs_portable(db)
+            db.commit()
+            return 1
+        except Exception:
+            db.rollback()
+            logger.exception("Failed to aggregate play logs; proof-of-play will read zero")
+            return 0
+
     try:
         db.execute(text("""
             WITH to_aggregate AS (
@@ -542,9 +638,9 @@ def aggregate_play_logs_sync(db: SessionLocal) -> int:
         """))
         db.commit()
         return 1
-    except Exception as e:
+    except Exception:
         db.rollback()
-        print(f"Error aggregating play logs: {e}")
+        logger.exception("Failed to aggregate play logs; proof-of-play will read zero")
         return 0
 
 

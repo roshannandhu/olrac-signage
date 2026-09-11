@@ -373,6 +373,21 @@ class PlaylistSynchronizer(context: Context) {
     companion object {
         private val GLOBAL_SYNC_MUTEX = Mutex()
         private const val PREFERENCES_NAME = "signage_prefs"
+        /** How many assigned items could not be fetched on the last sync; 0 when all is well. */
+        private const val KEY_UNREACHABLE_ITEMS = "unreachable_items"
+
+        /**
+         * Adverts the server has assigned to this screen that could not be downloaded.
+         *
+         * The player shows this instead of "Waiting for assigned content", which blamed the
+         * operator for a server problem: during a media outage the TV said nothing was
+         * booked while four paid campaigns sat on it.
+         */
+        fun unreachableItemCount(context: Context): Int =
+            context.applicationContext
+                .getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+                .getInt(KEY_UNREACHABLE_ITEMS, 0)
+
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_PLAYLIST_UPDATED_AT = "playlist_updated_at"
         private const val KEY_SYNC_INTERVAL_SECONDS = "sync_interval_seconds"

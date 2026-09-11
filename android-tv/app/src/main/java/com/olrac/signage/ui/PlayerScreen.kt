@@ -46,6 +46,7 @@ import com.olrac.signage.data.PlaylistItemEntity
 import com.olrac.signage.data.TransitionSpec
 import com.olrac.signage.data.TransitionSpecResolver
 import com.olrac.signage.data.TransitionType
+import com.olrac.signage.sync.PlaylistSynchronizer
 import com.olrac.signage.telemetry.PlaybackTelemetry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -70,11 +71,23 @@ fun PlayerScreen(viewModel: PlayerViewModel = viewModel()) {
     }
 
     if (playlist.isEmpty()) {
+        // "Waiting for assigned content" is only true when the server assigned none. During
+        // a media outage it is a lie that costs hours: the screen said nothing was booked
+        // while four paid campaigns sat on it, so the fault was hunted in the bookings.
+        val unreachable = remember(playlist) { PlaylistSynchronizer.unreachableItemCount(context) }
         Box(
             modifier = Modifier.fillMaxSize().background(Color.Black),
             contentAlignment = Alignment.Center
         ) {
-            Text(text = "OLRAC Signage\nWaiting for assigned content", color = Color.White)
+            Text(
+                text = if (unreachable > 0) {
+                    "OLRAC Signage\n$unreachable advert${if (unreachable == 1) "" else "s"} assigned " +
+                        "but could not be downloaded.\nThe server is not serving media."
+                } else {
+                    "OLRAC Signage\nWaiting for assigned content"
+                },
+                color = Color.White
+            )
         }
         return
     }

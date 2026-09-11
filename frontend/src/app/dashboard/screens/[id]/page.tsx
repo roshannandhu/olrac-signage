@@ -14,7 +14,6 @@ import { ScreenDetailsDrawer } from '@/components/dashboard/screen-details-drawe
 import { ScreenHoursDialog } from '@/components/dashboard/screen-hours-dialog'
 import { ScreenMap } from '@/components/dashboard/screen-map'
 import { ScreenSettingsDialog } from '@/components/dashboard/screen-settings-dialog'
-import { ScreenAdBookings } from '@/components/dashboard/screen-ad-bookings'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -179,9 +178,11 @@ export default function ScreenDetailPage() {
         </div>
       )}
 
-      <div className="mb-6">
-        <ScreenAdBookings screenId={screen.id} groupId={screen.group_id ?? null} />
-      </div>
+      {/* No commercial list here. This page is about what the screen PLAYS -- the loop
+          below, and the content library it is built from. The bookings sold onto it are a
+          commercial record that belongs to the advert, and repeating it here made the page
+          two things at once. It lives on the ad detail page, which is where it can be
+          edited rather than only stared at. */}
 
       {/* A freshly paired TV has no playlist, and it does not need one made by hand.
           Selling an advert to this screen creates its loop -- see playlist_for_target,

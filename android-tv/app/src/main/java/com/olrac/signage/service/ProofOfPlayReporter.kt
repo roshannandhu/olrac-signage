@@ -36,8 +36,10 @@ object ProofOfPlayReporter {
             }
 
             var totalUploaded = 0
+            // Shrinks only to isolate a batch the server permanently refuses, then resets.
+            var batchSize = ProofOfPlayWorker.BATCH_SIZE
             while (true) {
-                val pendingEvents = playEventDao.getPendingEvents(ProofOfPlayWorker.BATCH_SIZE)
+                val pendingEvents = playEventDao.getPendingEvents(batchSize)
                 if (pendingEvents.isEmpty()) break
 
                 // One shared mapping with ProofOfPlayWorker. This used to be a second copy
@@ -61,15 +63,29 @@ object ProofOfPlayReporter {
                     break
                 }
 
-                if (response.isSuccessful || (response.code() in 400..499 && response.code() !in listOf(401, 403, 408, 429))) {
+                if (response.isSuccessful) {
                     playEventDao.deleteEvents(pendingEvents.map { it.eventId })
                     totalUploaded += pendingEvents.size
+                    batchSize = ProofOfPlayWorker.BATCH_SIZE
+                } else if (PlayLogUploadPolicy.isPermanentRejection(response.code())) {
+                    // These events are billing evidence and the server holds no copy, so a
+                    // refusal must cost the single row responsible, not the whole batch --
+                    // which is what deleting here used to do. Halve until the offender is
+                    // alone, drop exactly it, and let everything behind it through.
+                    if (pendingEvents.size > 1) {
+                        batchSize = PlayLogUploadPolicy.narrowedBatchSize(pendingEvents.size)
+                        continue
+                    }
+                    val rejected = pendingEvents.first()
+                    Log.e(TAG, "Dropping play event ${rejected.eventId}: server refused it with ${response.code()}")
+                    playEventDao.deleteEvents(listOf(rejected.eventId))
+                    batchSize = ProofOfPlayWorker.BATCH_SIZE
                 } else {
                     Log.w(TAG, "Server responded with status code: ${response.code()}")
                     break
                 }
 
-                if (pendingEvents.size < ProofOfPlayWorker.BATCH_SIZE) break
+                if (pendingEvents.size < batchSize) break
             }
 
             if (totalUploaded > 0) {

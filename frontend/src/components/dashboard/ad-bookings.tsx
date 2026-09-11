@@ -259,6 +259,15 @@ export function AdBookings({ contentId }: { contentId: number }) {
 
 
 
+  // A booking can lose the playlist items it created without anyone touching it: deleting
+  // a playlist or a creative cascades them away and nulls the link, leaving the booking
+  // Running and Paid while playing on nothing. This puts it back.
+  const replaceTargets = useMutation({
+    mutationFn: (id: number) => api.replacePlacementTargets(id),
+    onSuccess: () => { refresh(); toast.success('Put back on its screens') },
+    onError: fail,
+  })
+
   const removeTarget = useMutation({
     mutationFn: ({ id, targetId }: { id: number; targetId: number }) => api.removePlacementTarget(id, targetId),
     onSuccess: () => { refresh(); toast.success('Removed from that place') },
@@ -492,6 +501,30 @@ export function AdBookings({ contentId }: { contentId: number }) {
                 </div>
               )}
 
+              {/* Sold, paid, and playing nowhere. Deleting a playlist or a creative cascades
+                  the booking's playlist items away and nulls the link, so this state
+                  arrives without anyone choosing it -- and until now there was no way back
+                  except deleting the location and re-adding it, which loses the assignment
+                  date the client's per-location figures are divided by. */}
+              {canEdit && placement.targets.some((t) => !t.is_placed) && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-2.5">
+                  <p className="text-muted-foreground min-w-0 flex-1 text-sm">
+                    <span className="text-foreground font-medium">Not playing.</span>{' '}
+                    This booking is not on{' '}
+                    {placement.targets.filter((t) => !t.is_placed).length} of its{' '}
+                    {placement.targets.length} location
+                    {placement.targets.length === 1 ? '' : 's'}, so nothing is running there.
+                  </p>
+                  <Button
+                    size="xs"
+                    disabled={replaceTargets.isPending}
+                    onClick={() => replaceTargets.mutate(placement.id)}
+                  >
+                    {replaceTargets.isPending ? 'Putting back…' : 'Put back on screens'}
+                  </Button>
+                </div>
+              )}
+
               <div className="mt-4 flex flex-wrap gap-2">
                 {!placement.targets.length && <p className="text-muted-foreground text-sm">Not running anywhere yet.</p>}
                 {placement.targets.map((target) => (
@@ -514,7 +547,7 @@ export function AdBookings({ contentId }: { contentId: number }) {
                     {target.days != null && (
                       <span className="text-muted-foreground text-xs tabular-nums">{target.days}d</span>
                     )}
-                    {!target.is_placed && <span className="text-muted-foreground text-xs">(removed by hand)</span>}
+                    {!target.is_placed && <span className="text-amber-600 dark:text-amber-400 text-xs">(not on screen)</span>}
                     {canEdit && (
                       <button
                         onClick={() => target.kind === 'group'

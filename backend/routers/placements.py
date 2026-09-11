@@ -441,6 +441,65 @@ def add_target(
     return _serialize(scope, placement)
 
 
+@router.post("/{placement_id}/replace", response_model=schemas.PlacementResponse)
+def replace_targets(
+    placement_id: int,
+    scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
+):
+    """Put a booking back on the screens it was sold to, for every place it has fallen off.
+
+    A target holds the playlist item it created, and that column is ON DELETE SET NULL --
+    deliberately, so an operator deleting the row by hand on the screen page leaves the
+    booking standing as a record of what was sold. But PlaylistItem.content_id is ON DELETE
+    CASCADE, so deleting or re-uploading a creative takes every playlist item with it and
+    nulls the same column. The booking then reads "Running" and "Paid" while playing on
+    nothing at all, and nothing in the product could put it back: the only route was to
+    delete the target and re-add it, which loses assigned_at and with it the per-location
+    figures on the client's report.
+
+    Idempotent, and only ever ADDS. A target that still holds its item is left exactly as it
+    is, so this cannot duplicate an advert into a loop or rewrite a window that is playing.
+    """
+    placement = scope.get(models.AdPlacement, placement_id)
+    if not placement:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    orphaned = [t for t in placement.targets if t.playlist_item_id is None]
+    if not orphaned:
+        return _serialize(scope, placement)
+
+    for target in orphaned:
+        ref = schemas.PlacementTargetRef(
+            screen_id=target.screen_id,
+            group_id=target.group_id,
+            # Its own window if it had one, so a location sold ten days does not silently
+            # inherit the booking's thirty on the way back.
+            days=(
+                max(1, round((target.ends_at - target.starts_at).total_seconds() / 86400))
+                if target.ends_at and target.starts_at
+                else None
+            ),
+        )
+        # Re-placed from the ORIGINAL assignment date, not today: the client's report
+        # divides this location's plays by the days it really ran, and restarting the clock
+        # here would report a location that has run all month as a late addition.
+        restored = _place(scope, placement, ref, assigned_at=target.assigned_at)
+        # The new row carries the item; the empty one it replaces would otherwise sit there
+        # as a second, permanently unplaced copy of the same location.
+        scope.db.delete(target)
+        logger.info(
+            "Booking %s re-placed on %s (target %s -> %s)",
+            placement.id,
+            f"screen {target.screen_id}" if target.screen_id else f"group {target.group_id}",
+            target.id,
+            restored.id,
+        )
+
+    scope.db.commit()
+    scope.db.refresh(placement)
+    return _serialize(scope, placement)
+
+
 @router.delete("/{placement_id}/targets/{target_id}", response_model=schemas.PlacementResponse)
 def remove_target(
     placement_id: int,

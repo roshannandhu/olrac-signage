@@ -411,6 +411,12 @@ export const api = {
   }) => fetchWithAuth<Placement>(`/placements/${placementId}/change-plan`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   }),
+  /** Put a booking back on every screen it has fallen off. Only ever adds: a location
+   *  that still holds its playlist item is left alone, so this cannot duplicate an
+   *  advert into a loop. */
+  replacePlacementTargets: (placementId: number) =>
+    fetchWithAuth<Placement>(`/placements/${placementId}/replace`, { method: 'POST' }),
+
   createPlacement: (data: {
     content_id: number
     // One or the other: a client record is the supported path, a bare name still works.

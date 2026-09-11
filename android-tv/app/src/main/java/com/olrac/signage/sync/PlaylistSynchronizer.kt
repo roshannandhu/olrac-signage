@@ -279,6 +279,17 @@ class PlaylistSynchronizer(context: Context) {
                     target.entity.copy(localPath = target.finalFile.absolutePath)
                 }
 
+                // Assigned, but not one of them could be fetched. Recorded so the player can
+                // say THAT, instead of "Waiting for assigned content" -- which blames the
+                // operator for a server problem and is exactly the message that sent a real
+                // media outage chasing bookings that were fine all along.
+                preferences.edit()
+                    .putInt(
+                        KEY_UNREACHABLE_ITEMS,
+                        if (targets.isNotEmpty() && activatedItems.isEmpty()) targets.size else 0
+                    )
+                    .apply()
+
                 // If we have ready items, or if the server genuinely sent an empty playlist,
                 // activate them so playback can begin.
                 if (activatedItems.isNotEmpty() || targets.isEmpty()) {

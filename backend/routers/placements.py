@@ -969,6 +969,11 @@ def build_booking_report(scope: TenantScope, placement: models.AdPlacement) -> d
     raw_thumb = (content.thumbnail or content.file_url) if content else None
     content_thumbnail = resolve_media_url(raw_thumb) if raw_thumb else None
 
+    # On-screen length of one play: the real video length, or the flat 10s slot an image
+    # occupies (the same fallback the playlist uses). Feeds "total airtime" on the report --
+    # plays x this -- which is real exposure, not a guessed audience number.
+    spot_seconds = (content.duration_ms / 1000) if (content and content.duration_ms) else 10.0
+
     import hashlib
     verify_payload = f"{placement.id}:{placement.organization_id}:{placement.advertiser}:{placement.starts_at.isoformat()}"
     token_hash = hashlib.sha256(verify_payload.encode()).hexdigest()[:8].upper()
@@ -1046,6 +1051,8 @@ def build_booking_report(scope: TenantScope, placement: models.AdPlacement) -> d
             "is_paid": placement.is_paid,
             "generated_at": generated_at,
             "totals": empty,
+            "spot_seconds": spot_seconds,
+            "airtime_seconds": 0,
             "per_screen": [],
             "per_location": [],
             "daily": [],
@@ -1198,6 +1205,8 @@ def build_booking_report(scope: TenantScope, placement: models.AdPlacement) -> d
         "is_paid": placement.is_paid,
         "generated_at": generated_at,
         "totals": totals,
+        "spot_seconds": spot_seconds,
+        "airtime_seconds": int(round(totals["total_plays"] * spot_seconds)),
         "per_screen": per_screen,
         "per_location": sorted(places.values(), key=lambda p: p["total_plays"], reverse=True),
         # Reported, never enforced. A plan's "5 locations" is what was quoted, and real

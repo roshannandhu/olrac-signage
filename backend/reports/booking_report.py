@@ -93,6 +93,18 @@ def _date(value: datetime | None) -> str:
     return value.strftime("%d %b %Y") if value else "-"
 
 
+def _duration(seconds: int | float | None) -> str:
+    """Seconds to a compact airtime string: '42h 18m', '18m 30s', '45s'."""
+    s = int(round(seconds or 0))
+    h, rem = divmod(s, 3600)
+    m, sec = divmod(rem, 60)
+    if h:
+        return f"{h:,}h {m:02d}m"
+    if m:
+        return f"{m}m {sec:02d}s"
+    return f"{sec}s"
+
+
 def _money(paise: int | None) -> str:
     """Paise to currency string. Integer division throughout -- money never touches a float."""
     symbol = "₹" if _HAS_RUPEE_FONT else "Rs."
@@ -486,12 +498,11 @@ def build_pdf(report: dict) -> bytes:
         ("Campaign period", f"{_date(report['starts_at'])}<br/>to {_date(ends_at)}", "Start to end"),
         ("Total locations", str(len(report["per_location"])), "Active locations"),
         ("Total ad plays", f"{totals['total_plays']:,}", "Verified count"),
+        # Total on-screen exposure: plays x the creative's real length. The headline number a
+        # client wants -- how long their advert was actually up. Completion % moved to its own
+        # card below, so no duplication. Not "Amount paid": what they owe is on the invoice.
+        ("Total airtime", _duration(report.get("airtime_seconds", 0)), "On-screen exposure"),
         ("Days remaining", f"{report.get('days_remaining', 0)} days", f"of {report.get('days_total', 0)} days"),
-        # Completion rate, not "Amount paid". This document is proof of delivery and goes to
-        # the client; what they owe belongs on the invoice, which is now a separate PDF.
-        # The figure was already computed here and never shown.
-        ("Completion rate", f"{totals.get('success_percent', 0):.1f}%",
-         f"{totals.get('completed_plays', 0):,} played in full"),
     ]))
     story.append(Spacer(1, 4 * mm))
 
@@ -527,15 +538,18 @@ def build_pdf(report: dict) -> bytes:
     sla_pct = round((completed / tot_plays * 100), 1) if tot_plays > 0 else 100.0
 
     trend_chart = _build_daily_trend_chart(daily, content_w - 48 * mm, height=48)
-    sla_card = _card([
-        [Paragraph('<font color="#16a34a"><b>SLA COMPLIANCE</b></font>', style["label"])],
+    # Playback completion, honestly labelled: this is completed/total plays -- the share of
+    # plays that ran to full length. It is NOT a contracted delivery target, so it must not
+    # be captioned as one on a document that carries a verification certificate.
+    completion_card = _card([
+        [Paragraph('<font color="#16a34a"><b>PLAYBACK COMPLETION</b></font>', style["label"])],
         [Paragraph(f"{sla_pct}%", style["value"])],
-        [Paragraph(f"{completed:,} of {tot_plays:,} completed", style["label"])],
-        [Paragraph("Verified playback delivery target achieved", style["note"])]
+        [Paragraph(f"{completed:,} of {tot_plays:,} plays ran in full", style["label"])],
+        [Paragraph("Share of plays that reached their full length", style["note"])]
     ], [44 * mm], bg=OK_BG, border=colors.HexColor("#bbf7d0"), pad=4)
 
     story.append(Table(
-        [[trend_chart, sla_card]],
+        [[trend_chart, completion_card]],
         colWidths=[content_w - 46 * mm, 46 * mm],
         style=TableStyle([
             ("VALIGN", (0, 0), (-1, -1), "TOP"),

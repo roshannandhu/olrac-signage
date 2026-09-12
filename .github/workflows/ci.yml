@@ -29,6 +29,12 @@ jobs:
         run: pip install -r backend/requirements-dev.txt
       - name: Layer boundaries (import-linter)
         run: lint-imports
+      - name: No embedded storage credentials
+        # Hardcoding a key makes blank thumbnails disappear instantly, which is why it kept
+        # getting re-added -- into a public backend module and into the browser bundle --
+        # and why the bug kept coming back a rotation later. Runs here rather than only in
+        # the test suite because this job is the gate a push actually has to pass.
+        run: python tests/test_no_embedded_credentials.py
       - name: App imports cleanly
         run: python -c "import backend.main; print('backend imports OK')"
 

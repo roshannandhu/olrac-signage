@@ -23,31 +23,38 @@ if (typeof window !== 'undefined') {
 
 export const WS_BASE = API_BASE.replace(/^http/, 'ws')
 
-import { presignR2Url } from './r2-signer'
-
+/**
+ * Absolute, fetchable URL for a stored media location.
+ *
+ * Pure string work: no credentials, no clock, no signing, nothing that expires. The API has
+ * already done the resolving — `ContentResponse.absolutise_urls` runs `resolve_media_url`
+ * over both `file_url` and `thumbnail`, so what arrives here is already
+ * `https://<api>/api/media/<key>`, a URL that signs a fresh redirect on every request and
+ * stays valid for as long as the object exists.
+ *
+ * This used to take that correct URL and mint a 7-day presigned R2 URL from credentials
+ * bundled into the page, and THAT is why "thumbnail not showing" kept coming back rather
+ * than being fixed once. A second signer has to agree with the backend about bucket,
+ * endpoint, region, key prefix and clock; any drift, any rotated key, any URL still cached
+ * after its window closes, and the result is an opaque 403 that renders as a grey box
+ * indistinguishable from a missing file. The backend retired its own presigner for exactly
+ * this reason (see `resolve_media_url` in backend/media_urls.py) and the TV app deliberately
+ * signs nothing (see `rewriteLoopbackMediaUrl` in ApiClient.kt). The dashboard was the last
+ * holdout. It also meant every visitor was served the storage credentials.
+ *
+ * If a thumbnail is blank now, the answer is in the response or the server — not here.
+ */
 export function resolveMediaUrl(urlStr: string | null | undefined): string | undefined {
   if (!urlStr) return undefined
-  // Direct Cloudflare R2 presigned edge delivery for zero latency and zero dependency on Render uptime
-  if (urlStr.startsWith('s3://') || urlStr.startsWith('r2://') || urlStr.includes('/api/media/')) {
-    const directR2 = presignR2Url(urlStr)
-    if (directR2) return directR2
-  }
-  if (urlStr.startsWith('/uploads/')) {
-    return `${API_HOST}${urlStr}`
-  }
-  if (urlStr.startsWith('uploads/')) {
-    return `${API_HOST}/${urlStr}`
-  }
-  try {
-    const url = new URL(urlStr)
-    if (url.pathname.startsWith('/uploads/')) {
-      return `${API_HOST}${url.pathname}${url.search}`
-    }
-    if (url.pathname.startsWith('/api/media/')) {
-      const directR2 = presignR2Url(urlStr)
-      if (directR2) return directR2
-    }
-  } catch {}
+  // Already absolute, which is the ordinary case: hand it back untouched.
+  if (/^https?:\/\//i.test(urlStr)) return urlStr
+  // A bare stored path, from a response that predates absolutising or was cached before it.
+  if (urlStr.startsWith('/uploads/')) return `${API_HOST}${urlStr}`
+  if (urlStr.startsWith('uploads/')) return `${API_HOST}/${urlStr}`
+  if (urlStr.startsWith('/api/media/')) return `${API_HOST}${urlStr}`
+  // s3:// is a storage location, not a URL. The API resolves these; if one reaches the
+  // browser the row was serialised by something that skipped absolutise_urls, and guessing
+  // at a signed URL here is what this function is no longer in the business of doing.
   return urlStr
 }
 

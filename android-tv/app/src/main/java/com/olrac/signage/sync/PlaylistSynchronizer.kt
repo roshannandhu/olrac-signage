@@ -79,17 +79,13 @@ class PlaylistSynchronizer(context: Context) {
                     val interval = saveInterval(responseInterval ?: currentInterval)
                     return@withContext SyncOutcome(true, false, false, interval)
                 }
-                if (response.code() == 404 || response.code() == 401 || response.code() == 403) {
-                    android.util.Log.w("PlaylistSynchronizer", "Screen deleted or credentials revoked (HTTP ${response.code()}); signing out")
-                    com.olrac.signage.boot.PlayerLauncher.handleUnpairedOrDeleted(appContext)
-                    return@withContext SyncOutcome(false, false, true, currentInterval, "Screen unlinked")
-                }
-                // 404 is not a transient failure and must not be retried like one. It means
-                // the server has no screen for this device id -- the operator removed this TV
-                // from their fleet. Treated as retryable (which it was) the panel keeps
-                // playing the removed tenant's cached playlist forever, reconnecting every
-                // minute to a workspace it no longer belongs to.
+                // 404, and ONLY 404, means this screen is gone. It is not a transient failure
+                // and must not be retried like one: the server has no screen for this device
+                // id, so the operator removed this TV from their fleet. Treated as retryable
+                // the panel keeps playing the removed tenant's cached playlist forever,
+                // reconnecting every minute to a workspace it no longer belongs to.
                 if (response.code() == 404) {
+                    android.util.Log.w("PlaylistSynchronizer", "Screen removed from its workspace (404); signing out")
                     com.olrac.signage.boot.PlayerLauncher.handleUnpairedOrDeleted(appContext)
                     return@withContext SyncOutcome(
                         successful = false,
@@ -97,6 +93,30 @@ class PlaylistSynchronizer(context: Context) {
                         changed = true,
                         intervalSeconds = currentInterval,
                         error = "This screen was removed from its workspace"
+                    )
+                }
+                // 401/403 is NOT "you were deleted". The device secret is still valid; what
+                // lapsed is the token minted from it, and ApiClient has already dropped the
+                // cached one -- so the next call re-mints and succeeds on its own.
+                //
+                // These used to be handled as deletion, which wiped the pairing, the device
+                // secret, the cached playlist AND every downloaded file over a momentary auth
+                // failure. The worst case is routine rather than exotic: rotating the server's
+                // SECRET_KEY invalidates every device token at once, so the whole fleet would
+                // factory-reset itself and need re-pairing by hand. Retry instead. A screen
+                // whose access was genuinely revoked comes back as a 404 and is handled above.
+                if (response.code() == 401 || response.code() == 403) {
+                    android.util.Log.w(
+                        "PlaylistSynchronizer",
+                        "Auth rejected (HTTP ${response.code()}); re-authenticating on the next sync"
+                    )
+                    ApiClient.clearToken()
+                    return@withContext SyncOutcome(
+                        successful = false,
+                        retryable = true,
+                        changed = false,
+                        intervalSeconds = currentInterval,
+                        error = "Authentication failed; retrying"
                     )
                 }
                 if (!response.isSuccessful) {

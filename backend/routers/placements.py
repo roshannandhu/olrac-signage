@@ -6,6 +6,7 @@ downstream — the player sync, proof-of-play, rendition selection, rotation —
 playlist items and needs no knowledge that bookings exist.
 """
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -146,20 +147,81 @@ def sync_placement_window(scope: TenantScope, placement: models.AdPlacement) -> 
         bump_playlist(playlist)
 
 
-def _serialize(scope: TenantScope, placement: models.AdPlacement) -> schemas.PlacementResponse:
-    screen_names = dict(scope.db.query(models.Screen.id, models.Screen.name).all())
-    screen_locations = dict(scope.db.query(models.Screen.id, models.Screen.location).all())
-    group_names = dict(scope.db.query(models.ScreenGroup.id, models.ScreenGroup.name).all())
-    # Group locations derived from screen members
-    group_screens = (
-        scope.db.query(models.Screen.group_id, models.Screen.location)
-        .filter(models.Screen.group_id.isnot(None), models.Screen.location.isnot(None))
+@dataclass(frozen=True)
+class BookingNames:
+    """Names, locations and members for the screens and groups a booking can point at.
+
+    Built ONCE per request. This used to be built inside `_serialize`, which the bookings
+    list calls once per placement -- four full-table queries each, so twenty bookings
+    issued eighty of them plus a member lookup per booking. Against a database in another
+    region that is several times the entire page budget, for data that is identical on
+    every pass.
+    """
+
+    screen_names: dict[int, str]
+    screen_locations: dict[int, str | None]
+    group_names: dict[int, str]
+    group_locations: dict[int, list[str]]
+    group_members: dict[int, list[int]]
+
+
+def booking_names(scope: TenantScope) -> BookingNames:
+    """One scoped pass over the workspace's screens and groups.
+
+    Through `scope.query`, not `scope.db.query`: the funnel is what applies the
+    organisation filter and drops archived rows. Reading around it pulled every tenant's
+    screens -- and every deleted one -- into a map built to resolve the names of one
+    booking's own targets.
+    """
+    screen_names: dict[int, str] = {}
+    screen_locations: dict[int, str | None] = {}
+    group_locations: dict[int, list[str]] = {}
+    group_members: dict[int, list[int]] = {}
+
+    rows = (
+        scope.query(models.Screen)
+        .with_entities(
+            models.Screen.id,
+            models.Screen.name,
+            models.Screen.location,
+            models.Screen.group_id,
+        )
         .all()
     )
-    group_locations: dict[int, list[str]] = {}
-    for gid, loc in group_screens:
-        if loc and loc.strip():
-            group_locations.setdefault(gid, []).append(loc.strip())
+    for screen_id, name, location, group_id in rows:
+        screen_names[screen_id] = name
+        screen_locations[screen_id] = location
+        if group_id is not None:
+            group_members.setdefault(group_id, []).append(screen_id)
+            if location and location.strip():
+                group_locations.setdefault(group_id, []).append(location.strip())
+
+    group_names = dict(
+        scope.query(models.ScreenGroup)
+        .with_entities(models.ScreenGroup.id, models.ScreenGroup.name)
+        .all()
+    )
+    return BookingNames(
+        screen_names=screen_names,
+        screen_locations=screen_locations,
+        group_names=group_names,
+        group_locations=group_locations,
+        group_members=group_members,
+    )
+
+
+def _serialize(
+    scope: TenantScope,
+    placement: models.AdPlacement,
+    names: BookingNames | None = None,
+) -> schemas.PlacementResponse:
+    # Optional so the fourteen single-booking callers stay a one-liner; the list endpoint
+    # builds it once and hands the same one to every row.
+    names = names or booking_names(scope)
+    screen_names = names.screen_names
+    screen_locations = names.screen_locations
+    group_names = names.group_names
+    group_locations = names.group_locations
 
     now = models.utcnow()
     ends = effective_ends_at(placement)
@@ -169,7 +231,9 @@ def _serialize(scope: TenantScope, placement: models.AdPlacement) -> schemas.Pla
     creative_thumb = resolve_media_url(content.thumbnail or content.file_url) if content else None
     # Groups expanded, the same way the cap counts them, so "3 of 5" means three TVs and
     # not three rows.
-    usage = plan_screen_usage(placement.plan, set(_booking_screen_ids(scope, placement)))
+    usage = plan_screen_usage(
+        placement.plan, set(_booking_screen_ids(scope, placement, names.group_members))
+    )
     # Reported rather than left to each caller to work out. See settlement().
     money = settlement(placement)
 
@@ -251,7 +315,11 @@ def list_placements(
     query = scope.query(models.AdPlacement)
     if content_id is not None:
         query = query.filter(models.AdPlacement.content_id == content_id)
-    return [_serialize(scope, p) for p in query.order_by(models.AdPlacement.created_at.desc()).all()]
+    names = booking_names(scope)
+    return [
+        _serialize(scope, p, names)
+        for p in query.order_by(models.AdPlacement.created_at.desc()).all()
+    ]
 
 
 def ensure_ad_slot_quota(scope: TenantScope) -> None:
@@ -902,7 +970,11 @@ def edit_payment(
     return _serialize(scope, placement)
 
 
-def _booking_screen_ids(scope: TenantScope, placement: models.AdPlacement) -> list[int]:
+def _booking_screen_ids(
+    scope: TenantScope,
+    placement: models.AdPlacement,
+    members_by_group: dict[int, list[int]] | None = None,
+) -> list[int]:
     """Every screen this booking actually reaches.
 
     A group target is expanded to its current members, because that is what the advert
@@ -916,8 +988,15 @@ def _booking_screen_ids(scope: TenantScope, placement: models.AdPlacement) -> li
         elif target.group_id:
             group_ids.append(target.group_id)
     if group_ids:
-        members = scope.query(models.Screen).filter(models.Screen.group_id.in_(group_ids)).all()
-        screen_ids.update(screen.id for screen in members)
+        if members_by_group is not None:
+            # Already loaded for this request, so expanding a group costs nothing. Without
+            # it the bookings list issued one member lookup per booking on top of everything
+            # else it was repeating.
+            for group_id in group_ids:
+                screen_ids.update(members_by_group.get(group_id, ()))
+        else:
+            members = scope.query(models.Screen).filter(models.Screen.group_id.in_(group_ids)).all()
+            screen_ids.update(screen.id for screen in members)
     return sorted(screen_ids)
 
 

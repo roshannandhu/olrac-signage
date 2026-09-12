@@ -46,7 +46,19 @@ async def collect_device_secret(device_id: str) -> Optional[str]:
 
 
 def legacy_device_auth_allowed() -> bool:
-    """Whether a screen holding no device secret may still call the device endpoints."""
+    """Whether a screen holding no device secret may still call the device endpoints.
+
+    ⚠️ Defaults to ON, which is the wrong posture: a deployment that never sets the
+    variable -- a new environment, a restored one, a developer's laptop -- accepts
+    unauthenticated device calls from anyone who knows or guesses a device id. A security
+    allowance should be switched on deliberately rather than inherited by forgetting.
+
+    It has NOT been flipped yet because the blast radius is a live fleet: any panel still
+    holding no device secret stops syncing the moment it changes, and over ten test files
+    drive the device endpoints with no credential. Flip it by setting
+    ALLOW_LEGACY_DEVICE_AUTH=false once no screen logs the legacy-path warning -- the
+    warning below is what tells you that.
+    """
     return os.getenv("ALLOW_LEGACY_DEVICE_AUTH", "true").strip().lower() in {"1", "true", "yes"}
 
 

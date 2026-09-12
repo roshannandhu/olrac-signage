@@ -15,6 +15,27 @@ from ..models import Campaign, Content, PlayLogHourlyRollup, Screen, ScreenGroup
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 
+def _bucket_daily(rows) -> list[tuple]:
+    """Hourly rollups folded into calendar days, oldest first.
+
+    Done in Python because `date_trunc` is Postgres-only, and these endpoints also run on
+    the SQLite the test suite and local development use -- where it raises "no such
+    function" and 500s the whole response. placements.py bucket the same way for the same
+    reason, and worker.py keeps a Postgres fast path only because it aggregates the entire
+    table; these two queries are already narrowed to one campaign or one creative over a
+    week or a month, so the row count is small and one portable path beats two.
+
+    Takes (date_hour, total, completed) rows and returns (date, total, completed).
+    """
+    buckets: dict = {}
+    for date_hour, total, completed in rows:
+        day = date_hour.date()
+        running = buckets.setdefault(day, [0, 0])
+        running[0] += total or 0
+        running[1] += completed or 0
+    return [(day, totals[0], totals[1]) for day, totals in sorted(buckets.items())]
+
+
 @router.get("/campaigns")
 def list_campaigns(
     tenant: TenantScope = Depends(require_tenant_roles("owner", "editor", "viewer")),
@@ -142,26 +163,21 @@ def get_campaign_timeseries(
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    # Get last 7 days grouped by day
+    # Last 7 days. Grouped by the hour column and bucketed to calendar days in Python --
+    # see _bucket_daily.
     rows = db.query(
-        func.date_trunc('day', PlayLogHourlyRollup.date_hour).label('day'),
-        func.sum(PlayLogHourlyRollup.total_plays).label('total'),
-        func.sum(PlayLogHourlyRollup.completed_plays).label('completed')
+        PlayLogHourlyRollup.date_hour,
+        func.sum(PlayLogHourlyRollup.total_plays),
+        func.sum(PlayLogHourlyRollup.completed_plays),
     ).filter(
         PlayLogHourlyRollup.organization_id == tenant.organization_id,
         PlayLogHourlyRollup.campaign_id == campaign_id,
         PlayLogHourlyRollup.date_hour >= datetime.now(timezone.utc) - timedelta(days=7)
-    ).group_by(
-        func.date_trunc('day', PlayLogHourlyRollup.date_hour)
-    ).order_by('day').all()
+    ).group_by(PlayLogHourlyRollup.date_hour).all()
 
     return [
-        {
-            "date": row.day.strftime("%Y-%m-%d"),
-            "total_plays": row.total,
-            "completed_plays": row.completed
-        }
-        for row in rows
+        {"date": day.isoformat(), "total_plays": total, "completed_plays": completed}
+        for day, total, completed in _bucket_daily(rows)
     ]
 
 
@@ -360,17 +376,16 @@ def get_media_report(
 
     daily_rows = (
         db.query(
-            func.date_trunc("day", PlayLogHourlyRollup.date_hour).label("day"),
-            func.coalesce(func.sum(PlayLogHourlyRollup.total_plays), 0).label("plays"),
-            func.coalesce(func.sum(PlayLogHourlyRollup.completed_plays), 0).label("completed"),
+            PlayLogHourlyRollup.date_hour,
+            func.coalesce(func.sum(PlayLogHourlyRollup.total_plays), 0),
+            func.coalesce(func.sum(PlayLogHourlyRollup.completed_plays), 0),
         )
         .filter(
             PlayLogHourlyRollup.organization_id == target_org_id,
             PlayLogHourlyRollup.media_id == content_id,
             PlayLogHourlyRollup.date_hour >= now - timedelta(days=30),
         )
-        .group_by(text("1"))
-        .order_by(text("1"))
+        .group_by(PlayLogHourlyRollup.date_hour)
         .all()
     )
 
@@ -383,7 +398,7 @@ def get_media_report(
         "per_screen": per_screen,
         "per_location": sorted(places.values(), key=lambda p: p["total_plays"], reverse=True),
         "daily": [
-            {"date": row.day.date().isoformat(), "total_plays": row.plays, "completed_plays": row.completed}
-            for row in daily_rows
+            {"date": day.isoformat(), "total_plays": total, "completed_plays": completed}
+            for day, total, completed in _bucket_daily(daily_rows)
         ],
     }

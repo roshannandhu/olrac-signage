@@ -42,11 +42,20 @@ CAMPAIGN_ENDING_WITHIN = timedelta(days=7)
 # play, so it will start failing downloads shortly.
 LOW_STORAGE_MB = 500
 
-# How long a screen must be unreachable before it is worth telling someone.
-#
-# Set aggressively low (1 minute) for immediate operator awareness. The heartbeat
-# interval is ~60s, so a screen that misses one cycle is flagged immediately.
-OFFLINE_ALERT_AFTER = timedelta(minutes=1)
+def offline_alert_after() -> timedelta:
+    """How long a screen must be unreachable before it is worth telling someone.
+
+    The SAME threshold the fleet uses to call a screen offline, deliberately. This was a
+    flat one minute while `screen_offline_after_seconds()` defaults to ninety, so a screen
+    silent for 60-90s raised a "screen is offline" alert while the screens list still
+    showed it with a green Online badge -- the dashboard contradicting itself, which is how
+    operators learn to distrust the alerts.
+
+    One source of truth means tuning the offline window moves both together.
+    """
+    from .services.screen_telemetry_service import screen_offline_after_seconds
+
+    return timedelta(seconds=screen_offline_after_seconds())
 
 
 @dataclass(frozen=True)
@@ -179,7 +188,7 @@ def evaluate_screen(screen, now: datetime) -> list[AlertCondition]:
 
     last_seen = _as_utc(getattr(screen, "last_seen", None))
     offline_for = (now - last_seen) if last_seen else None
-    if offline_for is not None and offline_for >= OFFLINE_ALERT_AFTER:
+    if offline_for is not None and offline_for >= offline_alert_after():
         minutes = int(offline_for.total_seconds() // 60)
         human = f"{minutes // 60}h {minutes % 60}m" if minutes >= 60 else f"{minutes}m"
         conditions.append(AlertCondition(

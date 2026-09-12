@@ -25,11 +25,14 @@ for _name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"):
     os.environ[_name] = ""
 
 
-def _serve(key: str):
+def _serve(key: str, range_header: str | None = None):
     """Call the route function directly, without a database or an app fixture."""
     from backend.main import serve_media
 
-    return serve_media(key)
+    class _Request:
+        headers = {"range": range_header} if range_header else {}
+
+    return serve_media(key, _Request())
 
 
 def test_public_base_is_a_location_not_a_secret():
@@ -83,7 +86,28 @@ def test_key_escape_is_still_blocked_on_the_public_path():
             raise AssertionError(f"expected 404 for {bad!r}")
 
 
+def test_range_parsing():
+    """Android's player sends these; an off-by-one here is a video that will not seek."""
+    from backend.main import _parse_range
+
+    assert _parse_range("bytes=0-99", 1000) == (0, 99)
+    assert _parse_range("bytes=500-", 1000) == (500, 999)
+    assert _parse_range("bytes=-200", 1000) == (800, 999)
+    # Past the end, malformed, absent, and multi-range all fall back to a whole-file reply.
+    for bad in ("bytes=2000-3000", "bytes=abc-def", "junk", None, "bytes=0-9,20-29"):
+        assert _parse_range(bad, 1000) is None, bad
+
+
+def test_database_mirror_is_absent_without_the_table():
+    """No mirror table must read as "not mirrored", never as a 500 on a media request."""
+    from backend.main import _serve_media_from_database
+
+    assert _serve_media_from_database("org-1/nothing.png", None) is None
+
+
 if __name__ == "__main__":
+    test_range_parsing()
+    test_database_mirror_is_absent_without_the_table()
     test_public_base_is_a_location_not_a_secret()
     test_serves_without_credentials()
     test_without_a_public_base_it_still_refuses_rather_than_guessing()

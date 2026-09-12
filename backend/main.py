@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -422,9 +422,80 @@ _MEDIA_SIGNATURE_SECONDS = 6 * 3600
 _MEDIA_REDIRECT_CACHE_SECONDS = 60
 
 
+def _parse_range(header: str | None, size: int) -> tuple[int, int] | None:
+    """`bytes=start-end` as a concrete, in-bounds pair, or None if it is not usable."""
+    if not header or not header.startswith("bytes=") or "," in header:
+        return None
+    span = header.removeprefix("bytes=").strip()
+    start_text, _, end_text = span.partition("-")
+    try:
+        if not start_text:
+            # A suffix range ("bytes=-500") counts back from the end.
+            length = int(end_text)
+            return (max(0, size - length), size - 1) if length > 0 else None
+        start = int(start_text)
+        end = int(end_text) if end_text else size - 1
+    except ValueError:
+        return None
+    end = min(end, size - 1)
+    if start > end or start >= size:
+        return None
+    return start, end
+
+
+def _serve_media_from_database(key: str, range_header: str | None):
+    """The object's bytes from the `media_blob` mirror, or None if it is not mirrored.
+
+    Returns None rather than raising for every reason it can fail -- absent table, absent
+    row, unreachable database -- because the caller's next move is the same in all of them
+    and a media route is no place to surface a schema problem.
+
+    Range is honoured because Android's player asks for one: without it a TV re-downloads a
+    whole advert to resume and cannot seek within it at all.
+    """
+    from sqlalchemy import text
+
+    from . import database
+
+    try:
+        with database.engine.connect() as connection:
+            row = connection.execute(
+                text("SELECT content_type, data FROM media_blob WHERE key = :key"),
+                {"key": key},
+            ).first()
+    except Exception:
+        return None
+    if row is None:
+        return None
+
+    content_type, data = row[0], bytes(row[1])
+    request_range = _parse_range(range_header, len(data))
+    if request_range:
+        start, end = request_range
+        chunk = data[start : end + 1]
+        return Response(
+            chunk,
+            status_code=206,
+            media_type=content_type,
+            headers={
+                "Content-Range": f"bytes {start}-{end}/{len(data)}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(len(chunk)),
+            },
+        )
+    return Response(
+        data,
+        media_type=content_type,
+        headers={
+            "Accept-Ranges": "bytes",
+            "Cache-Control": f"public, max-age={_MEDIA_SIGNATURE_SECONDS}",
+        },
+    )
+
+
 @app.get("/api/media/{key:path}")
 @app.head("/api/media/{key:path}")
-def serve_media(key: str):
+def serve_media(key: str, request: Request):
     """Stable URL for a stored object; signs the real one fresh on every request.
 
     This is the only place a media signature is produced. `resolve_media_url` hands out
@@ -458,6 +529,17 @@ def serve_media(key: str):
         )
 
     if not is_s3_enabled():
+        # Last resort before giving up: a copy held in the database itself. A deployment can
+        # lose its storage credentials while keeping its database, and then every object it
+        # owns is unreachable even though nothing was deleted -- so a mirrored copy is the
+        # difference between a dashboard that works and one that is entirely blank.
+        #
+        # ponytail: bytes through Postgres is slower and pricier than object storage and is
+        # meant as a bridge, not a home. Set credentials or publish the bucket and this
+        # branch stops being reached.
+        served = _serve_media_from_database(key, request.headers.get("range"))
+        if served is not None:
+            return served
         # Local storage is served by the /uploads mount above and never reaches here, so
         # this only fires for an s3:// row in a deployment that has since lost its
         # credentials. Saying so beats a blank image.

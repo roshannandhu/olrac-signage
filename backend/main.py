@@ -605,6 +605,16 @@ async def health_check(db: Session = Depends(database.get_db)):
     # so "thumbnails are blank" and "new uploads vanish on redeploy" are two different
     # states, and collapsing them into one boolean is what made the second one invisible.
     public_reads = bool(public_media_base())
+    if not object_storage and not public_reads:
+        # The database mirror serves the same objects, so a deployment using it must not be
+        # told its thumbnails are blank -- they are not, and a false alarm on a tenant's
+        # dashboard costs more trust than the real warning underneath it is worth.
+        try:
+            public_reads = bool(
+                db.execute(text("SELECT 1 FROM media_blob LIMIT 1")).first()
+            )
+        except Exception:
+            public_reads = False
     # Reported, not fatal. Nothing in the fleet depends on mail -- but a tenant who clicks
     # "email this report to the client" and is told it went is owed the truth, and the
     # place to find out is here rather than from the client who never received it.
@@ -648,7 +658,7 @@ async def health_check(db: Session = Depends(database.get_db)):
         "object_storage": (
             "configured"
             if object_storage
-            else "public read-only (new uploads are ephemeral)"
+            else "public read (new uploads are ephemeral)"
             if public_reads
             else "local disk (ephemeral)"
         ),

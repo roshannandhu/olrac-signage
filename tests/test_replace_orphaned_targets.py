@@ -155,6 +155,51 @@ try:
     assert http.post("/api/placements/999999/replace", headers=auth).status_code == 404
     print("  ok  an unknown booking is a 404")
 
+    # --- and it heals itself, without anyone pressing the button --------------------------
+    # The manual route above is the operator noticing. Most of the time nobody notices: the
+    # booking reads "Running" everywhere while playing on nothing. reconcile_unplaced_bookings
+    # runs on a timer in the app process -- not as a scheduled job, because those need Redis
+    # and this matters most when the deployment is already degraded.
+    from backend.services import reconcile_unplaced_bookings
+
+    db.expire_all()
+    db.query(models.Playlist).delete()
+    db.commit()
+    listed = http.get("/api/placements/", headers=auth).json()
+    broken = next(p for p in listed if p["id"] == booking_id)
+    assert not any(t["is_placed"] for t in broken["targets"]), broken["targets"]
+
+    healed = reconcile_unplaced_bookings(db)
+    assert healed == 2, f"expected both locations restored, got {healed}"
+
+    restored_auto = next(
+        p for p in http.get("/api/placements/", headers=auth).json() if p["id"] == booking_id
+    )
+    assert all(t["is_placed"] for t in restored_auto["targets"]), restored_auto["targets"]
+    assert len(restored_auto["targets"]) == 2, restored_auto["targets"]
+    db.expire_all()
+    assert db.query(models.PlaylistItem).count() == 2, "expected one item per screen"
+    print("  ok  a running booking that lost its items is restored automatically")
+
+    # Idempotent: a healthy fleet costs nothing and cannot stack duplicates.
+    assert reconcile_unplaced_bookings(db) == 0, "reconcile repeated work on a healthy booking"
+    db.expire_all()
+    assert db.query(models.PlaylistItem).count() == 2, "reconcile duplicated an advert"
+    print("  ok  reconciling a healthy fleet changes nothing")
+
+    # A FINISHED booking is supposed to have no items; reviving it would replay a campaign
+    # the client no longer pays for.
+    db.expire_all()
+    done = db.query(models.AdPlacement).filter(models.AdPlacement.id == booking_id).one()
+    done.ends_at = now - timedelta(days=1)
+    for t in done.targets:
+        t.ends_at = now - timedelta(days=1)
+    db.commit()
+    db.query(models.Playlist).delete()
+    db.commit()
+    assert reconcile_unplaced_bookings(db) == 0, "a finished booking was put back on air"
+    print("  ok  a finished booking is left alone")
+
     print("replace orphaned targets: all checks passed")
 finally:
     try:

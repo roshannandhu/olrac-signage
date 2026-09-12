@@ -28,6 +28,7 @@ from ..services import (
     playlist_for_target as _playlist_for_target,
     place_advert as _place,
     unplace_advert as _unplace,
+    repair_orphaned_targets as _repair_targets,
 )
 
 router = APIRouter()
@@ -532,36 +533,10 @@ def replace_targets(
     if not placement:
         raise HTTPException(status_code=404, detail="Booking not found")
 
-    orphaned = [t for t in placement.targets if t.playlist_item_id is None]
-    if not orphaned:
+    # Shared with the reconcile loop that does this automatically, so the manual button
+    # and the self-healing timer can never disagree about what "put it back" means.
+    if not _repair_targets(scope, placement):
         return _serialize(scope, placement)
-
-    for target in orphaned:
-        ref = schemas.PlacementTargetRef(
-            screen_id=target.screen_id,
-            group_id=target.group_id,
-            # Its own window if it had one, so a location sold ten days does not silently
-            # inherit the booking's thirty on the way back.
-            days=(
-                max(1, round((target.ends_at - target.starts_at).total_seconds() / 86400))
-                if target.ends_at and target.starts_at
-                else None
-            ),
-        )
-        # Re-placed from the ORIGINAL assignment date, not today: the client's report
-        # divides this location's plays by the days it really ran, and restarting the clock
-        # here would report a location that has run all month as a late addition.
-        restored = _place(scope, placement, ref, assigned_at=target.assigned_at)
-        # The new row carries the item; the empty one it replaces would otherwise sit there
-        # as a second, permanently unplaced copy of the same location.
-        scope.db.delete(target)
-        logger.info(
-            "Booking %s re-placed on %s (target %s -> %s)",
-            placement.id,
-            f"screen {target.screen_id}" if target.screen_id else f"group {target.group_id}",
-            target.id,
-            restored.id,
-        )
 
     scope.db.commit()
     scope.db.refresh(placement)

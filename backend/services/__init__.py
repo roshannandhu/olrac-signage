@@ -39,6 +39,8 @@ from .placement_service import (
     playlist_for_target,
     place_advert,
     unplace_advert,
+    repair_orphaned_targets,
+    reconcile_unplaced_bookings,
 )
 
 __all__ = [
@@ -74,4 +76,6 @@ __all__ = [
     "playlist_for_target",
     "place_advert",
     "unplace_advert",
+    "repair_orphaned_targets",
+    "reconcile_unplaced_bookings",
 ]

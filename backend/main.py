@@ -172,6 +172,17 @@ async def lifespan(_app: FastAPI):
                             process_media_sync(item.id)
                         except Exception as exc_item:
                             logger.warning("Supervisor error processing media %d: %s", item.id, exc_item)
+                # A booking that is sold, paid and running can lose the playlist items it
+                # created without anyone touching it: PlaylistItem cascades from both its
+                # playlist and its content, while the target's link is ON DELETE SET NULL.
+                # The booking then reads "Running" on every page while playing on nothing,
+                # which is invisible until a client asks why their advert never appeared.
+                #
+                # Here rather than as a scheduled job because the scheduled jobs need Redis,
+                # and this matters most when the deployment is already degraded.
+                from .services import reconcile_unplaced_bookings
+
+                reconcile_unplaced_bookings(rec_db)
             except Exception as exc:
                 logger.warning("Failed in media supervisor loop: %s", exc)
             finally:

@@ -123,6 +123,7 @@ PURE_MODULES = {
     # Airtime formatting on the client report. Committed without being registered in
     # either place, so it had never run -- the exact state this guard exists to catch.
     "test_report_airtime.py",
+    "test_no_embedded_credentials.py",
 }
 
 

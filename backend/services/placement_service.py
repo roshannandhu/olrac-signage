@@ -1,6 +1,7 @@
 """Ad Placement & Campaign Management Service."""
 
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 from fastapi import HTTPException
@@ -223,6 +224,124 @@ def unplace_advert(scope: TenantScope, target: models.AdPlacementTarget) -> None
                 bump_playlist(item.playlist)
             scope.db.delete(item)
     scope.db.delete(target)
+
+
+@dataclass(frozen=True)
+class SystemScope:
+    """Organisation-scoped access for background work that has no signed-in user.
+
+    `place_advert` and `playlist_for_target` need `db`, `organization_id`, `get` and
+    `query`. TenantScope derives those from a User, which a reconcile loop does not have.
+    The filters are the same ones TenantScope applies, so background work cannot reach
+    across organisations or resurrect archived rows either.
+    """
+
+    db: Session
+    organization_id: int
+
+    def get(self, model, record_id):
+        if not record_id:
+            return None
+        return self.query(model).filter(model.id == record_id).first()
+
+    def query(self, model):
+        query = self.db.query(model)
+        organization_column = getattr(model, "organization_id", None)
+        if organization_column is not None:
+            query = query.filter(organization_column == self.organization_id)
+        archived_column = getattr(model, "deleted_at", None)
+        if archived_column is not None:
+            query = query.filter(archived_column.is_(None))
+        return query
+
+
+def repair_orphaned_targets(scope, placement: models.AdPlacement) -> int:
+    """Put a booking back on every place it has silently fallen off. Returns how many.
+
+    A target holds the playlist item it created, and that column is ON DELETE SET NULL,
+    while PlaylistItem cascades from BOTH its playlist and its content. So deleting a
+    playlist or a creative takes the items away and nulls the link on every booking that
+    used them -- the booking survives, still Running and still Paid, playing on nothing.
+
+    A target left like that is ALWAYS breakage, never intent: stopping an advert in one
+    place goes through `unplace_advert`, which deletes the target row outright. A target
+    that still exists with no item is a broken invariant, so it is safe to restore.
+
+    Idempotent and additive. A target still holding its item is untouched, so this cannot
+    duplicate an advert into a loop.
+    """
+    orphaned = [target for target in placement.targets if target.playlist_item_id is None]
+    if not orphaned:
+        return 0
+
+    for target in orphaned:
+        ref = schemas.PlacementTargetRef(
+            screen_id=target.screen_id,
+            group_id=target.group_id,
+            # Its own window if it had one, so a location sold ten days does not silently
+            # inherit the booking's thirty on the way back.
+            days=(
+                max(1, round((target.ends_at - target.starts_at).total_seconds() / 86400))
+                if target.ends_at and target.starts_at
+                else None
+            ),
+        )
+        # From the ORIGINAL assignment date, not today: the client's report divides this
+        # location's plays by the days it really ran, and restarting the clock here would
+        # report a location that has run all month as a late addition.
+        restored = place_advert(scope, placement, ref, assigned_at=target.assigned_at)
+        # The new row carries the item; the empty one it replaces would otherwise sit there
+        # as a second, permanently unplaced copy of the same location.
+        scope.db.delete(target)
+        logger.info(
+            "Booking %s re-placed on %s (target %s -> %s)",
+            placement.id,
+            f"screen {target.screen_id}" if target.screen_id else f"group {target.group_id}",
+            target.id,
+            restored.id,
+        )
+    return len(orphaned)
+
+
+def reconcile_unplaced_bookings(db: Session, now=None) -> int:
+    """Restore every RUNNING booking that has lost the items it placed.
+
+    Runs on a timer in the app process rather than as a scheduled job, deliberately: the
+    scheduled jobs need Redis, and this is most needed exactly when the deployment is in a
+    degraded state. A booking that is sold, paid and playing on nothing is invisible from
+    the dashboard -- it still reads "Running" -- so waiting for someone to notice and press
+    a button is waiting for a client to ring up about an advert that never ran.
+
+    Only bookings whose window is open now. A finished one is supposed to have no items.
+    """
+    now = now or models.utcnow()
+    placements = (
+        db.query(models.AdPlacement)
+        .join(models.AdPlacementTarget,
+              models.AdPlacementTarget.placement_id == models.AdPlacement.id)
+        .filter(
+            models.AdPlacementTarget.playlist_item_id.is_(None),
+            models.AdPlacement.starts_at <= now,
+            models.AdPlacement.effective_ends_at > now,
+        )
+        .distinct()
+        .all()
+    )
+    repaired = 0
+    for placement in placements:
+        try:
+            repaired += repair_orphaned_targets(
+                SystemScope(db=db, organization_id=placement.organization_id), placement
+            )
+        except Exception:
+            # One unrepairable booking -- a deleted screen, a creative that is gone -- must
+            # not stop the rest from being restored.
+            db.rollback()
+            logger.exception("Could not re-place booking %s", placement.id)
+    if repaired:
+        db.commit()
+        logger.info("Re-placed %d location(s) on bookings that had fallen off their screens", repaired)
+    return repaired
 
 
 class PlacementService(BaseService):

@@ -74,9 +74,13 @@ function saveBlob(blob: Blob, filename: string): void {
 }
 
 async function authFetch(endpoint: string, options: RequestInit = {}): Promise<Response> {
-  const token = useAuthStore.getState().token
+  const { token, acting } = useAuthStore.getState()
   const headers = new Headers(options.headers)
   if (token) headers.set('Authorization', `Bearer ${token}`)
+  // Attached here rather than at each call site so stepping into a workspace reaches every
+  // existing tenant endpoint at once -- which is the whole reason admin does not need its
+  // own parallel copies of them. The server ignores it for anyone but a super admin.
+  if (acting) headers.set('X-Act-As-Org', String(acting.id))
 
   const response = await fetch(`${API_BASE}${endpoint}`, { ...options, headers })
   if (response.status === 401) {

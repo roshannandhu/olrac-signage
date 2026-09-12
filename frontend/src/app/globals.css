@@ -152,6 +152,63 @@
   --sidebar-ring: #7aa9ff;
 }
 
+/* ---------------------------------------------------------------------------
+   Admin console
+   The platform operator's surface, and deliberately NOT the tenant workspace.
+
+   Admin is a control plane: it approves and suspends workspaces, prices plans and
+   pushes APK releases to every television in the fleet. It read as an ordinary tenant
+   page because it was converted to the tenant tokens, and in light mode the two were
+   indistinguishable -- which is exactly the moment an operator mistakes whose data
+   they are looking at.
+
+   Scoped to a wrapper rather than restyling the pages: CSS custom properties cascade,
+   so redefining them on `.admin-console` wins for that subtree no matter what the site
+   theme is, and every admin page keeps using bg-background / bg-card / text-foreground
+   untouched. Always dark, by design -- the theme toggle does not reach it.
+
+   Cool slate rather than the tenant's neutral near-black (#0b0b0c), with violet as the
+   accent instead of azure, so the two surfaces are never mistakable at a glance.
+   --------------------------------------------------------------------------- */
+.admin-console {
+  color-scheme: dark;
+
+  --rail: #0a0e1a;
+  --rail-foreground: #e8eaf2;
+  --rail-muted: rgb(226 232 255 / 0.55);
+  --panel: #171c2e;
+  --brand: #a78bfa;
+  --brand-soft: #a78bfa;
+  --hairline: rgb(167 139 250 / 0.16);
+
+  --background: #070a14;
+  --foreground: #e8eaf2;
+  --card: #0e1322;
+  --card-foreground: #e8eaf2;
+  --popover: #141a2b;
+  --popover-foreground: #e8eaf2;
+  --primary: #a78bfa;
+  --primary-foreground: #070a14;
+  --secondary: #171c2e;
+  --secondary-foreground: #e8eaf2;
+  --muted: #171c2e;
+  /* 4.8:1 on --card, so secondary text still clears AA. */
+  --muted-foreground: #9aa3bf;
+  --accent: #1e2438;
+  --accent-foreground: #e8eaf2;
+  --border: rgb(167 139 250 / 0.16);
+  --input: rgb(167 139 250 / 0.22);
+  --ring: #a78bfa;
+  --sidebar: #0e1322;
+  --sidebar-foreground: #e8eaf2;
+  --sidebar-primary: #a78bfa;
+  --sidebar-primary-foreground: #070a14;
+  --sidebar-accent: #1e2438;
+  --sidebar-accent-foreground: #e8eaf2;
+  --sidebar-border: rgb(167 139 250 / 0.16);
+  --sidebar-ring: #a78bfa;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

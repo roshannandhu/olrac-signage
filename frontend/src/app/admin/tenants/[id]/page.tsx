@@ -3,8 +3,10 @@
 import { use, useState } from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, FileVideo, MonitorPlay, Users } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { ArrowLeft, FileVideo, LogIn, MonitorPlay, Users } from 'lucide-react'
 import { adminApi } from '@/lib/api'
+import { useAuthStore } from '@/lib/store'
 import {
   Feedback, PageHeader, QuotaBar, StatusPill, formatBytes,
 } from '@/components/admin/admin-ui'
@@ -12,16 +14,21 @@ import {
 type Tab = 'screens' | 'content' | 'users'
 
 /**
- * Read-only view of one tenant's workspace.
+ * One tenant's workspace, as the platform operator sees it.
  *
- * Deliberately has no edit controls for their screens, media or team: an operator needs to
- * SEE what a workspace contains to support it, not to change it. Status and limits are
- * changed from the tenants list, which is where those actions belong.
+ * The tabs are a read-only inspection: an operator needs to SEE what a workspace contains
+ * to support it. Changing it is a separate, deliberate act -- "Enter workspace" steps into
+ * the tenant's own dashboard with every call scoped to them, so support work happens on the
+ * real screens instead of through admin-only copies that would drift from them.
+ *
+ * Status and limits are still changed from the tenants list, which is where those belong.
  */
 export default function AdminTenantDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const tenantId = Number(id)
   const [tab, setTab] = useState<Tab>('screens')
+  const router = useRouter()
+  const enterWorkspace = useAuthStore((state) => state.enterWorkspace)
 
   const tenantQuery = useQuery({
     queryKey: ['admin', 'tenant', tenantId],
@@ -62,6 +69,19 @@ export default function AdminTenantDetailPage({ params }: { params: Promise<{ id
         <>
           <PageHeader title={tenant.name} description={tenant.owner_email ?? 'No owner email on record'}>
             <StatusPill status={tenant.status} />
+            {/* The tabs below only READ this workspace. This is how an operator actually
+                works inside it -- booking an advert, repairing a playlist -- using the
+                tenant's own screens rather than admin-only copies of them. */}
+            <button
+              onClick={() => {
+                enterWorkspace({ id: tenant.id, name: tenant.name })
+                router.push('/dashboard/screens')
+              }}
+              className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-violet-500"
+            >
+              <LogIn className="size-4" />
+              Enter workspace
+            </button>
           </PageHeader>
 
           {tenant.rejection_reason && (

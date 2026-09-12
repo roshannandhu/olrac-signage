@@ -1,12 +1,14 @@
+import logging
 from dataclasses import dataclass
 from typing import TypeVar
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, Header, HTTPException
 from sqlalchemy.orm import Query, Session
 
 from . import database, models
 from .routers.auth import get_current_user
 
+logger = logging.getLogger(__name__)
 
 TenantModel = TypeVar("TenantModel")
 
@@ -51,9 +53,25 @@ class TenantScope:
 
     db: Session
     user: models.User
+    # One workspace a platform operator has deliberately stepped into, set only by
+    # `get_tenant_scope` from the X-Act-As-Org header and only for a super_admin.
+    #
+    # This is what lets an operator actually run a tenant's workspace -- book an advert,
+    # repair a playlist, re-upload a creative -- through the ordinary tenant endpoints
+    # instead of a parallel set of admin-only clones that would drift from them.
+    #
+    # It also closes a real hazard. Without it a super_admin opening the dashboard got
+    # `query()` with the organisation filter DROPPED (every tenant's rows at once) while
+    # `organization_id` still returned their own org -- so what they saw was a soup of all
+    # workspaces, and anything they created was filed under the operator's own.
+    acting_organization_id: int | None = None
 
     @property
     def organization_id(self) -> int:
+        # The workspace being acted in wins, so a booking an operator creates inside a
+        # tenant is written to THAT tenant rather than to the operator's own organisation.
+        if self.acting_organization_id is not None:
+            return self.acting_organization_id
         # A super_admin has an organisation of its own like any other account, and this
         # returns it. Cross-tenant reach is expressed in `query()` below, which drops the
         # organisation filter -- not here, where a None would flow into non-nullable
@@ -68,7 +86,11 @@ class TenantScope:
             raise RuntimeError(f"{model.__name__} is not tenant scoped")
 
         query = self.db.query(model)
-        if not is_super_admin(self.user):
+        if self.acting_organization_id is not None:
+            # Narrower than the super_admin default, not wider: inside a workspace the
+            # operator sees that workspace only, which is the whole point of being in it.
+            query = query.filter(organization_column == self.acting_organization_id)
+        elif not is_super_admin(self.user):
             query = query.filter(organization_column == self.organization_id)
 
         # Archived rows are excluded here rather than at each call site, for the same
@@ -89,6 +111,12 @@ class TenantScope:
         return self.query(model).filter(model.id == record_id).first()
 
     def is_read_only(self) -> bool:
+        # A platform operator inside a workspace is not subject to that workspace's billing
+        # state. Going in to fix something is most needed precisely when a subscription has
+        # lapsed and the tenant has been put into read-only, and an operator locked out by
+        # the same rule as the customer could not do the job they went in for.
+        if self.acting_organization_id is not None:
+            return False
         # Read directly off the user rather than through self.organization_id, which
         # raises 403 for an account with no organisation -- from inside a permission
         # check, turning "you have no workspace" into an unexplained failure on every
@@ -112,20 +140,65 @@ class TenantScope:
         )
 
 
+ACT_AS_HEADER = "X-Act-As-Org"
+
+
+def resolve_acting_organization(
+    user: models.User, header_value: str | None, db: Session
+) -> int | None:
+    """The workspace this request is being carried out inside, or None.
+
+    Honoured ONLY for a super_admin. For anybody else the header is ignored outright
+    rather than rejected: a tenant sending it is not owed an error message that tells them
+    the mechanism exists, and failing closed to their own organisation is the safe answer.
+
+    Every acknowledged use is logged. This is impersonation -- an operator writing into a
+    customer's workspace -- and it has to be attributable after the fact.
+    """
+    if header_value is None or not header_value.strip():
+        return None
+    if not is_super_admin(user):
+        logger.warning(
+            "Ignoring %s from non-operator %s (role=%s)", ACT_AS_HEADER, user.username, user.role
+        )
+        return None
+    try:
+        organization_id = int(header_value)
+    except ValueError:
+        raise HTTPException(status_code=422, detail=f"{ACT_AS_HEADER} must be an organization id")
+
+    organization = (
+        db.query(models.Organization).filter(models.Organization.id == organization_id).first()
+    )
+    if organization is None:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    logger.info(
+        "Operator %s acting inside workspace %s (%s)",
+        user.username,
+        organization.id,
+        organization.name,
+    )
+    return organization.id
+
+
 def get_tenant_scope(
     db: Session = Depends(database.get_db),
     user: models.User = Depends(get_current_user),
+    act_as: str | None = Header(default=None, alias=ACT_AS_HEADER),
 ) -> TenantScope:
+    acting = resolve_acting_organization(user, act_as, db)
     if not is_super_admin(user):
         blocked = BLOCKED_ORGANIZATION_STATUSES.get(user.organization_status)
         if blocked:
             raise HTTPException(status_code=403, detail=blocked)
-    return TenantScope(db=db, user=user)
+    return TenantScope(db=db, user=user, acting_organization_id=acting)
 
 
 def get_billing_scope(
     db: Session = Depends(database.get_db),
     user: models.User = Depends(get_current_user),
+    act_as: str | None = Header(default=None, alias=ACT_AS_HEADER),
 ) -> TenantScope:
     """Scope for the storefront routes.
 
@@ -134,11 +207,15 @@ def get_billing_scope(
     status it is trying to clear would be a deadlock. A `suspended` or `rejected` workspace
     still cannot reach it: those are operator decisions money is not allowed to override.
     """
+    acting = resolve_acting_organization(user, act_as, db)
     if not is_super_admin(user):
         status = user.organization_status
         if status in ("suspended", "rejected"):
             raise HTTPException(status_code=403, detail=BLOCKED_ORGANIZATION_STATUSES[status])
-    return TenantScope(db=db, user=user)
+    # Same header as the tenant scope, or an operator inside a workspace would see the
+    # storefront answer for their OWN organisation while every other page showed the
+    # tenant's -- the two disagreeing about who is being looked at.
+    return TenantScope(db=db, user=user, acting_organization_id=acting)
 
 
 def require_super_admin(

@@ -69,13 +69,18 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   }, [hydrated, token, account, resolved, router])
 
   if (!hydrated || !token || !resolved || !isSuperAdmin(account)) {
-    return <div className="bg-background min-h-screen" />
+    return <div className="dark admin-console bg-background min-h-screen" />
   }
 
   const logout = () => { clearSession(); router.replace('/login') }
 
   return (
-    <div className="min-h-screen bg-background lg:flex">
+    // `dark admin-console`: the console palette is scoped here (see globals.css) so admin
+    // is always a dark control plane whatever the site theme says, and every page below
+    // re-skins without being touched. `dark` is required alongside it because the dark
+    // variant is defined as `&:is(.dark *)` -- without it the `dark:` utilities already
+    // written into these pages would follow the tenant theme and fight the console.
+    <div className="dark admin-console min-h-screen bg-background lg:flex">
       {/* Phone header. The sidebar below is 256px wide and was rendered at every width,
           which left about 110px of usable content on a 375px screen. */}
       <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-card px-4 py-3 lg:hidden">

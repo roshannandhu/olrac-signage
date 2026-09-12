@@ -18,6 +18,7 @@ import {
   QrCode,
   RadioTower,
   Settings2,
+  ShieldCheck,
   Contact,
   Palette,
   Tags,
@@ -76,7 +77,7 @@ const accountLinks = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { token, user, hydrated, clearSession, setUser } = useAuthStore()
+  const { token, user, hydrated, clearSession, setUser, acting, leaveWorkspace } = useAuthStore()
   const meQuery = useQuery({ queryKey: ['me'], queryFn: api.me, enabled: hydrated && Boolean(token) })
 
   // One socket for the whole dashboard, opened here so every page benefits and no page
@@ -90,7 +91,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // is gated on role === 'owner' -- so a super_admin landing here (from a bookmark, or the
   // old post-login redirect) got a dashboard with an empty Admin menu and no way to reach
   // the console. Send them where their tools actually are.
-  const isSuperAdmin = roleIsSuperAdmin(meQuery.data ?? user)
+  // ...unless they came here ON PURPOSE, through "Enter workspace". Then this IS their
+  // tool: every call is scoped to that tenant, so the operator works the real screens
+  // rather than a set of admin-only copies. Bouncing them would make the feature
+  // impossible -- the redirect would fire the instant they arrived.
+  const isSuperAdmin = roleIsSuperAdmin(meQuery.data ?? user) && !acting
 
   useEffect(() => {
     if (hydrated && !token) {
@@ -101,10 +106,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.replace('/admin')
       return
     }
-    if (hydrated && token && isPending && pathname !== '/dashboard/pending') {
+    // An operator inside a workspace is not subject to that workspace's own status: a
+    // pending or lapsed tenant is often exactly the one they went in to sort out.
+    if (hydrated && token && isPending && !acting && pathname !== '/dashboard/pending') {
       router.replace('/dashboard/pending')
     }
-  }, [hydrated, token, isSuperAdmin, isPending, pathname, router])
+  }, [hydrated, token, isSuperAdmin, isPending, acting, pathname, router])
 
   useEffect(() => {
     if (meQuery.data) setUser(meQuery.data)
@@ -125,7 +132,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     return <div className="bg-background min-h-screen" aria-label="Loading dashboard" />
   }
 
-  if (isPending) {
+  if (isPending && !acting) {
     if (pathname !== '/dashboard/pending') {
       return <div className="bg-background min-h-screen" aria-label="Redirecting to pending verification" />
     }
@@ -137,6 +144,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <a href="#dashboard-content" className="bg-card sr-only z-100 rounded-lg px-4 py-3 font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4">
         Skip to content
       </a>
+
+      {/* Impersonation has to be impossible to forget. Everything below this bar writes to
+          someone else's workspace, so it sits above the header, states whose workspace it
+          is, and keeps the way out one click away at all times. */}
+      {acting && (
+        <div className="sticky top-0 z-50 flex flex-wrap items-center gap-x-3 gap-y-1 bg-violet-600 px-4 py-2 text-sm text-white sm:px-6 lg:px-8">
+          <ShieldCheck className="size-4 shrink-0" aria-hidden="true" />
+          <p className="min-w-0 flex-1">
+            Platform operator — you are working inside{' '}
+            <strong className="font-semibold">{acting.name}</strong>. Everything you change here
+            belongs to them.
+          </p>
+          <button
+            onClick={() => {
+              const id = acting.id
+              leaveWorkspace()
+              router.replace(`/admin/tenants/${id}`)
+            }}
+            className="shrink-0 rounded-lg bg-white/15 px-3 py-1 font-semibold transition-colors hover:bg-white/25"
+          >
+            Leave workspace
+          </button>
+        </div>
+      )}
 
       <header className="border-hairline bg-card sticky top-0 z-40 border-b">
         <div className="mx-auto flex h-16 w-full max-w-[1600px] items-center gap-2 px-4 sm:px-6 lg:px-8">

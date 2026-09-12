@@ -438,12 +438,25 @@ def serve_media(key: str):
     bearer link, and which the dashboard had no way to authenticate anyway because an
     <img> tag cannot carry a token.
     """
-    from .media_urls import get_s3_config, is_s3_enabled, s3_client
+    from .media_urls import get_s3_config, is_s3_enabled, public_media_base, s3_client
 
     # The key goes straight into an S3 request, so it must not be able to climb out of the
     # prefix it was minted under.
     if not key or key.startswith("/") or ".." in key.split("/"):
         raise HTTPException(status_code=404, detail="Not found")
+
+    # A bucket published read-only needs no signature, so this works with no credentials at
+    # all. Checked before the credential path so that a deployment with both configured
+    # takes the cheaper route: no boto3 client, no signing, and a URL that never expires and
+    # is therefore cacheable by the CDN in front of it.
+    public_base = public_media_base()
+    if public_base:
+        return RedirectResponse(
+            f"{public_base}/{key}",
+            status_code=307,
+            headers={"Cache-Control": f"public, max-age={_MEDIA_SIGNATURE_SECONDS}"},
+        )
+
     if not is_s3_enabled():
         # Local storage is served by the /uploads mount above and never reaches here, so
         # this only fires for an s3:// row in a deployment that has since lost its
@@ -501,10 +514,15 @@ async def health_check(db: Session = Depends(database.get_db)):
     # nothing. Without it every upload is written to the container's own disk, which on
     # Render and most PaaS hosts is discarded on the next deploy: the row survives, the
     # file does not, and the dashboard lists media that 404s everywhere.
-    from .media_urls import is_s3_enabled
+    from .media_urls import is_s3_enabled, public_media_base
     from .mailer import is_configured as email_configured
 
     object_storage = is_s3_enabled()
+    # Reading and writing fail independently. A published bucket serves every object the
+    # deployment already has with no credential, while uploading still needs an API token --
+    # so "thumbnails are blank" and "new uploads vanish on redeploy" are two different
+    # states, and collapsing them into one boolean is what made the second one invisible.
+    public_reads = bool(public_media_base())
     # Reported, not fatal. Nothing in the fleet depends on mail -- but a tenant who clicks
     # "email this report to the client" and is told it went is owed the truth, and the
     # place to find out is here rather than from the client who never received it.
@@ -515,8 +533,9 @@ async def health_check(db: Session = Depends(database.get_db)):
         warnings.append("using local SQLite fallback; DATABASE_URL is not set")
     if not object_storage:
         warnings.append(
-            "object storage is not configured (AWS_ACCESS_KEY_ID unset or 'mock'); "
+            "object storage has no credentials (AWS_ACCESS_KEY_ID unset or 'mock'); "
             "uploads are written to local disk and are LOST on every redeploy"
+            + ("" if public_reads else ", and existing media cannot be served at all")
         )
 
     # Surfaced here because it is the one security-relevant setting that is open by
@@ -544,7 +563,13 @@ async def health_check(db: Session = Depends(database.get_db)):
         "backend": url.get_backend_name(),
         "host": url.host or url.database,
         "redis": "connected" if redis_ok else "unreachable",
-        "object_storage": "configured" if object_storage else "local disk (ephemeral)",
+        "object_storage": (
+            "configured"
+            if object_storage
+            else "public read-only (new uploads are ephemeral)"
+            if public_reads
+            else "local disk (ephemeral)"
+        ),
         "email": "configured" if email_ready else "not configured (SMTP_HOST/SMTP_FROM unset)",
         # Absent when the boot migration succeeded, which is the normal case.
         "schema_migration_error": SCHEMA_MIGRATION_ERROR,

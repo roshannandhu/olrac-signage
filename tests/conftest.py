@@ -124,6 +124,8 @@ PURE_MODULES = {
     # either place, so it had never run -- the exact state this guard exists to catch.
     "test_report_airtime.py",
     "test_no_embedded_credentials.py",
+    # Serving media from a published bucket, with no credential anywhere.
+    "test_public_media_bucket.py",
 }
 
 

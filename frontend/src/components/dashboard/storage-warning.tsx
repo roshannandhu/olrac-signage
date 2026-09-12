@@ -26,8 +26,37 @@ export function StorageWarning() {
     retry: false,
   })
 
-  const configured = !data?.object_storage || !/local disk/i.test(data.object_storage)
-  if (configured) return null
+  const status = data?.object_storage
+  if (!status || !/ephemeral/i.test(status)) return null
+
+  // Two different failures, and telling them apart matters: with a published bucket every
+  // existing thumbnail renders and only NEW uploads are at risk, so repeating "this is why
+  // thumbnails are blank" there would send someone chasing a bug that is not happening.
+  const readsWork = /public read/i.test(status)
+
+  if (readsWork) {
+    return (
+      <div
+        role="alert"
+        className="mb-4 flex flex-wrap items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-sm"
+      >
+        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="text-foreground font-semibold">New uploads are not being saved permanently.</p>
+          <p className="text-muted-foreground">
+            Existing content plays normally. Anything uploaded from now on is written to
+            temporary storage and disappears the next time the server restarts.{' '}
+            <span className="text-foreground font-medium">Re-upload it after this is fixed.</span>
+          </p>
+          <p className="text-muted-foreground text-xs">
+            Fix: set the storage API token in the backend&apos;s environment
+            (<code className="text-foreground">AWS_ACCESS_KEY_ID</code> and{' '}
+            <code className="text-foreground">AWS_SECRET_ACCESS_KEY</code>).
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div

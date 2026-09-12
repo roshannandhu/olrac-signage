@@ -62,6 +62,21 @@ def _setting(name: str) -> str:
     return val
 
 
+def public_media_base() -> str:
+    """Origin that serves the bucket's objects without a signature, or "" if there is none.
+
+    An R2 bucket can expose its objects read-only over an r2.dev subdomain or a custom
+    domain. Where that is enabled, serving media needs no credential at all: the key is
+    already the capability (it carries the upload's UUID), which is the same posture the
+    signed URL had. This is a location, not a secret, so it belongs with the other defaults.
+
+    Reads only. Uploading still needs an API token, so a deployment with this set but no
+    credentials serves everything it already has and writes new uploads to ephemeral local
+    disk -- which is why `/api/health` reports that state separately rather than as "fine".
+    """
+    return _setting("R2_PUBLIC_BASE_URL").rstrip("/")
+
+
 def get_s3_config() -> dict[str, str]:
     """Where object storage is and how to authenticate to it.
 

@@ -200,6 +200,47 @@ try:
     assert reconcile_unplaced_bookings(db) == 0, "a finished booking was put back on air"
     print("  ok  a finished booking is left alone")
 
+    # --- one unrepairable booking must not take the others down with it -------------------
+    # Committing the whole pass at the end meant a single failure rolled back every repair
+    # already staged in it. Seen in production: three bookings came back, a fourth silently
+    # did not, and which ones survived depended only on processing order.
+    db.expire_all()
+    done.ends_at = now + timedelta(days=20)
+    for t in done.targets:
+        t.ends_at = None
+        t.starts_at = None
+    db.commit()
+
+    # A second running booking whose screen has been archived: it cannot be placed.
+    doomed_screen = models.Screen(organization_id=org.id, name="Gone", status="offline")
+    db.add(doomed_screen); db.commit()
+    doomed = models.AdPlacement(
+        organization_id=org.id, content_id=ad_id, advertiser="Doomed", price_paise=1,
+        starts_at=now - timedelta(days=1), ends_at=now + timedelta(days=10),
+    )
+    db.add(doomed); db.commit()
+    db.add(models.AdPlacementTarget(
+        placement_id=doomed.id, screen_id=doomed_screen.id,
+        playlist_item_id=None, assigned_at=now - timedelta(days=1),
+    ))
+    doomed_screen.deleted_at = now   # archived, so SystemScope cannot see it
+    db.commit()
+
+    db.query(models.Playlist).delete()
+    db.commit()
+
+    healed_again = reconcile_unplaced_bookings(db)
+    assert healed_again >= 2, (
+        f"the healthy booking was lost to the broken one's rollback: {healed_again}"
+    )
+    survivors = next(
+        p for p in http.get("/api/placements/", headers=auth).json() if p["id"] == booking_id
+    )
+    assert all(t["is_placed"] for t in survivors["targets"]), (
+        "a repairable booking was rolled back by an unrepairable one"
+    )
+    print("  ok  one unrepairable booking does not roll back the others")
+
     print("replace orphaned targets: all checks passed")
 finally:
     try:

@@ -329,17 +329,23 @@ def reconcile_unplaced_bookings(db: Session, now=None) -> int:
     )
     repaired = 0
     for placement in placements:
+        # One booking per transaction. Committing once at the end looks tidier and is wrong:
+        # a single unrepairable booking rolls the session back, and the rollback takes every
+        # repair already staged in that pass with it. Observed doing exactly that -- three
+        # bookings came back, a fourth silently did not, and the difference was only which
+        # side of the failure they were processed on.
         try:
-            repaired += repair_orphaned_targets(
+            count = repair_orphaned_targets(
                 SystemScope(db=db, organization_id=placement.organization_id), placement
             )
+            if count:
+                db.commit()
+                repaired += count
         except Exception:
-            # One unrepairable booking -- a deleted screen, a creative that is gone -- must
-            # not stop the rest from being restored.
+            # A deleted screen, a creative that is gone. Must not stop the rest.
             db.rollback()
             logger.exception("Could not re-place booking %s", placement.id)
     if repaired:
-        db.commit()
         logger.info("Re-placed %d location(s) on bookings that had fallen off their screens", repaired)
     return repaired
 

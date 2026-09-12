@@ -68,6 +68,12 @@ ISOLATED_SCRIPTS = {
     "test_storage_cleanup.py",
     "test_sync_invalidation.py",
     "test_release_rollout.py",
+    "test_assign_shows_on_timeline.py",
+    "test_replace_orphaned_targets.py",
+    # A platform operator stepping into one workspace, and only a platform operator.
+    "test_act_as_tenant.py",
+    # A booking sold by per-location days is as long as its longest location.
+    "test_booking_window_follows_days.py",
     # Storefront: pay-to-access, the clients cap, the feature gate and the custom flow.
     # Falls back to SQLite with no server, like the two below.
     "test_plan_purchase.py",

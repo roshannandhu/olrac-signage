@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -61,6 +61,12 @@ export function CreateBookingModal({
   const [price, setPrice] = useState<string>('')
   const [startsAt, setStartsAt] = useState<string>(() => dateInput(new Date()))
   const [endsAt, setEndsAt] = useState<string>(() => dateInput(Date.now() + 30 * 864e5))
+  // Whether the operator has set the end date THEMSELVES. Until they do, the booking
+  // window follows the longest run being sold -- a bespoke sale states its length per
+  // location ("30 in the mall, 10 in the shop") and the longest of those is the
+  // campaign. Once they type a date it is theirs and nothing here rewrites it, which is
+  // what stops a window a client may already have been invoiced for from moving.
+  const [endsAtTouched, setEndsAtTouched] = useState(false)
   const [notes, setNotes] = useState<string>('')
   const [picked, setPicked] = useState<string[]>([])
   const [targetDays, setTargetDays] = useState<Record<string, number>>({})
@@ -159,8 +165,8 @@ export function CreateBookingModal({
       setPrice(String(plan.price_paise / 100))
     }
 
-    // Auto calculate endsAt based on plan duration
-    if (plan.duration_days > 0) {
+    // Auto calculate endsAt based on plan duration, unless the operator set one.
+    if (plan.duration_days > 0 && !endsAtTouched) {
       setEndsAt(addDays(startsAt, plan.duration_days))
     }
   }
@@ -168,7 +174,9 @@ export function CreateBookingModal({
   // Handle start date modification
   const handleStartDateChange = (newStart: string) => {
     setStartsAt(newStart)
-    if (selectedPlan && selectedPlan.duration_days > 0) {
+    // The effect below re-derives from the new start; only a plan sale needs doing here,
+    // because its length does not depend on the picked targets.
+    if (selectedPlan && selectedPlan.duration_days > 0 && !endsAtTouched) {
       setEndsAt(addDays(newStart, selectedPlan.duration_days))
     }
   }
@@ -181,6 +189,29 @@ export function CreateBookingModal({
     const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24))
     return diffDays > 0 ? diffDays : 0
   }, [startsAt, endsAt])
+
+  // The longest run being sold right now, in days.
+  //
+  // On a package the package states it. On a bespoke sale it is the longest per-location
+  // length, because that is when the campaign actually finishes -- the backend already
+  // agrees (AdPlacement.effective_ends_at takes the max of the window, its extensions and
+  // every per-location window). Locations left on the default inherit the booking, so they
+  // cannot drag the longest DOWN.
+  const longestRunDays = useMemo(() => {
+    if (selectedPlan && selectedPlan.duration_days > 0) return selectedPlan.duration_days
+    const custom = picked.map((key) => targetDays[key]).filter((d): d is number => Boolean(d && d > 0))
+    return custom.length ? Math.max(...custom) : 0
+  }, [selectedPlan, picked, targetDays])
+
+  // Keep the end date on the longest run until the operator takes it over. Without this a
+  // booking sold "10 days here, 30 there" was SOLD with whatever date happened to be in the
+  // box -- the screens ran their own windows correctly, but the booking, its invoice and
+  // the bookings list all showed a campaign that had already finished.
+  useEffect(() => {
+    if (endsAtTouched || longestRunDays <= 0 || !startsAt) return
+    const derived = addDays(startsAt, longestRunDays)
+    if (derived !== endsAt) setEndsAt(derived)
+  }, [endsAtTouched, longestRunDays, startsAt, endsAt])
 
   const toggleTarget = (key: string) => {
     setPicked((prev) =>
@@ -254,6 +285,9 @@ export function CreateBookingModal({
       setNotes('')
       setPicked([])
       setTargetDays({})
+      // Or the next booking silently inherits the last operator's hand-typed date and
+      // stops following the run being sold.
+      setEndsAtTouched(false)
     },
     onError: (err: Error) => {
       toast.error(err.message || 'Failed to create booking')
@@ -467,7 +501,7 @@ export function CreateBookingModal({
                   id="booking-until"
                   type="date"
                   value={endsAt}
-                  onChange={(e) => setEndsAt(e.target.value)}
+                  onChange={(e) => { setEndsAtTouched(true); setEndsAt(e.target.value) }}
                   className="pl-9 text-sm bg-background"
                 />
               </div>

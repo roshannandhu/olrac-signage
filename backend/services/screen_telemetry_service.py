@@ -28,11 +28,16 @@ def player_sync_interval_seconds() -> int:
 
 
 def screen_offline_after_seconds() -> int:
-    try:
-        configured = int(os.getenv("SCREEN_OFFLINE_AFTER_SECONDS", "90"))
-    except ValueError:
-        configured = 90
-    return max(60, min(configured, 3600))
+    """Delegated to alerting, which owns the definition.
+
+    Two copies of this drifted apart once already -- the listing called a screen offline at
+    ninety seconds while the alert fired at sixty, so the dashboard showed "screen is
+    offline" beside a green Online badge. It lives in alerting because that module imports
+    nothing but the standard library, so the dependency can only point this way.
+    """
+    from ..alerting import offline_after_seconds
+
+    return offline_after_seconds()
 
 
 def _release_response(release: models.AppRelease) -> schemas.AppVersionResponse:

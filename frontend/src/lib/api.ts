@@ -497,7 +497,10 @@ export const api = {
   }>) => fetchWithAuth<Placement>(`/placements/${id}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
   }),
-  addPlacementTarget: (id: number, target: { screen_id?: number; group_id?: number }) =>
+  // `days` gives this location its own run length, the same "30 in the mall, 10 in the
+  // shop" the create modal offers. The endpoint has always accepted it; not sending it made
+  // the feature unreachable for any place added after the booking was made.
+  addPlacementTarget: (id: number, target: { screen_id?: number; group_id?: number; days?: number }) =>
     fetchWithAuth<Placement>(`/placements/${id}/targets`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(target),
     }),

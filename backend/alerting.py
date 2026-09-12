@@ -42,20 +42,31 @@ CAMPAIGN_ENDING_WITHIN = timedelta(days=7)
 # play, so it will start failing downloads shortly.
 LOW_STORAGE_MB = 500
 
-def offline_alert_after() -> timedelta:
-    """How long a screen must be unreachable before it is worth telling someone.
+def offline_after_seconds() -> int:
+    """How long a screen may be silent before it counts as offline.
 
-    The SAME threshold the fleet uses to call a screen offline, deliberately. This was a
-    flat one minute while `screen_offline_after_seconds()` defaults to ninety, so a screen
-    silent for 60-90s raised a "screen is offline" alert while the screens list still
-    showed it with a green Online badge -- the dashboard contradicting itself, which is how
-    operators learn to distrust the alerts.
+    THE definition, for both the fleet listing and the alert below, which used to disagree:
+    the listing waited ninety seconds while the alert fired at sixty, so a screen quiet for
+    60-90s raised "screen is offline" next to a green Online badge. A dashboard that
+    contradicts itself is how operators learn to distrust alerts.
 
-    One source of truth means tuning the offline window moves both together.
+    It lives here, in the module with no imports beyond the standard library, and
+    screen_telemetry_service delegates to it. The other direction would drag models, the
+    database and the repositories into a module whose whole point -- and whose test -- is
+    that it is pure logic needing neither.
     """
-    from .services.screen_telemetry_service import screen_offline_after_seconds
+    import os
 
-    return timedelta(seconds=screen_offline_after_seconds())
+    try:
+        configured = int(os.getenv("SCREEN_OFFLINE_AFTER_SECONDS", "90"))
+    except ValueError:
+        configured = 90
+    return max(60, min(configured, 3600))
+
+
+def offline_alert_after() -> timedelta:
+    """The same threshold, as a duration."""
+    return timedelta(seconds=offline_after_seconds())
 
 
 @dataclass(frozen=True)

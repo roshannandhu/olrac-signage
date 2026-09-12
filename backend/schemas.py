@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from typing import Annotated, List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
@@ -1151,7 +1151,18 @@ class PlacementCreate(BaseModel):
     @model_validator(mode="after")
     def valid_window(self):
         if self.ends_at is None and self.plan_id is None:
-            raise ValueError("give an end date, or a plan to take the duration from")
+            # A bespoke sale states its length per location -- "30 in the mall, 10 in the
+            # shop" -- so the longest of those IS the booking's length and asking for it
+            # again is asking the operator to do arithmetic the request already contains.
+            # Refusing here meant a booking sold entirely by per-screen days had to carry a
+            # separate end date, and nothing kept the two agreeing.
+            longest = max((t.days for t in self.targets if t.days), default=None)
+            if longest is None:
+                raise ValueError(
+                    "give an end date, a plan to take the duration from, "
+                    "or per-location days to take it from"
+                )
+            self.ends_at = self.starts_at + timedelta(days=longest)
         if self.ends_at is not None and self.ends_at <= self.starts_at:
             raise ValueError("the end date must be after the start date")
         if not self.advertiser and self.client_id is None:

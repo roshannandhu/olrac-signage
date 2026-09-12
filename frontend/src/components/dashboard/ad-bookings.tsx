@@ -274,9 +274,15 @@ export function AdBookings({ contentId }: { contentId: number }) {
     onError: fail,
   })
 
+  // How long a newly added place runs. Blank = the booking's own window.
+  const [addDays_, setAddDays] = useState('')
   const addTarget = useMutation({
-    mutationFn: ({ id, key }: { id: number; key: string }) =>
-      api.addPlacementTarget(id, key.startsWith('s') ? { screen_id: Number(key.slice(1)) } : { group_id: Number(key.slice(1)) }),
+    mutationFn: ({ id, key, days }: { id: number; key: string; days?: number }) =>
+      api.addPlacementTarget(id, {
+        ...(key.startsWith('s') ? { screen_id: Number(key.slice(1)) } : { group_id: Number(key.slice(1)) }),
+        // Blank means "as long as the booking", which is the ordinary case and stores nothing.
+        ...(days && days > 0 ? { days } : {}),
+      }),
     onSuccess: () => { refresh(); toast.success('Added to that place') },
     onError: fail,
   })
@@ -358,13 +364,23 @@ export function AdBookings({ contentId }: { contentId: number }) {
                   <p className="text-muted-foreground mt-1 flex items-center gap-1.5 text-sm">
                     <CalendarRange className="size-3.5" aria-hidden="true" />
                     {asDate(placement.starts_at)} → {asDate(placement.ends_at)}
-                    {/* starts_at/ends_at stay as SOLD. When an extension moved the finish
-                        line, showing only the sold date would tell an operator a running
-                        campaign had ended. */}
-                    {placement.extensions.length > 0 && placement.effective_ends_at && (
+                    {/* starts_at/ends_at stay as SOLD, so showing only those tells an
+                        operator a still-running campaign has ended. That was gated on an
+                        EXTENSION existing, which missed the other way a booking outlives
+                        its sold window: a location sold a longer run than the campaign --
+                        50 days at an airport on a 30-day booking. The screen really was
+                        playing and this line said it had finished three weeks ago.
+
+                        The two are different commercial facts, so they read differently:
+                        an extension was paid for on top, a longer location was part of the
+                        original deal. */}
+                    {placement.effective_ends_at
+                      && placement.effective_ends_at !== placement.ends_at && (
                       <span className="text-foreground">
-                        · extended to {asDate(placement.effective_ends_at)}
-                        {placement.total_price_paise != null && ` (${rupees(placement.total_price_paise)} total)`}
+                        {placement.extensions.length > 0 ? ' · extended to ' : ' · runs until '}
+                        {asDate(placement.effective_ends_at)}
+                        {placement.extensions.length > 0 && placement.total_price_paise != null
+                          && ` (${rupees(placement.total_price_paise)} total)`}
                       </span>
                     )}
                   </p>
@@ -591,13 +607,37 @@ export function AdBookings({ contentId }: { contentId: number }) {
             <DialogTitle>Add places</DialogTitle>
             <DialogDescription>Where else should {addTo?.advertiser}&apos;s advert run?</DialogDescription>
           </DialogHeader>
+
+          {/* A place added later can be sold its own length, the same as one picked when the
+              booking was made. The endpoint always accepted it; without this box the only
+              way to sell "10 days in the new shop" was to rebuild the whole booking. */}
+          <div className="space-y-1.5 border-b border-hairline pb-3">
+            <Label htmlFor="add-days">Run length (days)</Label>
+            <Input
+              id="add-days"
+              type="number"
+              min={1}
+              value={addDays_}
+              onChange={(event) => setAddDays(event.target.value)}
+              placeholder="Leave blank to run as long as the booking"
+            />
+          </div>
+
           <div className="max-h-[55vh] space-y-1 overflow-y-auto px-1 pt-2">
             {placeOptions
               .filter((option) => !addTo?.targets.some((t) => option.key === (t.kind === 'group' ? `g${t.group_id}` : `s${t.screen_id}`)))
               .map((option) => (
                 <button
                   key={option.key}
-                  onClick={() => { addTarget.mutate({ id: addTo!.id, key: option.key }); setAddTo(null) }}
+                  onClick={() => {
+                    addTarget.mutate({
+                      id: addTo!.id,
+                      key: option.key,
+                      days: Number(addDays_) > 0 ? Number(addDays_) : undefined,
+                    })
+                    setAddDays('')
+                    setAddTo(null)
+                  }}
                   className="hover:bg-muted flex w-full cursor-pointer items-center gap-3 rounded-lg p-2.5 text-left text-sm"
                 >
                   {option.kind === 'group' ? <Layers3 className="size-4" /> : <MonitorPlay className="size-4" />}

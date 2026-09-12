@@ -146,6 +146,21 @@ export const api = {
     }
     return response.json() as Promise<{ access_token: string; token_type: string; user: User }>
   },
+  /**
+   * Whether the server can actually serve what the dashboard is about to render.
+   *
+   * Unauthenticated, like the endpoint. Used to say WHY a thumbnail is blank: without
+   * object storage every /api/media/* request is a 503 and every tile renders as a grey
+   * box indistinguishable from a missing file, which has cost days of hunting the wrong
+   * thing more than once.
+   */
+  health: () =>
+    fetch(`${API_BASE}/health`).then((r) => r.json() as Promise<{
+      status: string
+      object_storage?: string
+      redis?: string
+      warning?: string | null
+    }>),
   me: () => fetchWithAuth<User>('/auth/me'),
   updateProfile: (data: { full_name?: string | null; email?: string | null }) =>
     fetchWithAuth<User>('/auth/me', {

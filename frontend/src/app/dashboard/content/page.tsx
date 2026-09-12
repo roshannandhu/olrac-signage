@@ -12,6 +12,7 @@ import { BulkActionBar, SelectAllCheckbox } from '@/components/dashboard/bulk-ac
 import { ListToolbar, commonSorts, sortItems, type CommonSort } from '@/components/dashboard/list-toolbar'
 import { MediaThumbnail } from '@/components/dashboard/media-thumbnail'
 import { EditClientAdModal } from '@/components/dashboard/edit-client-ad-modal'
+import { StorageWarning } from '@/components/dashboard/storage-warning'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -677,6 +678,10 @@ export default function ContentPage() {
           </div>
         </div>
       )}
+      {/* Before the library, not after it: the blank tiles below are the symptom and this
+          is the cause, so it has to be read first. */}
+      <StorageWarning />
+
       <ListToolbar
         title="Content library"
         action={canEdit ? uploadDialog : <Badge variant="outline">View only</Badge>}

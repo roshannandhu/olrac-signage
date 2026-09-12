@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { ImageIcon, Video } from 'lucide-react'
+import { ImageIcon, ImageOff, Video } from 'lucide-react'
 import type { ContentItem } from '@/lib/types'
 import { resolveMediaUrl } from '@/lib/api'
 
@@ -78,6 +78,18 @@ export function MediaThumbnail({ item, className = '' }: { item: ContentItem; cl
             <Video className="size-7 text-primary/70" />
           </div>
         )
+      ) : hasError ? (
+        // The poster EXISTS and could not be fetched -- almost always the server refusing
+        // because object storage is not configured. Saying so beats the same placeholder a
+        // genuinely empty item gets: identical grey boxes for "nothing here" and "here but
+        // unreachable" is what made this take days to pin down.
+        <div
+          className="text-muted-foreground grid size-full place-items-center gap-1 bg-gradient-to-br from-slate-900 to-slate-800 p-2 text-center"
+          title="The server could not serve this file. Media storage is most likely not configured."
+        >
+          <ImageOff className="size-6 text-amber-500/70" aria-hidden="true" />
+          <span className="text-[10px] leading-tight">Preview unavailable</span>
+        </div>
       ) : (
         <div className="text-muted-foreground/50 grid size-full place-items-center bg-gradient-to-br from-slate-900 to-slate-800">
           <ImageIcon className="size-7" />

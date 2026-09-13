@@ -101,6 +101,8 @@ ISOLATED_SCRIPTS = {
     "test_playlist_resolution_parity.py",
     # The client-ad editor obeys the same booking rules as the placements routes.
     "test_client_ad_editor.py",
+    # A paid window that closes, and closes all the way to the television.
+    "test_subscription_expiry.py",
 }
 
 # Pure-logic tests: no database, no import-time engine, safe to run in-process.

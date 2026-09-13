@@ -183,6 +183,17 @@ async def lifespan(_app: FastAPI):
                 from .services import reconcile_unplaced_bookings
 
                 reconcile_unplaced_bookings(rec_db)
+
+                # A paid window closing is the one lifecycle event with no user action
+                # behind it, so something has to notice the clock. Here for the same reason
+                # as the reconcile above: the scheduled jobs run on arq over Redis, and a
+                # deployment with Redis down would otherwise let every expired subscription
+                # keep full access indefinitely -- which is the state this started in.
+                from .services import expire_due_subscriptions
+
+                expired = expire_due_subscriptions(rec_db)
+                if expired:
+                    logger.info("Expired %d subscription(s) past their period", expired)
             except Exception as exc:
                 logger.warning("Failed in media supervisor loop: %s", exc)
             finally:

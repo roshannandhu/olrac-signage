@@ -131,13 +131,19 @@ class TenantScope:
         )
         if not subscription:
             return False
-        if subscription.status in {"read_only", "cancelled", "completed"}:
-            return True
-        return (
-            subscription.status == "grace"
-            and subscription.grace_period_end is not None
-            and subscription.grace_period_end <= models.utcnow()
-        )
+        # One definition of expiry, shared with the sweep that sets it and with the screens
+        # that stop advertising because of it. It used to be spelled out here, which is how
+        # the paid window itself came to be ignored: this branch knew about `grace` and the
+        # provider's terminal statuses, and nothing anywhere compared `current_period_end`
+        # to the clock.
+        # One definition of expiry, shared with the sweep that records it and with the
+        # screens that stop advertising because of it. It used to be spelled out here, which
+        # is how the paid window itself came to be ignored: this branch knew about `grace`
+        # and the provider's terminal statuses, and nothing anywhere compared
+        # `current_period_end` to the clock.
+        from .billing import subscription_state
+
+        return subscription_state(subscription) == "expired"
 
 
 ACT_AS_HEADER = "X-Act-As-Org"

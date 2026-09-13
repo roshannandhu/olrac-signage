@@ -16,6 +16,7 @@ is not a queue, it is a formality.
 import hashlib
 import hmac
 import json
+import time
 import os
 import sys
 import tempfile
@@ -312,12 +313,19 @@ def run() -> None:
 
     # The provider confirms. Only a correctly signed webhook may activate a subscription.
     def webhook(event_type: str, event_id: str, *, valid: bool = True):
+        # Relative to now, not absolute. These were hardcoded epochs chosen while they were
+        # still in the future; by September 2026 `current_end` had drifted into the past, so
+        # "paying again" was handing the workspace a window that had already closed. That
+        # went unnoticed for as long as nothing compared the period to the clock -- the
+        # moment expiry became real, this test started failing for a reason that had nothing
+        # to do with the behaviour it covers.
+        now_epoch = int(time.time())
         raw = json.dumps({
             "event": event_type,
             "payload": {"subscription": {"entity": {
                 "id": provider_subscription_id,
-                "current_start": 1_786_000_000,
-                "current_end": 1_788_600_000,
+                "current_start": now_epoch - 86_400,
+                "current_end": now_epoch + 30 * 86_400,
             }}},
         }, separators=(",", ":")).encode()
         signature = hmac.new(

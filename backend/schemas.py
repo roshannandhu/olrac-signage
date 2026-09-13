@@ -790,6 +790,12 @@ class SyncResponse(BaseModel):
     operating_mode: OperatingMode = "always"
     operating_hours: Optional[dict[str, list[str]]] = None
     pending_command: Optional[str] = None
+    # Why this screen is being served the demo reel instead of its workspace's adverts:
+    # "pending_approval", "suspended", "rejected" or "expired". None on a normal sync.
+    # The player shows a designed notice for it rather than a raw error -- a venue owner is
+    # looking at this on a wall. Older builds ignore the field (Gson drops unknown keys), so
+    # they keep the demo reel and lose only the caption.
+    service_state: Optional[str] = None
     screen_id: Optional[int] = None
     organization_id: Optional[int] = None
 

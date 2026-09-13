@@ -10,9 +10,17 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -92,7 +100,64 @@ fun PlayerScreen(viewModel: PlayerViewModel = viewModel()) {
         return
     }
 
-    DualSurfacePlayer(playlist, telemetry, onReloadPlaylist = { viewModel.reloadPlaylist() })
+    // Re-read on every playlist change rather than held in state: a sync that clears the
+    // reason also replaces the playlist, so the notice goes as soon as the workspace is
+    // paid up, without the player being restarted.
+    val serviceState = remember(playlist) { PlaylistSynchronizer.serviceState(context) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        DualSurfacePlayer(playlist, telemetry, onReloadPlaylist = { viewModel.reloadPlaylist() })
+        serviceState?.let { ServiceNotice(it) }
+    }
+}
+
+/**
+ * Why this screen is showing the demo reel instead of the venue's adverts.
+ *
+ * Deliberately quiet. This hangs on a wall in someone's shop, usually in front of their
+ * customers, so it reads as a caption on the reel rather than an error on a broken
+ * television -- no red, no warning triangle, nothing that looks like a fault in the venue.
+ * The reel keeps playing underneath; this only explains it.
+ */
+@Composable
+private fun ServiceNotice(state: String) {
+    val (headline, detail) = when (state) {
+        "expired" -> "Subscription ended" to
+            "This display is paused until the plan is renewed."
+        "suspended" -> "Display paused" to
+            "This workspace has been suspended by the platform operator."
+        "rejected" -> "Not activated" to
+            "This workspace was not approved."
+        // pending_approval, and anything a newer server invents.
+        else -> "Setting up" to
+            "This display is ready and waiting for its workspace to be activated."
+    }
+
+    Box(
+        modifier = Modifier.fillMaxSize().padding(40.dp),
+        contentAlignment = Alignment.BottomStart
+    ) {
+        Column(
+            modifier = Modifier
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color(0xCC0B0E14))
+                .padding(horizontal = 26.dp, vertical = 20.dp)
+        ) {
+            Text(
+                text = headline,
+                color = Color.White,
+                fontSize = 30.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Start
+            )
+            Text(
+                text = detail,
+                color = Color(0xB3FFFFFF),
+                fontSize = 19.sp,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+    }
 }
 
 @Composable
@@ -687,9 +752,21 @@ private fun PlaybackSurface(
                     (LayoutInflater.from(context).inflate(R.layout.player_surface, null, false) as PlayerView).apply {
                         setShutterBackgroundColor(AndroidColor.TRANSPARENT)
                         this.player = player
+                        this.resizeMode = if (item.fitMode == "cover") {
+                            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        } else {
+                            androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                        }
                     }
                 },
-                update = { it.player = player },
+                update = {
+                    it.player = player
+                    it.resizeMode = if (item.fitMode == "cover") {
+                        androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    } else {
+                        androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    }
+                },
                 modifier = Modifier.fillMaxSize()
             )
 

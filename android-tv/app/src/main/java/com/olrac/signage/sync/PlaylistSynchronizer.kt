@@ -146,6 +146,12 @@ class PlaylistSynchronizer(context: Context) {
                     }
                 }
 
+                // Written every sync, cleared as soon as it comes back null, so the notice
+                // disappears on its own the moment the workspace is paid up again -- no
+                // restart, no re-pair. Stored rather than passed through because the player
+                // reads its playlist from the local database, not from this response.
+                preferences.edit().putString(KEY_SERVICE_STATE, syncData.service_state).apply()
+
                 syncData.pending_command?.let { cmd ->
                     if (cmd == "deregister") {
                         com.olrac.signage.boot.PlayerLauncher.handleUnpairedOrDeleted(appContext)
@@ -268,7 +274,14 @@ class PlaylistSynchronizer(context: Context) {
                         recordedSha256 = recordedSha[target.entity.contentId],
                         advertisedSha256 = target.entity.sha256
                     )
-                    if (target.finalFile.isFile && target.finalFile.length() > 0L && cachedIsCurrent) {
+                    val fileAlreadyValid = target.finalFile.isFile && target.finalFile.length() > 0L && (
+                        cachedIsCurrent || storageManager.verifyFileIntegrity(
+                            target.finalFile,
+                            target.entity.sha256,
+                            target.entity.fileSizeBytes
+                        )
+                    )
+                    if (fileAlreadyValid) {
                         readyTargets.add(target)
                     } else {
                         if (!cachedIsCurrent && target.finalFile.isFile) {
@@ -407,6 +420,20 @@ class PlaylistSynchronizer(context: Context) {
             context.applicationContext
                 .getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
                 .getInt(KEY_UNREACHABLE_ITEMS, 0)
+
+        /** Why the workspace's own adverts are not playing, or null when they are. */
+        private const val KEY_SERVICE_STATE = "service_state"
+
+        /**
+         * The server's reason for withholding this workspace's adverts, or null.
+         *
+         * One of "pending_approval", "suspended", "rejected", "expired". The demo reel plays
+         * underneath in every case; this only decides the caption over it.
+         */
+        fun serviceState(context: Context): String? =
+            context.applicationContext
+                .getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
+                .getString(KEY_SERVICE_STATE, null)
 
         private const val KEY_DEVICE_ID = "device_id"
         private const val KEY_PLAYLIST_UPDATED_AT = "playlist_updated_at"

@@ -74,6 +74,7 @@ from ..services import (
     verify_device_auth,
     issue_device_secret,
 )
+from ..billing import serving_block_reason
 
 
 
@@ -1584,16 +1585,23 @@ async def sync_tv(
 
     pending_command = await pop_device_command(device_id)
 
-    # Not yet let into the fleet: answer with the state and nothing else. Deliberately
-    # ahead of the 204 short-circuit below -- a screen that was playing before it was
-    # un-approved must be told now, not left running a cached playlist until something
-    # else happens to change its marker.
+    # Not cleared to advertise: answer with the demo reel and the reason, and nothing of the
+    # tenant's own. Deliberately ahead of the 204 short-circuit below -- a screen that was
+    # playing before its workspace was cut off must be told now, not left running a cached
+    # playlist until something else happens to change its marker.
     #
-    # organization_id guards the condition: a screen that has not been claimed at all also
-    # has no approved_at, and answering "pending_approval" for it would hide the
-    # waiting_pairing state the player uses to decide to show its pairing code -- a brand
-    # new TV would sit blank instead, and could never be paired.
-    if screen.organization and screen.organization.status == "pending_approval":
+    # This covers a suspension, a rejection, a workspace not yet activated, and a plan that
+    # has run out. Refusing with 401/403 instead would not work: the player treats those as
+    # transient, clears its token and retries forever on the playlist it already has, which
+    # is deliberate -- rotating SECRET_KEY once made the whole fleet factory-reset itself.
+    # Serving a valid response containing different content is what actually stops adverts.
+    #
+    # Nothing here is destructive. The screen stays paired, online, counted and credentialed,
+    # so paying again restores service on the next sync with no re-pairing.
+    block_reason = serving_block_reason(
+        screen.organization, screen.organization.subscription if screen.organization else None
+    )
+    if block_reason:
         setting = db.query(models.SystemSetting).filter(models.SystemSetting.key == "universal_demo_video_url").first()
         demo_url = setting.value if setting else "/uploads/f9863204-f997-4122-ac1b-a50157e3d905.mp4"
         demo_url = resolve_media_url(demo_url) or demo_url
@@ -1638,6 +1646,7 @@ async def sync_tv(
             pending_command=pending_command,
             screen_id=screen.id,
             organization_id=screen.organization_id,
+            service_state=block_reason,
         )
 
     playlist_id = resolve_screen_playlist(screen, db)

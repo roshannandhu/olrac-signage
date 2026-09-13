@@ -42,8 +42,10 @@ from .placement_service import (
     repair_orphaned_targets,
     reconcile_unplaced_bookings,
 )
+from .subscription_service import expire_due_subscriptions
 
 __all__ = [
+    "expire_due_subscriptions",
     "BaseService",
     "PlaylistService",
     "bump_playlist",

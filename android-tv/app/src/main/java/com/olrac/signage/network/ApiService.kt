@@ -153,7 +153,14 @@ data class SyncResponse(
     //
     // "always" | "hours" | "never"; hours maps "mon".."sun" -> ["HH:MM", "HH:MM"].
     val operating_mode: String? = null,
-    val operating_hours: Map<String, List<String>>? = null
+    val operating_hours: Map<String, List<String>>? = null,
+    // Why this screen is being sent the demo reel instead of its workspace's adverts:
+    // "pending_approval", "suspended", "rejected" or "expired". Null on a normal sync.
+    //
+    // The server answers 200 and swaps the content rather than refusing, because a refusal
+    // does not stop anything here -- 401/403 are treated as transient below and the player
+    // keeps looping whatever it already cached.
+    val service_state: String? = null
 )
 
 data class AppVersionDto(

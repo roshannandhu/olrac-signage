@@ -6,6 +6,7 @@ import tempfile
 import hashlib
 import hmac
 import json
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -444,8 +445,14 @@ def run() -> None:
                         "subscription": {
                             "entity": {
                                 "id": provider_subscription_id,
-                                "current_start": 1_786_000_000,
-                                "current_end": 1_788_600_000,
+                                # Relative to now. These were fixed epochs picked while they
+                                # were still ahead of the calendar; `current_end` fell into
+                                # the past during September 2026, so a "recovered"
+                                # subscription was being handed a window that had already
+                                # closed. Harmless while nothing compared the period to the
+                                # clock, and an instant failure once something did.
+                                "current_start": int(time.time()) - 86_400,
+                                "current_end": int(time.time()) + 30 * 86_400,
                             }
                         }
                     },
@@ -491,8 +498,14 @@ def run() -> None:
         assert client.get("/api/billing/summary", headers=owner).json()["is_read_only"] is True
         blocked_write = client.post("/api/playlists/", headers=owner, json={"name": "Blocked"})
         assert blocked_write.status_code == 403
-        # Billing lapse never blocks player sync or cached playback.
-        assert client.get("/api/screens/feature-tv/sync").status_code == 200
+        # A billing lapse must never make the player's sync FAIL -- the app treats 401/403 as
+        # transient and would retry forever on its cached playlist, so a refusal stops
+        # nothing. It answers 200 and stops the adverts by serving something else instead:
+        # the demo reel, with the reason attached.
+        lapsed_sync = client.get("/api/screens/feature-tv/sync")
+        assert lapsed_sync.status_code == 200
+        assert lapsed_sync.json()["service_state"] == "expired"
+        assert lapsed_sync.json()["playlist"]["name"] == "OLRAC Universal Demo Loop"
         assert send_webhook("subscription.activated", "evt-recovered").status_code == 200
         assert client.get("/api/billing/summary", headers=owner).json()["is_read_only"] is False
 

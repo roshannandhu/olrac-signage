@@ -4,7 +4,13 @@ from typing import List, Dict, Any
 from fastapi import APIRouter, Depends
 
 from .. import schemas
-from ..tenancy import TenantScope, get_tenant_scope, require_tenant_roles
+from ..tenancy import (
+    TenantScope,
+    ensure_feature,
+    get_tenant_scope,
+    require_feature,
+    require_tenant_roles,
+)
 from ..repositories.playlist_repo import PLAYLIST_LOAD
 from ..services.playlist_service import PlaylistService, bump_playlist, set_schedule
 
@@ -17,6 +23,19 @@ __all__ = ["router", "PLAYLIST_LOAD", "bump_playlist", "set_schedule"]
 def _service(scope: TenantScope) -> PlaylistService:
     """Dependency helper to get PlaylistService instance."""
     return PlaylistService(scope.db)
+
+
+def _gate_scheduling(scope: TenantScope, schedule) -> None:
+    """Charge for scheduling only when a request actually schedules something.
+
+    "scheduling" is sold on every package in the storefront and, until this, gated nothing --
+    a workspace on a package without it could set day-and-time windows freely. It cannot be
+    a route dependency: schedules ride along on ordinary playlist-item writes, so refusing
+    the route would stop a tenant adding items at all rather than stop them scheduling.
+    """
+    if schedule is None:
+        return
+    ensure_feature(scope, "scheduling")
 
 
 @router.post("/", response_model=schemas.PlaylistResponse, status_code=201)
@@ -57,6 +76,7 @@ def add_item_to_playlist(
     item: schemas.PlaylistItemCreate,
     scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
 ):
+    _gate_scheduling(scope, item.schedule)
     return _service(scope).add_item_to_playlist(playlist_id, item, scope)
 
 
@@ -76,6 +96,7 @@ def update_playlist_item(
     payload: schemas.PlaylistItemUpdate,
     scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
 ):
+    _gate_scheduling(scope, payload.schedule)
     return _service(scope).update_playlist_item(playlist_id, item_id, payload, scope)
 
 
@@ -83,7 +104,9 @@ def update_playlist_item(
 def update_playlist_transitions(
     playlist_id: int,
     payload: schemas.PlaylistTransitionUpdate,
+    # Sold on the Starter package upwards and, until this, enforced nowhere.
     scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
+    _gate: TenantScope = Depends(require_feature("transitions")),
 ):
     return _service(scope).update_playlist_transitions(playlist_id, payload, scope)
 

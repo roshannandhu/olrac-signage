@@ -252,6 +252,21 @@ def tenant_features(owner: dict, editor: dict, viewer: dict) -> dict:
             item = client.post(f"/api/playlists/{made['playlist']}/items", headers=editor,
                                json={"content_id": made["content"], "duration": 12})
             works(item, "editor adds playlist item", "tenant", ok=(200, 201))
+        # Transitions are a paid feature, and this file is about roles, not packages -- so
+        # put the workspace on one that includes it, or the assertion passes or fails for
+        # the wrong reason. Business (slug "business") is the seeded package carrying it.
+        db = database.SessionLocal()
+        try:
+            business = db.query(models.Plan).filter(models.Plan.slug == "business").first()
+            org = db.query(models.Organization).filter(
+                models.Organization.slug == "acme"
+            ).one()
+            if business:
+                org.plan_id = business.id
+                db.commit()
+        finally:
+            db.close()
+
         works(client.put(f"/api/playlists/{made['playlist']}/transitions", headers=editor,
                          json={"transition": "fade", "transition_ms": 600, "apply_to_all": True}),
               "editor sets transitions", "tenant")

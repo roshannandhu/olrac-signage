@@ -242,6 +242,34 @@ def require_super_admin(
     return scope
 
 
+def ensure_feature(scope: "TenantScope", feature: str) -> None:
+    """Refuse unless this workspace's package includes `feature`. 403 if it does not.
+
+    The imperative half of `require_feature`, for the gates that cannot be a dependency
+    because the feature is only involved when the payload asks for it -- attaching a
+    schedule to a playlist item, say, where refusing the whole route would stop a tenant
+    adding items at all.
+    """
+    if is_super_admin(scope.user):
+        return
+    # Local import: billing imports models only, but keeping it here avoids any
+    # import-order coupling in this early module.
+    from .billing import plan_features
+
+    org = scope.db.query(models.Organization).filter(
+        models.Organization.id == scope.organization_id
+    ).first()
+    plan = org.plan if org else None
+    if not (plan and plan_features(plan).get(feature)):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                f"Your plan does not include {feature.replace('_', ' ')}. "
+                f"Upgrade your plan to enable it."
+            ),
+        )
+
+
 def require_feature(feature: str):
     """Gate a route behind a plan feature flag (e.g. "emergency_alert").
 
@@ -250,24 +278,7 @@ def require_feature(feature: str):
     closed until a package that includes the flag is bought.
     """
     def dependency(scope: TenantScope = Depends(get_tenant_scope)) -> TenantScope:
-        if is_super_admin(scope.user):
-            return scope
-        # Local import: billing imports models only, but keeping it here avoids any
-        # import-order coupling in this early module.
-        from .billing import plan_features
-
-        org = scope.db.query(models.Organization).filter(
-            models.Organization.id == scope.organization_id
-        ).first()
-        plan = org.plan if org else None
-        if not (plan and plan_features(plan).get(feature)):
-            raise HTTPException(
-                status_code=403,
-                detail=(
-                    f"Your plan does not include {feature.replace('_', ' ')}. "
-                    f"Upgrade your plan to enable it."
-                ),
-            )
+        ensure_feature(scope, feature)
         return scope
 
     return dependency

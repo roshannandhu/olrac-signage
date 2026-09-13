@@ -12,11 +12,15 @@ const GIB = 1024 ** 3
 // The feature toggles the app actually understands. Kept as a fixed list rather than
 // free-form keys so the operator sets flags the code reads (billing.plan_features /
 // require_feature), not typos that silently gate nothing.
-const FEATURES: { key: string; label: string }[] = [
-  { key: 'scheduling', label: 'Scheduling' },
-  { key: 'transitions', label: 'Transitions' },
-  { key: 'emergency_alert', label: 'Emergency alert' },
-  { key: 'priority_support', label: 'Priority support' },
+// `enforced: false` means the flag changes nothing in the product -- it is a commitment you
+// make outside the software. Labelled rather than removed so nobody has to guess which
+// toggles bite: scheduling, transitions and emergency alert are all refused by the API
+// without them, priority support is a promise about how fast you answer the phone.
+const FEATURES: { key: string; label: string; enforced: boolean }[] = [
+  { key: 'scheduling', label: 'Scheduling', enforced: true },
+  { key: 'transitions', label: 'Transitions', enforced: true },
+  { key: 'emergency_alert', label: 'Emergency alert', enforced: true },
+  { key: 'priority_support', label: 'Priority support', enforced: false },
 ]
 
 const blank: PackageWrite = {
@@ -213,6 +217,14 @@ export default function AdminPackagesPage() {
                     className="size-4 accent-violet-500"
                   />
                   {f.label}
+                  {!f.enforced && (
+                    <span
+                      className="rounded bg-white/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground/80"
+                      title="Sold as a commitment, not enforced by the software"
+                    >
+                      Not enforced
+                    </span>
+                  )}
                 </label>
               ))}
             </div>

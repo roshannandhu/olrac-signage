@@ -236,12 +236,40 @@ def run() -> None:
         assert changed_sync.json()["playlist"]["items"][0]["duration"] == 20
         assert changed_sync.json()["playlist"]["items"][0]["transition"] == "zoom"
 
+        # Transitions are sold from Starter upwards, so the package decides this, not the
+        # role. Prove the gate in both directions rather than only the happy path: the
+        # feature was in the storefront and enforced nowhere for a long time precisely
+        # because nothing ever asserted the refusal.
+        refused_transitions = client.put(
+            f"/api/playlists/{playlist_id}/transitions",
+            headers=owner,
+            json={"transition": "slide_left", "transition_ms": 700, "apply_to_all": True},
+        )
+        assert refused_transitions.status_code == 403, refused_transitions.text
+        assert "transitions" in refused_transitions.json()["detail"]
+
+        db = database.SessionLocal()
+        business = db.query(models.Plan).filter(models.Plan.slug == "business").one()
+        org_row = db.query(models.Organization).filter(models.Organization.id == 1).one()
+        package_before_transitions = org_row.plan_id
+        org_row.plan_id = business.id
+        db.commit()
+        db.close()
+
         applied = client.put(
             f"/api/playlists/{playlist_id}/transitions",
             headers=owner,
             json={"transition": "slide_left", "transition_ms": 700, "apply_to_all": True},
         )
         assert applied.status_code == 200, applied.text
+
+        # Put the package back. The P6 block below shrinks the FREE plan's screen cap and
+        # expects this workspace to feel it, which it cannot do while parked on Business.
+        db = database.SessionLocal()
+        org_row = db.query(models.Organization).filter(models.Organization.id == 1).one()
+        org_row.plan_id = package_before_transitions
+        db.commit()
+        db.close()
         assert applied.json()["default_transition"] == "slide_left"
         assert applied.json()["items"][0]["transition"] == "slide_left"
         assert applied.json()["items"][0]["transition_ms"] == 700

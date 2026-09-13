@@ -330,10 +330,13 @@ def mock_confirm(
 ):
     """Finish a mock purchase, standing in for the provider webhook when PAYMENT_PROVIDER=mock.
 
-    Refuses outright under a real provider, so it can never be a free-activation backdoor in
-    production, and only activates an order raised by the caller's own workspace.
+    Refuses outright under a real provider AND on any hosted deployment, so setting
+    PAYMENT_PROVIDER=mock in production by accident cannot turn payment off; only activates
+    an order raised by the caller's own workspace.
     """
-    if os.getenv("PAYMENT_PROVIDER", "razorpay").lower() != "mock":
+    from ..billing import mock_payments_enabled
+
+    if not mock_payments_enabled():
         raise HTTPException(status_code=404, detail="Not found")
 
     owned = scope.db.query(models.Subscription).filter(

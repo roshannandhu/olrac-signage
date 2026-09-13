@@ -3,8 +3,11 @@
  * publish or promote a player release, because a release installs across every tenant's
  * fleet. The team page never offers it — TenantRole is what that page may assign.
  */
+// 'manager' is retired. It stays in Role because the server still returns it for accounts
+// created before that, but it is gone from TenantRole -- which is what gets SENT, and what
+// backend schemas.TenantRole rejects with a 422.
 export type Role = 'super_admin' | 'manager' | 'owner' | 'editor' | 'viewer'
-export type TenantRole = 'manager' | 'owner' | 'editor' | 'viewer'
+export type TenantRole = 'owner' | 'editor' | 'viewer'
 /** Promotion ring for a player build. Only `released` reaches screens with no pin. */
 export type RolloutState = 'draft' | 'canary' | 'released'
 export type TransitionName = 'none' | 'fade' | 'slide_left' | 'slide_right' | 'slide_up' | 'slide_down' | 'zoom'

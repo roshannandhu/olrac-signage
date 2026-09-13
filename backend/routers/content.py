@@ -420,6 +420,15 @@ def update_content_client_ad(
     # advert silently replaced the client's permanent note -- the one /dashboard/clients
     # shows -- and then leaked into every later booking through the editor's prefill.
     if not client:
+        # The clients cap binds here too. This route creates a client implicitly from a
+        # typed name, and it was the one door into the table that never asked -- so a
+        # workspace at its limit could keep adding clients indefinitely by booking adverts
+        # instead of using the clients page. Exactly the bypass the ad-slot guard below had
+        # before it was added.
+        from .clients import ensure_client_quota
+
+        ensure_client_quota(scope)
+
         import re, random
         base_code = re.sub(r'[^A-Za-z0-9]', '', client_name.upper())[:6] or "CLNT"
         rand_suffix = f"{random.randint(100, 999)}"

@@ -24,16 +24,21 @@ import type { Role, TenantRole } from '@/lib/types'
 // member. The API filters those rows out of this list, and the backend refuses to create
 // or edit one here, so the team page has no reason to describe it.
 const roleDescription: Record<TenantRole, string> = {
-  manager: 'Approvals and fleet management',
   owner: 'Full access, including team management',
   editor: 'Can publish and manage signage content',
   viewer: 'Read-only access to network status',
 }
 
-const TENANT_ROLES: TenantRole[] = ['manager', 'owner', 'editor', 'viewer']
+// 'manager' is gone from the backend -- schemas.TenantRole accepts owner/editor/viewer and
+// 422s anything else -- so offering it here produced a role in the picker that failed on
+// save with a validation error naming a field the person never typed.
+const TENANT_ROLES: TenantRole[] = ['owner', 'editor', 'viewer']
 
 /** Narrow an API-supplied role for display; a platform account should never appear. */
-const asTenantRole = (role: Role): TenantRole => (role === 'super_admin' ? 'viewer' : role)
+// 'manager' still exists on rows created before the role was retired, and the server will
+// hand one back; it is shown as the editor it behaved as rather than crashing the picker.
+const asTenantRole = (role: Role): TenantRole =>
+  role === 'super_admin' ? 'viewer' : role === 'manager' ? 'editor' : role
 
 export default function TeamPage() {
   const queryClient = useQueryClient()

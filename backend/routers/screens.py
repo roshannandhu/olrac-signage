@@ -876,11 +876,19 @@ def tv_google_oauth_callback(
     if not user:
         import secrets
         org_name = google_claims.get("name") or target_email.split("@")[0]
+        # Same posture as signing up in the browser (`routers/auth.py`): a brand new
+        # workspace waits until it has paid or been approved. This used to create the
+        # organisation "active" with approved_at already stamped, which meant signing in on
+        # a television instead of the dashboard walked straight past the storefront, the
+        # approval queue and billing entirely -- the same signup, two different answers,
+        # depending only on which screen it was done from.
+        #
+        # models.utcnow() rather than datetime.utcnow(): the column is timezone-aware and
+        # everything that compares against it expects an aware value.
         organization = models.Organization(
             name=f"{org_name}'s Workspace",
             slug=f"org-{secrets.token_hex(4)}",
-            status="active",
-            approved_at=datetime.utcnow(),
+            status="pending_approval",
         )
         db.add(organization)
         db.flush()
@@ -1335,61 +1343,6 @@ def revoke_device_secret(
     db_screen.device_secret_hash = None
     scope.db.commit()
     return {"status": "ok", "message": "Device secret revoked"}
-
-
-@router.delete("/{screen_id}")
-async def delete_screen(
-    screen_id: int,
-    scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
-):
-    """Permanently delete a screen and instruct the physical TV to sign out immediately."""
-    db_screen = scope.get(models.Screen, screen_id)
-    if not db_screen:
-        raise HTTPException(status_code=404, detail="Screen not found")
-
-    device_id = db_screen.device_id
-    org_id = db_screen.organization_id
-
-    # 1. Queue and publish instant remote reset / unpair command
-    if device_id:
-        try:
-            await queue_device_command(device_id, "reset", 300)
-        except Exception as exc:
-            logger.warning("Could not queue reset command for %s: %s", device_id, exc)
-
-        payload = json.dumps({"type": "command", "command": "reset", "reason": "unpaired_by_admin"})
-        try:
-            redis = database.get_redis()
-            await redis.publish(f"screen:{device_id}", payload)
-            await redis.publish(f"device:{device_id}", payload)
-            await redis.publish(f"screen:{screen_id}", payload)
-            if org_id:
-                await redis.publish(f"org:{org_id}", payload)
-        except Exception as exc:
-            logger.warning("Failed to publish reset command to redis: %s", exc)
-
-        try:
-            from .websockets import broadcast_in_memory
-            await broadcast_in_memory(f"screen:{device_id}", payload)
-            await broadcast_in_memory(f"device:{device_id}", payload)
-            await broadcast_in_memory(f"screen:{screen_id}", payload)
-            if org_id:
-                await broadcast_in_memory(f"org:{org_id}", payload)
-        except Exception as exc:
-            logger.warning("Failed to broadcast reset command in-memory: %s", exc)
-
-    # 2. Clean up child references
-    scope.db.query(models.AdPlacementTarget).filter(models.AdPlacementTarget.screen_id == screen_id).delete(synchronize_session=False)
-    scope.db.query(models.ScreenshotLog).filter(models.ScreenshotLog.screen_id == screen_id).delete(synchronize_session=False)
-    scope.db.query(models.Alert).filter(models.Alert.screen_id == screen_id).delete(synchronize_session=False)
-    scope.db.query(models.PlayLog).filter(models.PlayLog.screen_id == screen_id).delete(synchronize_session=False)
-    scope.db.query(models.PlayLogHourlyRollup).filter(models.PlayLogHourlyRollup.screen_id == screen_id).delete(synchronize_session=False)
-
-    # 3. Delete the screen from database
-    scope.db.delete(db_screen)
-    scope.db.commit()
-
-    return {"status": "ok", "message": f"Screen {screen_id} deleted and unpairing signal broadcast."}
 
 
 @router.post("/heartbeat")

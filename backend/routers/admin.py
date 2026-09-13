@@ -205,10 +205,18 @@ def _summarise(db: Session, org: models.Organization) -> TenantSummaryOut:
         models.Screen.organization_id == org.id,
         models.Screen.status == "online",
     ).count()
-    ads_used = db.query(models.AdPlacement).filter(
-        models.AdPlacement.organization_id == org.id,
-        models.AdPlacement.ends_at >= models.utcnow(),
-    ).count()
+    # Counted the same way the quota is enforced, on the effective end rather than the sold
+    # one. An extended campaign runs past its original ends_at while still holding its slot,
+    # so counting the raw column showed an operator fewer ads in use than the tenant was
+    # actually being refused for -- the console said 3/5 while a booking was bouncing off
+    # the cap.
+    ads_used = sum(
+        1
+        for placement in db.query(models.AdPlacement).filter(
+            models.AdPlacement.organization_id == org.id
+        )
+        if placement.effective_ends_at >= models.utcnow()
+    )
     from sqlalchemy import func
 
     storage_used = db.query(
@@ -251,15 +259,26 @@ def _get_org(db: Session, org_id: int) -> models.Organization:
 
 
 def _apply_plan(org: models.Organization, plan: models.Plan) -> None:
-    """Copy a package's limits onto the tenant.
+    """Put a tenant on a package.
 
-    Copied rather than read through the relationship on every check, because an operator
-    can then raise one tenant's ceiling without editing the package everyone else is on --
-    which is what Organization.max_screens / max_ad_slots exist for.
+    Sets the package and clears the per-tenant overrides, rather than copying the package's
+    numbers into them. `Organization.max_screens` / `max_ad_slots` mean "this tenant differs
+    from their package", and `effective_max_*` already resolves override -> package ->
+    unlimited, so copying made every tenant permanently different from a package whose
+    numbers merely happened to match at the time.
+
+    The consequence was invisible and wrong in both directions: editing a package no longer
+    moved anyone put on it from this console, while `max_clients` -- which this never copied
+    -- did keep tracking it, so one tenant followed their package for clients and ignored it
+    for screens. The custom-request revise path had to clear these columns by hand to work
+    around exactly this.
+
+    storage_quota_bytes is still copied: it is a real column with no derived equivalent, and
+    `test_plan_purchase` pins that it follows the package.
     """
     org.plan_id = plan.id
-    org.max_screens = plan.max_screens
-    org.max_ad_slots = plan.max_ad_slots
+    org.max_screens = 0
+    org.max_ad_slots = 0
     org.storage_quota_bytes = plan.max_storage_bytes
 
 

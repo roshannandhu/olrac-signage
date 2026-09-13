@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
@@ -46,7 +47,23 @@ DEFAULT_PLANS = (
 def ensure_billing_catalog(db: Session) -> None:
     by_slug = {plan.slug: plan for plan in db.query(models.Plan).all()}
     for payload in DEFAULT_PLANS:
-        if payload["slug"] in by_slug:
+        existing = by_slug.get(payload["slug"])
+        if existing is not None:
+            # Backfill only flags this plan has never carried an opinion about.
+            #
+            # The alembic migration seeds the same three packages, and its Business row omits
+            # emergency_alert. Because this loop used to `continue` on any existing slug, a
+            # database brought up through migrations had a Business plan that could never use
+            # the one feature that is actually enforced, and nothing here would ever repair
+            # it -- the seeds only agree on a fresh create_all install.
+            #
+            # A key that is present stays untouched, true or false: an operator turning a
+            # feature off in the packages editor is a decision, and re-asserting the seed
+            # over it every boot would quietly undo them.
+            current = plan_features(existing)
+            missing = {k: v for k, v in payload["features"].items() if k not in current}
+            if missing:
+                existing.feature_flags_json = json.dumps({**current, **missing}, sort_keys=True)
             continue
         db.add(
             models.Plan(
@@ -82,6 +99,23 @@ def ensure_billing_catalog(db: Session) -> None:
                 )
             )
     db.commit()
+
+
+def mock_payments_enabled() -> bool:
+    """Whether the free-activation test shortcut is live.
+
+    `POST /api/billing/mock/confirm` activates a workspace with no payment. That is correct
+    for a test run and catastrophic anywhere real, and the only thing standing between the
+    two is an environment variable nobody looks at -- so a hosted deployment refuses it
+    outright regardless, and `/api/health` names it while it is on, the same treatment
+    legacy device auth gets.
+
+    RENDER_EXTERNAL_URL is set by the host, not by us, so it cannot be forgotten the way a
+    deliberate PRODUCTION flag can.
+    """
+    if os.getenv("PAYMENT_PROVIDER", "razorpay").lower() != "mock":
+        return False
+    return not os.getenv("RENDER_EXTERNAL_URL", "").strip()
 
 
 def plan_features(plan: models.Plan) -> dict[str, bool]:

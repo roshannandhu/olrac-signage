@@ -660,6 +660,16 @@ async def health_check(db: Session = Depends(database.get_db)):
             "jobs are stopped"
         )
 
+    # Named for the same reason legacy device auth is: it is a setting that silently turns
+    # a commercial rule off, and nothing else would ever say so.
+    from .billing import mock_payments_enabled
+
+    if mock_payments_enabled():
+        warnings.append(
+            "PAYMENT_PROVIDER=mock; /api/billing/mock/confirm will activate a workspace "
+            "with no payment. Set a real provider before selling anything"
+        )
+
     return {
         "status": "ok" if redis_ok and not ephemeral and not warnings else "degraded",
         "database": "connected",

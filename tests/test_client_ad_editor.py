@@ -313,6 +313,40 @@ def run() -> None:
               f"the plan cap ignored the group's screen: {over.status_code} {over.text}")
         ok("the plan's location cap counts screens inside a group target")
 
+        # 5b. The clients cap binds on this route too. It creates a Client implicitly from a
+        #     typed name, and was the one door into that table that never asked -- so a
+        #     workspace at its limit could keep adding clients indefinitely by booking
+        #     adverts instead of using the clients page.
+        db = database.SessionLocal()
+        org = db.query(models.Organization).filter(models.Organization.id == org_id).one()
+        org.max_clients = db.query(models.Client).filter(
+            models.Client.organization_id == org_id
+        ).count()
+        db.commit()
+        at_cap = org.max_clients
+        db.close()
+
+        capped = client.put(f"/api/content/{content_id}/client-ad", headers=headers, json={
+            "client_name": "A Brand New Advertiser",
+            "plan_id": plan_id,
+            "screen_ids": [screens["mall"]],
+        })
+        check(capped.status_code == 409,
+              f"the clients cap was walked past via the ad editor: {capped.status_code} {capped.text}")
+
+        db = database.SessionLocal()
+        after = db.query(models.Client).filter(models.Client.organization_id == org_id).count()
+        db.close()
+        check(after == at_cap, f"a client was created despite the refusal ({after} > {at_cap})")
+
+        # Put it back so the rest of the run is unaffected.
+        db = database.SessionLocal()
+        org = db.query(models.Organization).filter(models.Organization.id == org_id).one()
+        org.max_clients = 0
+        db.commit()
+        db.close()
+        ok("the clients cap binds on the client-ad editor, and refuses without creating a row")
+
         # 6. Booking a screen that inherits its loop from a group keeps that loop, and the
         #    rest of the group does not get the advert.
         db = database.SessionLocal()

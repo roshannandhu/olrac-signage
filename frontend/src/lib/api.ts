@@ -678,6 +678,26 @@ export const adminApi = {
     fetchWithAuth<TenantSummary>(`/admin/tenants/${id}/quota`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     }),
+  // The paid window. Separate from suspend/reinstate on purpose: suspension is a judgement
+  // about the customer, expiry is a fact about the calendar.
+  updateSubscription: (
+    id: number,
+    body: { extend_days?: number; period_end?: string; billing_period?: string; status?: 'active' | 'expired' },
+  ) =>
+    fetchWithAuth<TenantSummary>(`/admin/tenants/${id}/subscription`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }),
+  // Limits and features for one workspace, without touching the package everyone else is on.
+  grantLimits: (
+    id: number,
+    body: {
+      max_screens?: number; max_ad_slots?: number; max_clients?: number
+      max_storage_bytes?: number; features?: Record<string, boolean>; days?: number; name?: string
+    },
+  ) =>
+    fetchWithAuth<TenantSummary>(`/admin/tenants/${id}/grant`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }),
 
   listPackages: () => fetchWithAuth<Package[]>('/admin/plans'),
   createPackage: (body: PackageWrite) =>

@@ -103,6 +103,8 @@ ISOLATED_SCRIPTS = {
     "test_client_ad_editor.py",
     # A paid window that closes, and closes all the way to the television.
     "test_subscription_expiry.py",
+    # The operator setting a paid window, and granting limits of their own.
+    "test_admin_lifecycle_controls.py",
 }
 
 # Pure-logic tests: no database, no import-time engine, safe to run in-process.
@@ -167,6 +169,10 @@ NEEDS_POSTGRES = ISOLATED_SCRIPTS - {
     "test_ws_connection_pool.py",
     # Playlist resolution is plain Python over the ORM, so SQLite exercises it fully.
     "test_playlist_resolution_parity.py",
+    # Both create their own SQLite file and check plain Python over the ORM. Listed here or
+    # a machine with no Postgres would skip them and report a green run that proved nothing.
+    "test_subscription_expiry.py",
+    "test_admin_lifecycle_controls.py",
 }
 
 

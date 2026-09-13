@@ -17,15 +17,15 @@ import os
 import pathlib
 import shutil
 import uuid
-from datetime import timedelta
-from typing import Dict, List, Optional
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from .. import database, models, schemas
-from ..billing import plan_features
+from ..billing import plan_features, subscription_state
 from ..media_urls import resolve_media_url
 from ..tenancy import TenantScope, require_super_admin
 
@@ -118,6 +118,13 @@ class TenantSummaryOut(BaseModel):
     storage_used_bytes: int = 0
     storage_quota_bytes: int = 0
     rejection_reason: Optional[str] = None
+    # The paid window. `subscription_state` is the answer the product actually acts on --
+    # "active", "grace" or "expired" -- rather than the raw status column, which says
+    # "active" right up until something compares the period to the clock.
+    subscription_state: Optional[str] = None
+    subscription_status: Optional[str] = None
+    billing_period: Optional[str] = None
+    current_period_end: Optional[str] = None
 
 
 class TenantScreenOut(BaseModel):
@@ -166,6 +173,34 @@ class QuotaUpdateRequest(BaseModel):
     plan_id: Optional[int] = None
     max_screens: Optional[int] = Field(default=None, ge=0)
     max_ad_slots: Optional[int] = Field(default=None, ge=0)
+
+
+class SubscriptionUpdateRequest(BaseModel):
+    """Move a workspace's paid window by hand.
+
+    `extend_days` is the everyday case -- "give them another month" -- and is measured from
+    whichever is later, now or the end they already have, so extending twice in a week adds
+    two months rather than throwing the first one away.
+    """
+    extend_days: Optional[int] = Field(default=None, ge=1, le=3650)
+    period_end: Optional[datetime] = None
+    billing_period: Optional[Literal["monthly", "yearly", "one_time"]] = None
+    # "active" reinstates a workspace whose window ran out; "expired" cuts one off now.
+    status: Optional[Literal["active", "expired"]] = None
+
+
+class GrantRequest(BaseModel):
+    """Put one workspace on limits of your own, rather than on a published package.
+
+    Everything is optional; anything left out keeps the value the workspace already has.
+    """
+    max_screens: Optional[int] = Field(default=None, ge=0)
+    max_ad_slots: Optional[int] = Field(default=None, ge=0)
+    max_clients: Optional[int] = Field(default=None, ge=0)
+    max_storage_bytes: Optional[int] = Field(default=None, ge=0)
+    features: Optional[dict[str, bool]] = None
+    days: Optional[int] = Field(default=None, ge=1, le=3650)
+    name: Optional[str] = None
 
 
 class RejectionRequest(BaseModel):
@@ -248,6 +283,12 @@ def _summarise(db: Session, org: models.Organization) -> TenantSummaryOut:
         storage_used_bytes=int(storage_used),
         storage_quota_bytes=org.storage_quota_bytes,
         rejection_reason=org.rejection_reason,
+        subscription_state=subscription_state(org.subscription),
+        subscription_status=org.subscription.status if org.subscription else None,
+        billing_period=org.subscription.billing_period if org.subscription else None,
+        current_period_end=(
+            _iso(org.subscription.current_period_end) if org.subscription else None
+        ),
     )
 
 
@@ -420,6 +461,155 @@ def approve_tenant(
     logger.info(
         "Org %s (ID %s) approved by %s: plan=%s screens=%s ads=%s",
         org.name, org.id, scope.user.username, org.plan_id, org.max_screens, org.max_ad_slots,
+    )
+    return _summarise(db, org)
+
+
+@router.patch("/tenants/{org_id}/subscription", response_model=TenantSummaryOut)
+def update_tenant_subscription(
+    org_id: int,
+    req: SubscriptionUpdateRequest,
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    """Set, extend or end a workspace's paid window.
+
+    The only lever over the lifecycle an operator had was suspend/reinstate, which is a
+    different thing: suspension is a judgement about the customer, expiry is a fact about
+    the calendar. Without this there was no way to say "they paid me offline, give them
+    another month" except editing the database.
+    """
+    org = _get_org(db, org_id)
+    subscription = org.subscription
+    if subscription is None:
+        if org.plan_id is None:
+            raise HTTPException(
+                status_code=409,
+                detail="This workspace has no package; assign one before setting a period.",
+            )
+        subscription = models.Subscription(
+            organization_id=org.id,
+            plan_id=org.plan_id,
+            status="active",
+            billing_period=req.billing_period or "one_time",
+        )
+        db.add(subscription)
+        db.flush()
+
+    now = models.utcnow()
+    if req.extend_days is not None:
+        # From the later of now and the end they already hold, so extending a live
+        # subscription adds to it rather than truncating it back to today.
+        current_end = subscription.current_period_end
+        if current_end is not None and current_end.tzinfo is None:
+            current_end = current_end.replace(tzinfo=timezone.utc)
+        base = max(now, current_end) if current_end else now
+        subscription.current_period_end = base + timedelta(days=req.extend_days)
+        if subscription.current_period_start is None:
+            subscription.current_period_start = now
+    if req.period_end is not None:
+        subscription.current_period_end = req.period_end
+    if req.billing_period is not None:
+        subscription.billing_period = req.billing_period
+
+    if req.status == "active":
+        subscription.status = "active"
+        # Clearing the grace end matters: left set and in the past, it would expire them
+        # again on the next sweep.
+        subscription.grace_period_end = None
+    elif req.status == "expired":
+        subscription.status = "expired"
+    elif subscription.status in {"expired", "grace"} and (
+        req.extend_days is not None or req.period_end is not None
+    ):
+        # Giving an expired workspace a future window without saying "active" plainly means
+        # reinstating it; leaving the status expired would ignore the window just granted.
+        subscription.status = "active"
+        subscription.grace_period_end = None
+
+    subscription.updated_at = now
+    db.commit()
+    db.refresh(org)
+    logger.info(
+        "Subscription for org %s (ID %s) set by %s: status=%s period_end=%s",
+        org.name, org.id, scope.user.username, subscription.status,
+        subscription.current_period_end,
+    )
+    return _summarise(db, org)
+
+
+@router.post("/tenants/{org_id}/grant", response_model=TenantSummaryOut)
+def grant_custom_limits(
+    org_id: int,
+    req: GrantRequest,
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    """Put one workspace on limits and features of your own choosing.
+
+    Screens and ad slots already had per-tenant overrides, but clients, storage and the
+    feature flags did not -- and features live on a Plan, so there was no way to give one
+    workspace emergency alerts without editing the package every other workspace is on.
+
+    This mints a hidden package for them, the same shape a paid custom request produces
+    (`is_active=False`, a `custom-` slug the catalogue filters out), so effective_max_* and
+    plan_features keep working unchanged and nothing new has to understand a third kind of
+    limit. Re-granting edits that same package rather than accumulating one per change.
+    """
+    org = _get_org(db, org_id)
+
+    slug = f"custom-org-{org.id}"
+    plan = db.query(models.Plan).filter(models.Plan.slug == slug).first()
+    source = org.plan
+    if plan is None:
+        plan = models.Plan(
+            name=req.name or f"Custom limits for {org.name}",
+            slug=slug,
+            monthly_price_paise=0,
+            yearly_price_paise=0,
+            price_paise=0,
+            duration_days=req.days or (source.duration_days if source else 30),
+            # Seeded from whatever they are on now, so a grant that sets only one field
+            # does not silently zero the rest.
+            max_screens=source.max_screens if source else 0,
+            max_clients=source.max_clients if source else 0,
+            max_ad_slots=source.max_ad_slots if source else 0,
+            max_storage_bytes=source.max_storage_bytes if source else 0,
+            feature_flags_json=json.dumps(plan_features(source) if source else {}, sort_keys=True),
+            is_active=False,
+        )
+        db.add(plan)
+        db.flush()
+    elif req.name:
+        plan.name = req.name
+
+    if req.max_screens is not None:
+        plan.max_screens = req.max_screens
+    if req.max_ad_slots is not None:
+        plan.max_ad_slots = req.max_ad_slots
+    if req.max_clients is not None:
+        plan.max_clients = req.max_clients
+    if req.max_storage_bytes is not None:
+        plan.max_storage_bytes = req.max_storage_bytes
+    if req.days is not None:
+        plan.duration_days = req.days
+    if req.features is not None:
+        plan.feature_flags_json = json.dumps(req.features, sort_keys=True)
+
+    _apply_plan(org, plan)
+    # A granted workspace is one you have decided about, so let it in.
+    if org.status == "pending_approval":
+        org.status = "active"
+        org.approved_at = models.utcnow()
+        org.approved_by_user_id = scope.user.id
+        org.rejection_reason = None
+
+    db.commit()
+    db.refresh(org)
+    logger.info(
+        "Custom limits granted to org %s (ID %s) by %s: screens=%s ads=%s clients=%s features=%s",
+        org.name, org.id, scope.user.username, plan.max_screens, plan.max_ad_slots,
+        plan.max_clients, plan.feature_flags_json,
     )
     return _summarise(db, org)
 

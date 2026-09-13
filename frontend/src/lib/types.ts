@@ -570,6 +570,13 @@ export interface TenantSummary {
   storage_used_bytes: number
   storage_quota_bytes: number
   rejection_reason?: string | null
+  // The paid window. `subscription_state` is what the product acts on -- 'active', 'grace'
+  // or 'expired' -- while `subscription_status` is the stored column, which reads "active"
+  // whatever the calendar says.
+  subscription_state?: string | null
+  subscription_status?: string | null
+  billing_period?: string | null
+  current_period_end?: string | null
 }
 
 export interface TenantScreen {

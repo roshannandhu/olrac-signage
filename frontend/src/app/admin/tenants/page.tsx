@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  CheckCircle, Clock, Film, Gauge, MonitorPlay, RefreshCw, Users, XCircle,
+  CalendarPlus, CalendarX, CheckCircle, Clock, Film, Gauge, MonitorPlay, RefreshCw, Users, XCircle,
 } from 'lucide-react'
 import { adminApi } from '@/lib/api'
 import type { TenantSummary } from '@/lib/types'
@@ -21,6 +21,36 @@ import {
  * built Tailwind classes by interpolation (`bg-${color}-500/10`), which Tailwind v4 cannot
  * see -- so none of them were styled.
  */
+const formatWindowEnd = (value?: string | null) =>
+  value ? new Date(value).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : 'no end date'
+
+/**
+ * The paid window, in the two words an operator needs at a glance.
+ *
+ * Reads `subscription_state`, never `subscription_status`: the stored column says "active"
+ * regardless of the calendar, which is precisely how a period that had run out went on
+ * granting full access.
+ */
+function PlanWindow({ tenant }: { tenant: TenantSummary }) {
+  const state = tenant.subscription_state
+  if (!state) return <span className="text-xs text-muted-foreground">—</span>
+
+  const tone =
+    state === 'expired' ? 'border-rose-500/20 bg-rose-500/10 text-rose-400'
+      : state === 'grace' ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+        : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+  const label = state === 'expired' ? 'Ended' : state === 'grace' ? 'Grace' : 'Running'
+
+  return (
+    <div className="space-y-1">
+      <span className={`inline-block rounded-md border px-2 py-0.5 text-[11px] ${tone}`}>{label}</span>
+      <p className="text-[11px] text-muted-foreground">
+        {tenant.current_period_end ? `to ${formatWindowEnd(tenant.current_period_end)}` : 'no end date set'}
+      </p>
+    </div>
+  )
+}
+
 export default function AdminTenantsPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
@@ -45,6 +75,17 @@ export default function AdminTenantsPage() {
     mutationFn: ({ id, action }: { id: number; action: 'suspend' | 'reinstate' }) =>
       action === 'suspend' ? adminApi.suspendTenant(id) : adminApi.reinstateTenant(id),
     onSuccess: (tenant) => done(`${tenant.name} is now ${tenant.status}.`),
+    onError: failed,
+  })
+
+  const setPlanWindow = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: { extend_days?: number; status?: 'active' | 'expired' } }) =>
+      adminApi.updateSubscription(id, body),
+    onSuccess: (tenant) => done(
+      tenant.subscription_state === 'expired'
+        ? `${tenant.name}'s plan has been ended. Their screens now show the demo reel.`
+        : `${tenant.name}'s plan runs until ${formatWindowEnd(tenant.current_period_end)}.`,
+    ),
     onError: failed,
   })
 
@@ -107,15 +148,16 @@ export default function AdminTenantsPage() {
           <p className="p-10 text-center text-sm text-muted-foreground">Loading…</p>
         ) : (
           <div className="overflow-x-auto">
-            {/* min-w keeps the eight columns readable and lets the wrapper scroll, rather
+            {/* min-w keeps the nine columns readable and lets the wrapper scroll, rather
                 than squeezing them into 375px until every cell wraps to three lines. */}
-            <table className="w-full min-w-[880px] text-sm">
+            <table className="w-full min-w-[1100px] text-sm">
               <thead className="border-b border-border bg-muted text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="p-4 pl-5 text-left">Workspace</th>
                   <th className="p-4 text-left">Owner</th>
                   <th className="p-4 text-left">Package</th>
                   <th className="p-4 text-left">Status</th>
+                  <th className="p-4 text-left">Plan window</th>
                   <th className="p-4 text-left">Screens</th>
                   <th className="p-4 text-left">Ad slots</th>
                   <th className="p-4 text-left">Storage</th>
@@ -134,6 +176,7 @@ export default function AdminTenantsPage() {
                     <td className="p-4 font-mono text-xs text-emerald-400">{tenant.owner_email ?? '—'}</td>
                     <td className="p-4 text-xs text-muted-foreground">{tenant.plan_name ?? '—'}</td>
                     <td className="p-4"><StatusPill status={tenant.status} /></td>
+                    <td className="p-4"><PlanWindow tenant={tenant} /></td>
                     <td className="w-32 p-4"><QuotaBar used={tenant.screens_count} max={tenant.max_screens} /></td>
                     <td className="w-32 p-4"><QuotaBar used={tenant.ad_slots_used} max={tenant.max_ad_slots} /></td>
                     <td className="p-4 text-xs text-muted-foreground">
@@ -148,6 +191,31 @@ export default function AdminTenantsPage() {
                           <Gauge className="size-3" />
                           Limits
                         </button>
+                        <button
+                          onClick={() => setPlanWindow.mutate({ id: tenant.id, body: { extend_days: 30 } })}
+                          disabled={setPlanWindow.isPending}
+                          title="Add 30 days to this workspace's paid window"
+                          className="flex items-center gap-1.5 rounded-lg border border-sky-500/20 bg-sky-500/10 px-3 py-1.5 text-xs text-sky-400 transition-all hover:bg-sky-500/20 disabled:opacity-50"
+                        >
+                          <CalendarPlus className="size-3" />
+                          +30 days
+                        </button>
+                        {tenant.subscription_state === 'active' && (
+                          <button
+                            onClick={() => {
+                              if (window.confirm(
+                                `End "${tenant.name}"'s plan now? Their adverts stop and their screens show the demo reel. Nothing is deleted, and extending the plan puts it all back.`,
+                              )) {
+                                setPlanWindow.mutate({ id: tenant.id, body: { status: 'expired' } })
+                              }
+                            }}
+                            disabled={setPlanWindow.isPending}
+                            className="flex items-center gap-1.5 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-400 transition-all hover:bg-amber-500/20 disabled:opacity-50"
+                          >
+                            <CalendarX className="size-3" />
+                            End plan
+                          </button>
+                        )}
                         {tenant.status === 'suspended' ? (
                           <button
                             onClick={() => setStatus.mutate({ id: tenant.id, action: 'reinstate' })}

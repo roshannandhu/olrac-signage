@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
@@ -60,7 +60,9 @@ export function CreateBookingModal({
   const [planId, setPlanId] = useState<number | null>(null)
   const [price, setPrice] = useState<string>('')
   const [startsAt, setStartsAt] = useState<string>(() => dateInput(new Date()))
-  const [endsAt, setEndsAt] = useState<string>(() => dateInput(Date.now() + 30 * 864e5))
+  // What the operator typed. The value actually used is `endsAt` below, which prefers the
+  // run length being sold until they take the field over.
+  const [endsAtInput, setEndsAtInput] = useState<string>(() => dateInput(Date.now() + 30 * 864e5))
   // Whether the operator has set the end date THEMSELVES. Until they do, the booking
   // window follows the longest run being sold -- a bespoke sale states its length per
   // location ("30 in the mall, 10 in the shop") and the longest of those is the
@@ -167,28 +169,20 @@ export function CreateBookingModal({
 
     // Auto calculate endsAt based on plan duration, unless the operator set one.
     if (plan.duration_days > 0 && !endsAtTouched) {
-      setEndsAt(addDays(startsAt, plan.duration_days))
+      setEndsAtInput(addDays(startsAt, plan.duration_days))
     }
   }
 
   // Handle start date modification
   const handleStartDateChange = (newStart: string) => {
     setStartsAt(newStart)
-    // The effect below re-derives from the new start; only a plan sale needs doing here,
-    // because its length does not depend on the picked targets.
+    // `endsAt` re-derives from the new start on its own; this only keeps the typed value
+    // underneath it in step for a plan sale, so the field still reads correctly if the
+    // operator later takes it over.
     if (selectedPlan && selectedPlan.duration_days > 0 && !endsAtTouched) {
-      setEndsAt(addDays(newStart, selectedPlan.duration_days))
+      setEndsAtInput(addDays(newStart, selectedPlan.duration_days))
     }
   }
-
-  // Calculate run duration in days
-  const runDurationDays = useMemo(() => {
-    if (!startsAt || !endsAt) return 0
-    const start = new Date(`${startsAt}T00:00:00`).getTime()
-    const end = new Date(`${endsAt}T00:00:00`).getTime()
-    const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24))
-    return diffDays > 0 ? diffDays : 0
-  }, [startsAt, endsAt])
 
   // The longest run being sold right now, in days.
   //
@@ -207,11 +201,25 @@ export function CreateBookingModal({
   // booking sold "10 days here, 30 there" was SOLD with whatever date happened to be in the
   // box -- the screens ran their own windows correctly, but the booking, its invoice and
   // the bookings list all showed a campaign that had already finished.
-  useEffect(() => {
-    if (endsAtTouched || longestRunDays <= 0 || !startsAt) return
-    const derived = addDays(startsAt, longestRunDays)
-    if (derived !== endsAt) setEndsAt(derived)
-  }, [endsAtTouched, longestRunDays, startsAt, endsAt])
+  //
+  // Derived during render rather than written back from an effect. The effect version set
+  // state on every change to a value it also depended on, which React flags
+  // (react-hooks/set-state-in-effect) because it renders twice for one edit and can loop if
+  // the derivation is ever not exactly idempotent. Here the truth is simply "the typed date
+  // if the operator typed one, otherwise start + longest run", which needs no state at all.
+  const endsAt =
+    !endsAtTouched && longestRunDays > 0 && startsAt
+      ? addDays(startsAt, longestRunDays)
+      : endsAtInput
+
+  // Calculate run duration in days
+  const runDurationDays = useMemo(() => {
+    if (!startsAt || !endsAt) return 0
+    const start = new Date(`${startsAt}T00:00:00`).getTime()
+    const end = new Date(`${endsAt}T00:00:00`).getTime()
+    const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24))
+    return diffDays > 0 ? diffDays : 0
+  }, [startsAt, endsAt])
 
   const toggleTarget = (key: string) => {
     setPicked((prev) =>
@@ -501,7 +509,7 @@ export function CreateBookingModal({
                   id="booking-until"
                   type="date"
                   value={endsAt}
-                  onChange={(e) => { setEndsAtTouched(true); setEndsAt(e.target.value) }}
+                  onChange={(e) => { setEndsAtTouched(true); setEndsAtInput(e.target.value) }}
                   className="pl-9 text-sm bg-background"
                 />
               </div>

@@ -58,5 +58,11 @@ jobs:
         run: npx tsc --noEmit
       - name: Module boundaries (dependency-cruiser)
         run: npx depcruise src
+      - name: Lint (errors only)
+        # tsc and the build both pass happily through a React rules violation, so nothing
+        # here caught a setState written inside an effect -- it sat in main until someone
+        # ran eslint by hand. Errors fail; the existing warnings do not, so this gate can go
+        # in without a cleanup pass first.
+        run: npx eslint src
       - name: Production build
         run: npm run build

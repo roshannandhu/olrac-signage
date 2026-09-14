@@ -710,7 +710,7 @@ class MainActivity : ComponentActivity() {
 
                     pairCode = registration.pairCode
                     codeIssuedAt = System.currentTimeMillis()
-                    launchState = LaunchState.Pairing(pairCode = pairCode, connectionMessage = null, issuedAtMs = codeIssuedAt, ttlSeconds = 60)
+                    launchState = LaunchState.Pairing(pairCode = pairCode, connectionMessage = null, issuedAtMs = codeIssuedAt, ttlSeconds = PAIR_CODE_TTL_SECONDS)
                 } else {
                     val response = ApiClient.service(this).sync(deviceId)
                     val body = response.body()
@@ -727,7 +727,7 @@ class MainActivity : ComponentActivity() {
                     }
 
                     if (launchState is LaunchState.Pairing && (launchState as LaunchState.Pairing).connectionMessage != null) {
-                        launchState = LaunchState.Pairing(pairCode = pairCode, connectionMessage = null, issuedAtMs = codeIssuedAt, ttlSeconds = 60)
+                        launchState = LaunchState.Pairing(pairCode = pairCode, connectionMessage = null, issuedAtMs = codeIssuedAt, ttlSeconds = PAIR_CODE_TTL_SECONDS)
                     }
                 }
             } catch (e: Exception) {
@@ -737,7 +737,7 @@ class MainActivity : ComponentActivity() {
                     pairCode = pairCode,
                     connectionMessage = "No connection. Pairing will resume automatically.",
                     issuedAtMs = codeIssuedAt,
-                    ttlSeconds = 60
+                    ttlSeconds = PAIR_CODE_TTL_SECONDS
                 )
             }
 
@@ -857,7 +857,18 @@ class MainActivity : ComponentActivity() {
         // How long to keep watching for the browser half to bind this screen. Generous
         // because it is a person signing into Google on a TV remote, which is slow.
         private const val BROWSER_SIGN_IN_TIMEOUT_MS = 10 * 60_000L
-        private const val PAIR_CODE_REFRESH_MS = 60_000L
+        // Strictly INSIDE the server's PAIR_CODE_TTL (one minute), never equal to it.
+        // Both were sixty seconds, so the code expired at the same instant this replaced it
+        // -- and since the loop below only ticks every few seconds, the digits on screen were
+        // an already-expired code for up to five seconds of every minute. Typing them then
+        // earned "Invalid pairing code".
+        //
+        // Refreshing early costs nothing: /register hands back the SAME code while it is
+        // still valid rather than minting a new one, so this only has to beat expiry.
+        private const val PAIR_CODE_REFRESH_MS = 45_000L
+
+        /** What the server actually grants, so the countdown on the TV is not a fiction. */
+        private const val PAIR_CODE_TTL_SECONDS = 60
     }
 }
 

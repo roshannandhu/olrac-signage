@@ -120,6 +120,19 @@ def presents_valid_device_token(device_id: str, credentials: HTTPAuthorizationCr
         return False
 
 
+# How long a pairing code stays valid. Rotation is deliberate; the player shows a countdown.
+#
+# The player's PAIR_CODE_REFRESH_MS must be strictly SHORTER than this. Both were sixty
+# seconds, so the code expired at the same instant the TV asked for a new one -- and because
+# the player polls every few seconds, the six digits on screen were an expired code for up to
+# five seconds of every minute. Typing them then earns "Invalid pairing code", which is
+# exactly what was reported.
+#
+# tests/test_pairing_code_window.py reads the player's constant and fails if the margin is
+# lost again, because nothing else connects a Python timedelta to a Kotlin Long.
+PAIR_CODE_TTL = timedelta(minutes=1)
+
+
 @router.post("/register", response_model=schemas.RegisterResponse)
 # Unauthenticated, and it both creates rows and can hand back a credential, so it needs a
 # ceiling. Sized like /auth for the same reason: a site coming back after a power cut
@@ -260,7 +273,7 @@ async def register_tv(
         while db.query(models.Screen).filter(models.Screen.pair_code == code, models.Screen.deleted_at.is_(None)).first():
             code = generate_pair_code()
         db_screen.pair_code = code
-        db_screen.pair_code_expires_at = now + timedelta(minutes=1)
+        db_screen.pair_code_expires_at = now + PAIR_CODE_TTL
     db.commit()
     db.refresh(db_screen)
     return db_screen

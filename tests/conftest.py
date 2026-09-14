@@ -138,6 +138,8 @@ PURE_MODULES = {
     "test_no_embedded_credentials.py",
     # Serving media from a published bucket, with no credential anywhere.
     "test_public_media_bucket.py",
+    # The pairing code must outlive the moment the player replaces it.
+    "test_pairing_code_window.py",
 }
 
 

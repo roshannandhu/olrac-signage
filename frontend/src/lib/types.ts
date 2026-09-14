@@ -705,3 +705,16 @@ export interface PlatformStorage {
   cached: boolean
   tenants: StorageTenant[]
 }
+
+export interface StorageSettings {
+  /** Masked — only the last characters, enough to tell two keys apart. */
+  access_key_id?: string | null
+  /** The secret is never returned. This says only whether one is held. */
+  secret_is_set: boolean
+  endpoint_url?: string | null
+  bucket?: string | null
+  /** Which values come from the console rather than the server environment. */
+  from_console: string[]
+  /** Whether the resulting configuration actually works. The only real question. */
+  storage_enabled: boolean
+}

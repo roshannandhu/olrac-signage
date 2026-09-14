@@ -47,6 +47,33 @@ _S3_DEFAULTS = {
 }
 
 
+# Storage settings an operator typed into the admin console, which win over the environment.
+#
+# Kept as a plain dict that something else fills in, rather than read from the database here,
+# because this module is imported by `schemas` and sits underneath everything -- giving it a
+# session would put the whole ORM behind a function that resolves a URL.
+#
+# They win on purpose. A deployment whose AWS_ACCESS_KEY_ID is the literal string "mock" is
+# indistinguishable from an unconfigured one, and that is not hypothetical: it is what this
+# product was actually running with while an operator edited the variable on a second Render
+# service and watched nothing change. Someone who fills the form in wants it to take effect.
+_OVERRIDES: dict[str, str] = {}
+
+
+def apply_storage_overrides(values: dict[str, str] | None) -> None:
+    """Replace the settings the console has supplied. Blank entries are dropped."""
+    _OVERRIDES.clear()
+    for key, value in (values or {}).items():
+        cleaned = (value or "").strip()
+        if cleaned:
+            _OVERRIDES[key] = cleaned
+
+
+def storage_override_names() -> list[str]:
+    """Which settings are currently coming from the console rather than the environment."""
+    return sorted(_OVERRIDES)
+
+
 def _setting(name: str) -> str:
     """One environment value, with a variable that is present but BLANK treated as unset.
 
@@ -54,6 +81,9 @@ def _setting(name: str) -> str:
     no default to fall back to, so an unset or placeholder key yields "" and object storage
     reports itself disabled rather than authenticating as somebody.
     """
+    override = _OVERRIDES.get(name)
+    if override:
+        return override
     val = (os.getenv(name) or "").strip()
     if not val:
         return _S3_DEFAULTS.get(name, "")

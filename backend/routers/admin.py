@@ -533,6 +533,110 @@ class StorageOut(BaseModel):
     tenants: List[StorageTenantOut] = Field(default_factory=list)
 
 
+class StorageSettingsOut(BaseModel):
+    """What the console shows about the storage credentials it holds.
+
+    Deliberately never contains the secret. A settings form that reads its own secret back is
+    a settings form that will hand it to anyone who finds a way to call the endpoint, and
+    there is no honest need: the only useful questions are "is one set" and "which one", and
+    the last four characters of the key id answer the second without being a credential.
+    """
+    access_key_id: Optional[str] = None
+    secret_is_set: bool = False
+    endpoint_url: Optional[str] = None
+    bucket: Optional[str] = None
+    # Which values are coming from this form rather than the server's environment.
+    from_console: List[str] = Field(default_factory=list)
+    # True once the resulting configuration actually works, which is the only thing an
+    # operator is really asking.
+    storage_enabled: bool = False
+
+
+class StorageSettingsWrite(BaseModel):
+    """Blank or omitted clears that setting and falls back to the environment."""
+    access_key_id: Optional[str] = Field(default=None, max_length=256)
+    secret_access_key: Optional[str] = Field(default=None, max_length=512)
+    endpoint_url: Optional[str] = Field(default=None, max_length=512)
+    bucket: Optional[str] = Field(default=None, max_length=128)
+
+
+def _storage_settings_out(db: Session) -> StorageSettingsOut:
+    from ..media_urls import get_s3_config, is_s3_enabled, storage_override_names
+    from ..services.storage_service import load_storage_overrides
+
+    live = load_storage_overrides(db)
+    config = get_s3_config()
+    key_id = config["aws_access_key_id"]
+    return StorageSettingsOut(
+        # Enough to tell two keys apart, not enough to be one.
+        access_key_id=f"…{key_id[-4:]}" if key_id else None,
+        secret_is_set=bool(config["aws_secret_access_key"]),
+        endpoint_url=config["endpoint_url"] or None,
+        bucket=config["bucket"] or None,
+        from_console=storage_override_names(),
+        storage_enabled=is_s3_enabled(),
+    )
+
+
+@router.get("/storage/settings", response_model=StorageSettingsOut)
+def get_storage_settings(
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    """The storage credentials this deployment is using, without the secret."""
+    return _storage_settings_out(db)
+
+
+@router.put("/storage/settings", response_model=StorageSettingsOut)
+def put_storage_settings(
+    req: StorageSettingsWrite,
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    """Set the storage credentials from the console, overriding the server's environment.
+
+    They win over the environment on purpose. `AWS_ACCESS_KEY_ID=mock` is indistinguishable
+    from an unconfigured deployment and is exactly the state this product ran in while its
+    operator edited that variable on a second Render service and watched nothing change.
+    Someone who fills this form in wants it to take effect, and they can see here whether it
+    did -- `storage_enabled` is the answer, not a promise.
+    """
+    from ..services.storage_service import save_storage_overrides
+
+    save_storage_overrides(db, {
+        "AWS_ACCESS_KEY_ID": req.access_key_id,
+        "AWS_SECRET_ACCESS_KEY": req.secret_access_key,
+        "S3_ENDPOINT_URL": req.endpoint_url,
+        "S3_BUCKET_NAME": req.bucket,
+    })
+    logger.info("Storage settings updated by %s", scope.user.username)
+    return _storage_settings_out(db)
+
+
+@router.post("/storage/settings/test")
+def test_storage_settings(
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    """Actually reach the bucket with whatever is configured, and say what happened.
+
+    Saving a key that turns out to be wrong looks identical to saving a key that is right
+    until somebody uploads something, so the form offers to find out now.
+    """
+    from ..media_urls import get_s3_config, is_s3_enabled, s3_client
+    from ..services.storage_service import load_storage_overrides
+
+    load_storage_overrides(db)
+    if not is_s3_enabled():
+        return {"ok": False, "detail": "No storage credentials are configured."}
+    try:
+        config = get_s3_config()
+        s3_client().list_objects_v2(Bucket=config["bucket"], MaxKeys=1)
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "detail": str(exc).splitlines()[0][:200]}
+    return {"ok": True, "detail": "Connected. Uploads will be stored permanently."}
+
+
 @router.get("/storage", response_model=StorageOut)
 def platform_storage(
     refresh: bool = False,

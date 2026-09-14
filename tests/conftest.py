@@ -111,6 +111,8 @@ ISOLATED_SCRIPTS = {
     "test_screen_reconnect.py",
     # Publishing a player build reaches screens whose content never changes.
     "test_ota_reaches_a_settled_fleet.py",
+    # Storage credentials set from the console, and never handed back.
+    "test_storage_settings.py",
 }
 
 # Pure-logic tests: no database, no import-time engine, safe to run in-process.
@@ -182,6 +184,7 @@ NEEDS_POSTGRES = ISOLATED_SCRIPTS - {
     "test_storage_accounting.py",
     "test_screen_reconnect.py",
     "test_ota_reaches_a_settled_fleet.py",
+    "test_storage_settings.py",
 }
 
 

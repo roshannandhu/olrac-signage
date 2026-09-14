@@ -28,6 +28,75 @@ from .. import models
 logger = logging.getLogger(__name__)
 
 
+# The settings an operator can fill in from the admin console, and the SystemSetting key each
+# is stored under. Named for the environment variable they stand in for, so the console, the
+# environment and `/api/health` all talk about the same four things.
+STORAGE_SETTING_KEYS = {
+    "AWS_ACCESS_KEY_ID": "storage.aws_access_key_id",
+    "AWS_SECRET_ACCESS_KEY": "storage.aws_secret_access_key",
+    "S3_ENDPOINT_URL": "storage.s3_endpoint_url",
+    "S3_BUCKET_NAME": "storage.s3_bucket_name",
+}
+SECRET_SETTINGS = {"AWS_SECRET_ACCESS_KEY"}
+
+
+def load_storage_overrides(db: Session) -> dict[str, str]:
+    """Read the console's storage settings and make them live for this process.
+
+    Called at start-up and again whenever they are saved, so the change takes effect without
+    a restart -- and once more from the supervisor loop, so a second worker process picks up
+    what the one handling the request wrote.
+    """
+    from ..media_urls import apply_storage_overrides
+
+    try:
+        rows = db.query(models.SystemSetting).filter(
+            models.SystemSetting.key.in_(sorted(STORAGE_SETTING_KEYS.values()))
+        ).all()
+    except Exception:
+        # A database that predates the settings table must not stop media serving.
+        logger.exception("Could not read storage settings")
+        return {}
+
+    by_key = {row.key: row.value for row in rows}
+    values = {
+        name: by_key.get(setting_key, "")
+        for name, setting_key in STORAGE_SETTING_KEYS.items()
+    }
+    apply_storage_overrides(values)
+    return {name: value for name, value in values.items() if (value or "").strip()}
+
+
+def save_storage_overrides(db: Session, values: dict[str, str | None]) -> dict[str, str]:
+    """Write the console's storage settings, then make them live immediately.
+
+    A blank or absent value clears that setting, which is how an operator goes back to
+    whatever the environment says. Secrets are never read back out, so clearing is the only
+    way to "see" that one is gone.
+    """
+    for name, setting_key in STORAGE_SETTING_KEYS.items():
+        if name not in values:
+            continue
+        cleaned = (values.get(name) or "").strip()
+        row = db.query(models.SystemSetting).filter(
+            models.SystemSetting.key == setting_key
+        ).first()
+        if not cleaned:
+            if row:
+                db.delete(row)
+            continue
+        if row:
+            row.value = cleaned
+            row.updated_at = models.utcnow()
+        else:
+            db.add(models.SystemSetting(
+                key=setting_key, value=cleaned,
+                description="Object storage, set from the admin console",
+            ))
+    db.commit()
+    return load_storage_overrides(db)
+
+
 def organization_storage_used(db: Session, organization_id: int) -> int:
     """Bytes this workspace occupies: its content plus every rendition made from it.
 

@@ -155,6 +155,11 @@ async def lifespan(_app: FastAPI):
     try:
         auth.ensure_initial_owner(db)
         ensure_billing_catalog(db)
+        # Before anything can serve or accept media: a key typed into the admin console has
+        # to be live from the first request, not from the first supervisor tick.
+        from .services.storage_service import load_storage_overrides
+
+        load_storage_overrides(db)
     finally:
         db.close()
 
@@ -189,6 +194,12 @@ async def lifespan(_app: FastAPI):
                 # as the reconcile above: the scheduled jobs run on arq over Redis, and a
                 # deployment with Redis down would otherwise let every expired subscription
                 # keep full access indefinitely -- which is the state this started in.
+                # Storage settings typed into the console, re-read here so a second worker
+                # process picks up what the one handling the request wrote.
+                from .services.storage_service import load_storage_overrides
+
+                load_storage_overrides(rec_db)
+
                 from .services import expire_due_subscriptions
 
                 expired = expire_due_subscriptions(rec_db)

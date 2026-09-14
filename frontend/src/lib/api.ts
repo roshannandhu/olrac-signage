@@ -1,6 +1,6 @@
 import { useAuthStore } from './store'
 import type {
-  PlatformStorage, Package, PackageWrite, FleetOverview, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, Placement, PaymentMethod, PlanOption, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, PurchaseResponse, CustomPlanRequestInput, CustomPlanRequestItem, CustomPlanRequestUpdate, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
+  PlatformStorage, StorageSettings, Package, PackageWrite, FleetOverview, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, Placement, PaymentMethod, PlanOption, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, PurchaseResponse, CustomPlanRequestInput, CustomPlanRequestItem, CustomPlanRequestUpdate, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
 
 const PROD_API_URL = 'https://olrac-signage-32lh.onrender.com'
 const configuredUrl = (process.env.NEXT_PUBLIC_API_URL || PROD_API_URL).replace(/\/$/, '')
@@ -704,6 +704,16 @@ export const adminApi = {
   // re-count; the server caches it because LIST is billed per request.
   getStorage: (refresh = false) =>
     fetchWithAuth<PlatformStorage>(`/admin/storage${refresh ? '?refresh=true' : ''}`),
+  getStorageSettings: () => fetchWithAuth<StorageSettings>('/admin/storage/settings'),
+  saveStorageSettings: (body: {
+    access_key_id?: string; secret_access_key?: string; endpoint_url?: string; bucket?: string
+  }) =>
+    fetchWithAuth<StorageSettings>('/admin/storage/settings', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }),
+  // Reaches the bucket for real, so a wrong key is found now rather than at the next upload.
+  testStorageSettings: () =>
+    fetchWithAuth<{ ok: boolean; detail: string }>('/admin/storage/settings/test', { method: 'POST' }),
   listPackages: () => fetchWithAuth<Package[]>('/admin/plans'),
   createPackage: (body: PackageWrite) =>
     fetchWithAuth<Package>('/admin/plans', {

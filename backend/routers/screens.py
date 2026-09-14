@@ -252,11 +252,15 @@ async def register_tv(
         )
         db.add(db_screen)
 
-    code = generate_pair_code()
-    while db.query(models.Screen).filter(models.Screen.pair_code == code).first():
+    now = models.utcnow()
+    # If the screen already has an unexpired pairing code, reuse it so we don't
+    # invalidate the code shown on TV during polling or network retries.
+    if not (db_screen.pair_code and db_screen.pair_code_expires_at and db_screen.pair_code_expires_at > now):
         code = generate_pair_code()
-    db_screen.pair_code = code
-    db_screen.pair_code_expires_at = models.utcnow() + timedelta(minutes=5)
+        while db.query(models.Screen).filter(models.Screen.pair_code == code, models.Screen.deleted_at.is_(None)).first():
+            code = generate_pair_code()
+        db_screen.pair_code = code
+        db_screen.pair_code_expires_at = now + timedelta(minutes=1)
     db.commit()
     db.refresh(db_screen)
     return db_screen
@@ -330,6 +334,7 @@ async def pair_screen(
             .filter(
                 models.Screen.installation_id == db_screen.installation_id,
                 models.Screen.organization_id == scope.organization_id,
+                models.Screen.deleted_at.is_(None),
                 models.Screen.id != db_screen.id,
             )
             .first()
@@ -340,7 +345,13 @@ async def pair_screen(
             "Reclaiming existing screen %s (%s) on pairing reinstalled hardware (installation_id: %s, new device_id: %s)",
             existing_screen.id, existing_screen.name, db_screen.installation_id, db_screen.device_id
         )
-        existing_screen.device_id = db_screen.device_id
+        # Avoid Postgres unique constraint collision between db_screen and existing_screen
+        dev_id = db_screen.device_id
+        db_screen.device_id = None
+        scope.db.delete(db_screen)
+        scope.db.flush()
+
+        existing_screen.device_id = dev_id
         if db_screen.model:
             existing_screen.model = db_screen.model
         if db_screen.manufacturer:
@@ -353,8 +364,6 @@ async def pair_screen(
 
         device_secret = issue_device_secret(existing_screen)
 
-        # Remove the transient waiting_pairing placeholder
-        scope.db.delete(db_screen)
         scope.db.commit()
         scope.db.refresh(existing_screen)
         # Parked for the TV to collect on its next /register poll; this response goes to
@@ -1330,10 +1339,10 @@ async def remove_screen(
     if device_id:
         await queue_device_command(device_id, "deregister", ttl_seconds=3600)
         try:
-            redis = database.get_redis()
-            payload = json.dumps({"type": "deregister", "command": "deregister"})
-            await redis.publish(f"screen:{device_id}", payload)
-            await redis.publish(f"device:{device_id}", payload)
+            from .websockets import broadcast_ws_event
+            payload = {"type": "deregister", "command": "deregister"}
+            await broadcast_ws_event(f"screen:{device_id}", payload)
+            await broadcast_ws_event(f"device:{device_id}", payload)
         except Exception as exc:  # noqa: BLE001 - the 404 still resets it
             logger.warning("Could not push deregister to %s: %s", device_id, exc)
 

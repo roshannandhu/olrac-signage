@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Database, HardDrive, Layers, RefreshCw } from 'lucide-react'
 import { adminApi } from '@/lib/api'
 import { Feedback, PageHeader, StatCard, formatBytes } from '@/components/admin/admin-ui'
+import { StorageSettingsCard } from '@/components/admin/storage-settings-card'
 
 /**
  * What the object store actually holds, and which workspace put it there.
@@ -50,6 +51,8 @@ export default function AdminStoragePage() {
       </PageHeader>
 
       <Feedback ok="" error={error ? (error as Error).message : ''} />
+
+      <StorageSettingsCard />
 
       {data && !data.configured && (
         <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">

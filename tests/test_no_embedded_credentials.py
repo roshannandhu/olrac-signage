@@ -39,6 +39,13 @@ ASSIGNMENT = re.compile(
 # secret is 64, so these never collide with one.
 PLACEHOLDERS = {"", "mock", "test", "changeme", "your-key", "your-secret", "none", "null"}
 
+# A credential NAME mapped to the name of somewhere a credential is kept is not a credential.
+# `{"AWS_ACCESS_KEY_ID": "storage.aws_access_key_id"}` is a lookup table, and flagging it
+# would push whoever hit it towards weakening this guard rather than fixing anything. Kept
+# deliberately narrow -- a dotted lower-case settings path and nothing else, so it can never
+# be stretched to cover an actual key.
+SETTINGS_PATH = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
+
 # Config files are where credentials are SUPPOSED to live, and .env is gitignored anyway.
 # This file names the patterns it hunts for, so it would match itself.
 SKIP_NAMES = {"test_no_embedded_credentials.py"}
@@ -80,6 +87,9 @@ def find_embedded_credentials() -> list[str]:
                 continue
             # A lookup that happens to be quoted, e.g. os.getenv("AWS_ACCESS_KEY_ID").
             if value.upper() in CREDENTIAL_NAMES:
+                continue
+            # A map from the credential's name to where that credential is STORED.
+            if SETTINGS_PATH.match(value):
                 continue
             line = text[: match.start()].count("\n") + 1
             offences.append(

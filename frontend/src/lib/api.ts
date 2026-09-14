@@ -704,16 +704,6 @@ export const adminApi = {
   // re-count; the server caches it because LIST is billed per request.
   getStorage: (refresh = false) =>
     fetchWithAuth<PlatformStorage>(`/admin/storage${refresh ? '?refresh=true' : ''}`),
-  getStorageSettings: () => fetchWithAuth<StorageSettings>('/admin/storage/settings'),
-  saveStorageSettings: (body: {
-    access_key_id?: string; secret_access_key?: string; endpoint_url?: string; bucket?: string
-  }) =>
-    fetchWithAuth<StorageSettings>('/admin/storage/settings', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    }),
-  // Reaches the bucket for real, so a wrong key is found now rather than at the next upload.
-  testStorageSettings: () =>
-    fetchWithAuth<{ ok: boolean; detail: string }>('/admin/storage/settings/test', { method: 'POST' }),
   listPackages: () => fetchWithAuth<Package[]>('/admin/plans'),
   createPackage: (body: PackageWrite) =>
     fetchWithAuth<Package>('/admin/plans', {

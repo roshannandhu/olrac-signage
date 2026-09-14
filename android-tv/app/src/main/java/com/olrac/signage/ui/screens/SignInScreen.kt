@@ -167,7 +167,7 @@ fun SignInScreen(
         // Pairing Code Button
         Button(
             onClick = onUsePairingCode,
-            enabled = !state.busy,
+            enabled = true,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),

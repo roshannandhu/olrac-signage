@@ -1,5 +1,6 @@
 package com.olrac.signage.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +23,8 @@ fun GoogleSignInScreen(
     onSaveServer: (String) -> Unit,
     onChooseHome: () -> Unit
 ) {
+    BackHandler(onBack = onCancel)
+
     SetupSurface {
         Text(text = "Sign in with Google", color = Color.White, textAlign = TextAlign.Center)
         Text(

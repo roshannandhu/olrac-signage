@@ -304,7 +304,9 @@ sealed interface LaunchState {
     /** Fallback for when no keyboard is to hand. Reached from a link on [SignIn]. */
     data class Pairing(
         val pairCode: String? = null,
-        val connectionMessage: String? = null
+        val connectionMessage: String? = null,
+        val issuedAtMs: Long = System.currentTimeMillis(),
+        val ttlSeconds: Int = 60
     ) : LaunchState
 }
 

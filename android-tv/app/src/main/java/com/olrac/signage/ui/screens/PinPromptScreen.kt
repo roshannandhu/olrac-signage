@@ -1,5 +1,6 @@
 package com.olrac.signage.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,6 +30,8 @@ fun PinPromptScreen(
     onUnlocked: () -> Unit,
     onCancel: () -> Unit
 ) {
+    BackHandler(onBack = onCancel)
+
     var entered by remember { mutableStateOf("") }
     var attemptsLeft by remember { mutableIntStateOf(MaintenanceGesture.MAX_PIN_ATTEMPTS) }
     var error by remember { mutableStateOf<String?>(null) }

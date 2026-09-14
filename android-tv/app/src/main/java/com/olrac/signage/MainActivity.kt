@@ -71,8 +71,13 @@ import com.olrac.signage.ui.screens.*
 import com.olrac.signage.telemetry.ScreenshotManager
 import com.olrac.signage.network.RealtimeClient
 import com.olrac.signage.device.DeviceOwnerManager
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.coroutines.coroutineContext
 import java.io.IOException
 
 class MainActivity : ComponentActivity() {
@@ -83,6 +88,7 @@ class MainActivity : ComponentActivity() {
     private var showServerSetup by mutableStateOf(false)
     private var showPinPrompt by mutableStateOf(false)
     private var defaultHome by mutableStateOf(false)
+    private var pairingJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -99,11 +105,10 @@ class MainActivity : ComponentActivity() {
             launchState = LaunchState.SignIn()
         } else if (deviceState.isPaired) {
             launchState = LaunchState.Playing(deviceState.screenName)
+            PlaybackService.start(this, launchPlayer = false)
         } else {
             launchState = LaunchState.CheckingLocalState
         }
-
-        PlaybackService.start(this, launchPlayer = false)
         
         DeviceOwnerManager.applyKioskPolicy(this)
         if (DeviceOwnerManager.isDeviceOwner(this)) {
@@ -178,7 +183,7 @@ class MainActivity : ComponentActivity() {
                                 scope.launch { startGoogleSignIn(deviceId, screenName) }
                             },
                             onUsePairingCode = {
-                                scope.launch { usePairingCode(deviceId) }
+                                startPairingFlow(deviceId)
                             },
                             onOpenSettings = {
                                 showPinPrompt = true
@@ -198,7 +203,7 @@ class MainActivity : ComponentActivity() {
 
                     is LaunchState.Pairing -> PairingScreen(
                         state = state,
-                        onBackToSignIn = { launchState = LaunchState.SignIn() }
+                        onBackToSignIn = ::cancelPairingFlow
                     )
                 }
             }
@@ -224,6 +229,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (launchState is LaunchState.SignIn && !deviceState.isPaired) {
+            launchState = LaunchState.SignIn(busy = false)
+        }
         defaultHome = isDefaultHomeLauncher()
         hideSystemBars()
         // Backstop: re-pin whenever we are back on the player with no maintenance surface
@@ -657,6 +665,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun startPairingFlow(deviceId: String) {
+        pairingJob?.cancel()
+        pairingJob = lifecycleScope.launch {
+            usePairingCode(deviceId)
+        }
+    }
+
+    private fun cancelPairingFlow() {
+        pairingJob?.cancel()
+        pairingJob = null
+        launchState = LaunchState.SignIn()
+    }
+
     /** Fallback route: mint a code here and let a dashboard user claim it, as before. */
     private suspend fun usePairingCode(deviceId: String) {
         launchState = LaunchState.Pairing()
@@ -667,14 +688,18 @@ class MainActivity : ComponentActivity() {
         }
 
         launchState = resolved
-        waitForPairing(deviceId, resolved as LaunchState.Pairing)
+        if (resolved is LaunchState.Pairing) {
+            waitForPairing(deviceId, resolved)
+        }
     }
 
     private suspend fun waitForPairing(deviceId: String, initialState: LaunchState.Pairing) {
         var pairCode = initialState.pairCode
         var codeIssuedAt = if (pairCode == null) 0L else System.currentTimeMillis()
 
-        while (true) {
+        while (coroutineContext.isActive) {
+            if (launchState !is LaunchState.Pairing) return
+
             try {
                 if (pairCode == null || System.currentTimeMillis() - codeIssuedAt >= PAIR_CODE_REFRESH_MS) {
                     val registration = register(deviceId)
@@ -685,7 +710,7 @@ class MainActivity : ComponentActivity() {
 
                     pairCode = registration.pairCode
                     codeIssuedAt = System.currentTimeMillis()
-                    launchState = LaunchState.Pairing(pairCode = pairCode)
+                    launchState = LaunchState.Pairing(pairCode = pairCode, connectionMessage = null, issuedAtMs = codeIssuedAt, ttlSeconds = 60)
                 } else {
                     val response = ApiClient.service(this).sync(deviceId)
                     val body = response.body()
@@ -700,11 +725,19 @@ class MainActivity : ComponentActivity() {
                     if (!response.isSuccessful) {
                         throw IOException("Pairing check failed with HTTP ${response.code()}")
                     }
+
+                    if (launchState is LaunchState.Pairing && (launchState as LaunchState.Pairing).connectionMessage != null) {
+                        launchState = LaunchState.Pairing(pairCode = pairCode, connectionMessage = null, issuedAtMs = codeIssuedAt, ttlSeconds = 60)
+                    }
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                android.util.Log.w("MainActivity", "Pairing polling issue: ${e.message}")
                 launchState = LaunchState.Pairing(
                     pairCode = pairCode,
-                    connectionMessage = "No connection. Pairing will resume automatically."
+                    connectionMessage = "No connection. Pairing will resume automatically.",
+                    issuedAtMs = codeIssuedAt,
+                    ttlSeconds = 60
                 )
             }
 
@@ -743,6 +776,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun completePairing(screenName: String?, pairCode: String?, deviceSecret: String? = null) {
+        pairingJob?.cancel()
+        pairingJob = null
         val fallbackName = pairCode?.let { "Screen $it" } ?: DeviceState.DEFAULT_SCREEN_NAME
         // The server returns this exactly once, from whichever route bound the screen. It
         // is the credential every later request authenticates with, so it is stored before
@@ -753,6 +788,7 @@ class MainActivity : ComponentActivity() {
         }
         deviceState.markPaired(screenName ?: fallbackName)
         launchState = LaunchState.Playing(deviceState.screenName)
+        PlaybackService.start(this, launchPlayer = false)
         PlaybackService.requestImmediateSync(this)
     }
 
@@ -821,7 +857,7 @@ class MainActivity : ComponentActivity() {
         // How long to keep watching for the browser half to bind this screen. Generous
         // because it is a person signing into Google on a TV remote, which is slow.
         private const val BROWSER_SIGN_IN_TIMEOUT_MS = 10 * 60_000L
-        private const val PAIR_CODE_REFRESH_MS = 4 * 60_000L
+        private const val PAIR_CODE_REFRESH_MS = 60_000L
     }
 }
 

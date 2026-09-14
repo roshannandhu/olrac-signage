@@ -110,8 +110,10 @@ object UpdateManager {
         // Says this replacement is policy rather than something a person chose, which is
         // what keeps some OEM firmware from raising its own prompt over the platform's.
         runCatching { params.setInstallReason(PackageManager.INSTALL_REASON_POLICY) }
-        val unattended = deviceOwner || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-        Log.d(TAG, "Installing $versionCode (deviceOwner=$deviceOwner, unattended=$unattended)")
+        // Logged separately per route so a screen that installs without asking can be told
+        // apart from one that only managed it because it happened to be provisioned.
+        val selfUpdateSilent = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        Log.d(TAG, "Installing $versionCode (deviceOwner=$deviceOwner, selfUpdateSilent=$selfUpdateSilent, unattended=${deviceOwner || selfUpdateSilent})")
         var session: PackageInstaller.Session? = null
 
         try {

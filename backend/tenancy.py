@@ -44,6 +44,11 @@ BLOCKED_ORGANIZATION_STATUSES = {
     "rejected": (
         "This workspace registration was not approved. Contact your platform administrator."
     ),
+    # Not a real `status` value -- User.organization_status synthesises it from deleted_at,
+    # so that removal travels the same path as every other reason to refuse a workspace.
+    "removed": (
+        "This workspace has been removed. Contact your platform administrator."
+    ),
 }
 
 
@@ -79,6 +84,18 @@ class TenantScope:
         if self.user.organization_id is None:
             raise HTTPException(status_code=403, detail="User is not assigned to an organization")
         return self.user.organization_id
+
+    @property
+    def organization(self) -> models.Organization:
+        """The workspace being acted in, as a row.
+
+        Storage paths are built from the tenant's NAME, not its id, so the code that files
+        an upload needs the organisation itself and not just the number. Resolved through
+        `organization_id` so an operator working inside a tenant files into that tenant's
+        folder rather than their own -- reading `user.organization` directly would put
+        every object an operator uploaded on a customer's behalf under the operator.
+        """
+        return self.db.get(models.Organization, self.organization_id)
 
     def query(self, model: type[TenantModel]) -> Query:
         organization_column = getattr(model, "organization_id", None)
@@ -178,6 +195,11 @@ def resolve_acting_organization(
     )
     if organization is None:
         raise HTTPException(status_code=404, detail="Workspace not found")
+    # An operator may not step into a workspace that is counting down to being purged.
+    # Everything inside it is about to stop existing, and work done there would be lost
+    # without a word.
+    if organization.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="Workspace has been removed")
 
     logger.info(
         "Operator %s acting inside workspace %s (%s)",
@@ -216,7 +238,7 @@ def get_billing_scope(
     acting = resolve_acting_organization(user, act_as, db)
     if not is_super_admin(user):
         status = user.organization_status
-        if status in ("suspended", "rejected"):
+        if status in ("suspended", "rejected", "removed"):
             raise HTTPException(status_code=403, detail=BLOCKED_ORGANIZATION_STATUSES[status])
     # Same header as the tenant scope, or an operator inside a workspace would see the
     # storefront answer for their OWN organisation while every other page showed the

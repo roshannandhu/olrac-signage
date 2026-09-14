@@ -200,6 +200,11 @@ class PlaylistSynchronizer(context: Context) {
 
                 // Cached ahead of the empty-playlist return: a screen with nothing scheduled
                 // still has to be serviceable from the remote.
+                // Written every sync including when absent, so clearing the master code in
+                // the console actually takes it off the panels rather than leaving a key that
+                // works for ever on whichever screen happened to cache it.
+                DeviceState(appContext).setMasterPin(syncData.master_pin)
+
                 syncData.maintenance_pin?.takeIf { it.isNotBlank() }?.let {
                     DeviceState(appContext).setMaintenancePin(it)
                 }
@@ -312,25 +317,47 @@ class PlaylistSynchronizer(context: Context) {
                     target.entity.copy(localPath = target.finalFile.absolutePath)
                 }
 
-                // Assigned, but not one of them could be fetched. Recorded so the player can
-                // say THAT, instead of "Waiting for assigned content" -- which blames the
-                // operator for a server problem and is exactly the message that sent a real
-                // media outage chasing bookings that were fine all along.
-                preferences.edit()
-                    .putInt(
-                        KEY_UNREACHABLE_ITEMS,
-                        if (targets.isNotEmpty() && activatedItems.isEmpty()) targets.size else 0
-                    )
-                    .apply()
+                // Assigned, but could not be fetched. Recorded so the player can say THAT,
+                // instead of "Waiting for assigned content" -- which blames the operator for
+                // a server problem and is exactly the message that sent a real media outage
+                // chasing bookings that were fine all along.
+                //
+                // Counts the ones that actually failed rather than only the total-wipeout
+                // case: a screen playing two old adverts and missing the new one was
+                // reporting zero unreachable, so the one symptom anybody could see was "the
+                // advert I just assigned is not playing" with nothing anywhere saying why.
+                val unreachable = targets.size - activatedItems.size
+                preferences.edit().putInt(KEY_UNREACHABLE_ITEMS, unreachable).apply()
 
                 // If we have ready items, or if the server genuinely sent an empty playlist,
                 // activate them so playback can begin.
                 if (activatedItems.isNotEmpty() || targets.isEmpty()) {
                     dao.replaceAll(activatedItems)
                     cleanupOldCache(readyTargets.mapTo(mutableSetOf()) { it.finalFile.name })
-                    preferences.edit()
-                        .putString(KEY_PLAYLIST_UPDATED_AT, syncData.playlist_updated_at)
-                        .apply()
+
+                    // Only claim to be caught up when every assigned item is actually on
+                    // disk. This marker is what the next sync sends as `since`, and the
+                    // server answers 204 to anything it has already covered -- so writing
+                    // it after a PARTIAL download told the screen it was up to date while
+                    // an advert it had never managed to fetch was quietly dropped from the
+                    // loop. One failed download (an expired media URL, a blip mid-transfer)
+                    // stranded that advert permanently: it was never in the playlist, never
+                    // re-offered, and the booking read "Running" on the dashboard for its
+                    // whole paid window while the screen played everything except it.
+                    //
+                    // Holding the old marker back costs one unchanged playlist per minute
+                    // until the fetch succeeds, and then it settles to 204 on its own.
+                    if (unreachable == 0) {
+                        preferences.edit()
+                            .putString(KEY_PLAYLIST_UPDATED_AT, syncData.playlist_updated_at)
+                            .apply()
+                    } else {
+                        android.util.Log.w(
+                            "PlaylistSynchronizer",
+                            "$unreachable of ${targets.size} assigned items could not be " +
+                                "fetched; holding the sync marker so they are retried"
+                        )
+                    }
                 }
                 SyncOutcome(true, false, true, interval)
             } catch (exception: Exception) {

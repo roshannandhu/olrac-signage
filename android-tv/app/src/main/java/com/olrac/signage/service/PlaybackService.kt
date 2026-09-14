@@ -22,6 +22,7 @@ import androidx.work.WorkManager
 import com.olrac.signage.MainActivity
 import com.olrac.signage.R
 import com.olrac.signage.boot.PlayerLauncher
+import com.olrac.signage.data.DeviceState
 import com.olrac.signage.network.ConnectivityWatcher
 import com.olrac.signage.network.RealtimeClient
 import com.olrac.signage.sync.PlaylistSynchronizer
@@ -36,6 +37,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -46,6 +48,7 @@ class PlaybackService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val immediateSyncSignals = Channel<Unit>(capacity = Channel.CONFLATED)
     private var pollingJob: Job? = null
+    private var commandPollJob: Job? = null
     private var connectivityWatcher: ConnectivityWatcher? = null
     private var realtimeClient: RealtimeClient? = null
 
@@ -80,6 +83,8 @@ class PlaybackService : Service() {
         connectivityWatcher?.stop()
         connectivityWatcher = null
         pollingJob = null
+        commandPollJob?.cancel()
+        commandPollJob = null
         serviceScope.cancel()
         wakeLock?.takeIf(PowerManager.WakeLock::isHeld)?.release()
         wakeLock = null
@@ -90,6 +95,22 @@ class PlaybackService : Service() {
         realtimeClient = RealtimeClient(this) { msg ->
             val type = msg.optString("type")
             val command = msg.optString("command")
+
+            // A screen's socket is subscribed to `screen:<device_id>` AND to `org:<id>` and
+            // `group:<id>`, so plenty of what arrives here was addressed to the tenant
+            // rather than to this panel. Anything that names a screen is therefore checked
+            // against this one before it is obeyed.
+            //
+            // "Open app on TV" is published to both channels, and the org copy names the
+            // device it meant. Without this check every television in the tenant came to
+            // the front when an operator pressed the button on one of them -- on an estate
+            // running per-screen content that interrupts every other screen to fix one.
+            val addressedDevice = msg.optString("device_id").takeIf { it.isNotBlank() }
+            if (addressedDevice != null && addressedDevice != DeviceState(this).deviceId) {
+                Log.d(TAG, "Ignoring $type/$command addressed to another screen")
+                return@RealtimeClient
+            }
+
             when {
                 type == "request_screenshot" || command == "request_screenshot" -> ScreenshotManager.requestScreenshot()
                 type == "launch_app" || type == "bring_to_front" || command == "launch_app" || command == "bring_to_front" -> launchPlayer()
@@ -223,6 +244,52 @@ class PlaybackService : Service() {
                 if (networkOrManualSignal) consecutiveFailures = 0
             }
         }
+
+        startCommandPollLoop()
+    }
+
+    /**
+     * A second, much faster poll that exists only to collect remote commands.
+     *
+     * "Open app on TV" queues a command server-side and the screen picks it up on its next
+     * call. Both calls that carry one -- sync and heartbeat -- were on the same 60s loop
+     * with +/-25% jitter, so pressing the button meant waiting up to 75 seconds with the
+     * dashboard showing nothing in the meantime. Long enough that the honest read is "the
+     * button does not work", which is what it was reported as.
+     *
+     * The server cannot push: a TV behind a venue's NAT holds no connection, which is why
+     * commands are queued rather than sent. Polling faster is the whole lever available,
+     * so this sends the same heartbeat on a short cycle and leaves the expensive work --
+     * the playlist sync, the media downloads, the proof-of-play flush -- where it was.
+     *
+     * A heartbeat is a small POST that updates last_seen and takes any pending command, so
+     * four times as many of them is cheap, and it sharpens the online/offline reading as a
+     * side effect. It backs off on failure for the same reason the sync loop does: a screen
+     * whose venue has lost its line must not retry every fifteen seconds for ever.
+     */
+    private fun startCommandPollLoop() {
+        if (commandPollJob?.isActive == true) return
+        commandPollJob = serviceScope.launch {
+            var consecutiveFailures = 0
+            while (isActive) {
+                val delaySeconds = if (consecutiveFailures == 0) {
+                    COMMAND_POLL_SECONDS
+                } else {
+                    SyncBackoffPolicy.failureDelaySeconds(consecutiveFailures - 1)
+                }
+                // Jittered for the same reason the sync loop is: a mall coming back on
+                // power must not put every screen on the same fifteen-second tick.
+                val jitter = kotlin.random.Random.nextDouble(0.75, 1.25)
+                delay(((delaySeconds * jitter).toLong().coerceAtLeast(1L)) * 1_000L)
+                try {
+                    HeartbeatReporter.send(this@PlaybackService)
+                    consecutiveFailures = 0
+                } catch (exception: Exception) {
+                    consecutiveFailures++
+                    Log.d(TAG, "Command poll heartbeat unavailable", exception)
+                }
+            }
+        }
     }
 
     companion object {
@@ -231,6 +298,9 @@ class PlaybackService : Service() {
         private const val NOTIFICATION_ID = 1001
         private const val EXTRA_LAUNCH_PLAYER = "launch_player"
         private const val ACTION_SYNC_NOW = "com.olrac.signage.action.SYNC_NOW"
+
+        /** How often to ask for a queued remote command. See startCommandPollLoop. */
+        private const val COMMAND_POLL_SECONDS = 15
 
         fun start(context: Context, launchPlayer: Boolean) {
             val intent = Intent(context, PlaybackService::class.java)

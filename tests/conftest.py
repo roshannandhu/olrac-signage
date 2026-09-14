@@ -107,12 +107,24 @@ ISOLATED_SCRIPTS = {
     "test_admin_lifecycle_controls.py",
     # One definition of a workspace's storage, and bucket objects attributed to it.
     "test_storage_accounting.py",
+    # One row per workspace however many key prefixes it has accumulated.
+    "test_storage_attribution.py",
+    # A delete reaches the bucket AND the Postgres mirror, and logs whatever it missed.
+    "test_media_deletion.py",
+    # A removed workspace survives 30 days, then nothing of it does.
+    "test_tenant_purge.py",
     # A reinstalled panel comes back as itself; only removal wipes it.
     "test_screen_reconnect.py",
     # Publishing a player build reaches screens whose content never changes.
     "test_ota_reaches_a_settled_fleet.py",
-    # Storage credentials set from the console, and never handed back.
-    "test_storage_settings.py",
+    # Every kiosked screen has a way in; only the operator sets the fallback PIN.
+    "test_maintenance_pin.py",
+    # A booked advert reaches the screen, inside a window that is open now.
+    "test_assigned_ad_plays.py",
+    # Tenant purge: removing a workspace and hard-deleting 30 days later.
+    "test_tenant_purge.py",
+    # Every screen gets a dedicated playlist upon pairing/enrolling and safety provisioning.
+    "test_screen_auto_playlist.py",
 }
 
 # Pure-logic tests: no database, no import-time engine, safe to run in-process.
@@ -186,7 +198,14 @@ NEEDS_POSTGRES = ISOLATED_SCRIPTS - {
     "test_storage_accounting.py",
     "test_screen_reconnect.py",
     "test_ota_reaches_a_settled_fleet.py",
-    "test_storage_settings.py",
+    "test_maintenance_pin.py",
+    "test_assigned_ad_plays.py",
+    # All three build their own SQLite file and check plain Python over the ORM. Listed
+    # here or a machine with no Postgres would skip them and report a green run that
+    # proved nothing.
+    "test_storage_attribution.py",
+    "test_media_deletion.py",
+    "test_tenant_purge.py",
 }
 
 

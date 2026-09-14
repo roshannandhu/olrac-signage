@@ -421,6 +421,14 @@ export function PlaylistBuilder({ playlistId, showHeader = true }: { playlistId:
           contentId={bookingFor.id}
           contentTitle={bookingFor.name}
           defaultScreenIds={screensOnThisPlaylist}
+          // The advert already knows who it belongs to -- client_id and client_name sit on
+          // the content row, and the whole row is in hand here. Leaving them out made this
+          // the one place that asked the operator to name a client the system had already
+          // been told, and the Ads page (ad-bookings.tsx) has always passed them. Asking
+          // again invites a second Client row for an advertiser who already exists, spelled
+          // slightly differently -- and those do not merge.
+          initialClientId={bookingFor.client_id ?? null}
+          initialAdvertiser={bookingFor.client_name ?? ''}
         />
       )}
     </div>

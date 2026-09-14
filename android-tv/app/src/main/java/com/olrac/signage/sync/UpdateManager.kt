@@ -7,6 +7,7 @@ import android.content.pm.PackageInstaller
 import android.net.Uri
 import android.util.Log
 import androidx.core.content.FileProvider
+import com.olrac.signage.device.DeviceOwnerManager
 import com.olrac.signage.network.AppVersionDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -69,7 +70,7 @@ object UpdateManager {
             }
 
             Log.d(TAG, "Update downloaded successfully to ${apkFile.absolutePath}")
-            installUpdate(context, apkFile)
+            installUpdate(context, apkFile, update.version_code)
             return@withContext true
         } catch (e: Exception) {
             Log.e(TAG, "Error downloading update", e)
@@ -78,8 +79,14 @@ object UpdateManager {
         }
     }
 
-    private fun installUpdate(context: Context, apkFile: File) {
-        // Attempt silent install if device owner
+    private fun installUpdate(context: Context, apkFile: File, versionCode: Int) {
+        // Silent when this player is the device owner, which is the only way Android lets an
+        // app install a package without a human. Everything else -- the session, the digest,
+        // the download -- is identical either way; the difference is entirely whether the
+        // platform trusts the caller, so the attempt is made the same way regardless and the
+        // fallback exists only for panels that were never provisioned.
+        val silent = DeviceOwnerManager.isDeviceOwner(context)
+        Log.d(TAG, "Installing $versionCode (deviceOwner=$silent, unattended=${silent})")
         val packageInstaller = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         var session: PackageInstaller.Session? = null
@@ -96,8 +103,13 @@ object UpdateManager {
             }
 
             val intent = Intent(context, InstallReceiver::class.java)
+                .putExtra(InstallReceiver.EXTRA_VERSION_CODE, versionCode)
+            // requestCode is the version: two PendingIntents that differ only in extras are
+            // "the same" to the system, so a shared request code would silently hand the
+            // second version's result the first version's extras.
             val pendingIntent = PendingIntent.getBroadcast(
-                context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+                context, versionCode, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
             )
 
             Log.d(TAG, "Committing session")
@@ -107,17 +119,22 @@ object UpdateManager {
         } catch (e: SecurityException) {
             Log.w(TAG, "Not device owner, falling back to Intent install", e)
             session?.abandon()
-            fallbackToIntentInstall(context, apkFile)
+            fallbackToIntentInstall(context, apkFile, versionCode)
         } catch (e: Exception) {
             Log.e(TAG, "Error during silent install", e)
             session?.abandon()
-            fallbackToIntentInstall(context, apkFile)
+            fallbackToIntentInstall(context, apkFile, versionCode)
         } finally {
             runCatching { session?.close() }
         }
     }
 
-    private fun fallbackToIntentInstall(context: Context, apkFile: File) {
+    private fun fallbackToIntentInstall(context: Context, apkFile: File, versionCode: Int) {
+        // Only reachable on a panel that is not the device owner. It always asks, and on an
+        // unattended screen nobody answers -- so the retry guard is released first, or one
+        // ignored dialog freezes that television on its current build for good.
+        context.getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
+            .edit().remove("update_in_flight_$versionCode").apply()
         try {
             val uri = FileProvider.getUriForFile(
                 context,

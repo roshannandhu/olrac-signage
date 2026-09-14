@@ -368,6 +368,10 @@ class Screen(Base):
     # silently drop the evidence an advertiser was billed on. The fleet loses the screen;
     # the history keeps it.
     deleted_at = Column(UtcDateTime, nullable=True, index=True)
+    # How strong this screen's hardware identity is: "serial" | "android_id" | "random".
+    # Decides whether it can be recognised again after a wipe, so it is reported rather than
+    # left as something an operator discovers by finding a duplicate.
+    identity_source = Column(String, nullable=True)
     installation_id = Column(String, nullable=True)
     pair_code = Column(String, unique=True, index=True, nullable=True)
     pair_code_expires_at = Column(UtcDateTime, nullable=True)

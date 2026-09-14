@@ -166,6 +166,8 @@ async def register_tv(
         known_installation_id = db_screen.installation_id
         if req.installation_id:
             db_screen.installation_id = req.installation_id
+        if req.identity_source:
+            db_screen.identity_source = req.identity_source
         if req.device_model:
             db_screen.model = req.device_model
         db_screen.last_seen = models.utcnow()
@@ -236,9 +238,16 @@ async def register_tv(
             response.device_secret = issued
             return response
     else:
+        # Model and manufacturer recorded from the first contact, not left until the screen
+        # is claimed and starts sending heartbeats. An operator redeeming a pairing code is
+        # looking at a list of TVs that have not been named yet, and "Lenovo TB-8505F" is the
+        # only thing that distinguishes one waiting panel from another.
         db_screen = models.Screen(
             device_id=req.device_id,
             installation_id=req.installation_id,
+            identity_source=req.identity_source,
+            model=req.device_model,
+            manufacturer=req.manufacturer,
             status="waiting_pairing"
         )
         db.add(db_screen)

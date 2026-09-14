@@ -225,8 +225,14 @@ export default function ScreenDetailPage() {
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
                 <DialogTitle>Remove {label}?</DialogTitle>
+                {/* Says what is actually cleared and what is not. "Permanently" was not
+                    true: the screen is archived precisely so its play history survives, and
+                    that history is what client reports and past invoices are built from. */}
                 <DialogDescription>
-                  This will permanently unpair and remove this display from your workspace. The physical TV will be automatically signed out and return to the pairing screen.
+                  The TV is signed out immediately, clears its content and returns to the
+                  pairing screen. Its slot is freed, so you can pair another display in its
+                  place. Play history is kept, so past campaign reports and invoices stay
+                  correct — and the same TV can be paired again later.
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter className="gap-2 sm:gap-0">

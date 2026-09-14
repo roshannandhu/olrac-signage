@@ -30,6 +30,22 @@ const dateTime = (value: string | null | undefined) =>
  * It is reference material an operator checks when something looks wrong, so it should
  * not cost them the playlist they were editing.
  */
+/**
+ * How recoverable this screen is if the TV is reset or the app reinstalled.
+ *
+ * "serial" is the only identifier that survives a factory reset, and reading it needs the
+ * player to be device owner — which it is on a zero-touch provisioned panel and is not on a
+ * sideloaded install. "android_id" survives a reinstall but a reset gives it a new value.
+ * "random" survives neither, so that panel WILL return as a duplicate if it is ever wiped.
+ */
+function identityLabel(source?: string | null): string | null {
+  if (!source) return 'Not reported yet'
+  if (source === 'serial') return 'Yes — survives a factory reset'
+  if (source === 'android_id') return 'Reinstall only — a factory reset makes a duplicate'
+  if (source === 'random') return 'No — any wipe makes a duplicate'
+  return source
+}
+
 export function ScreenDetailsDrawer({
   screen,
   open,
@@ -109,6 +125,10 @@ export function ScreenDetailsDrawer({
                 <Row label="Manufacturer" value={screen.manufacturer} />
                 <Row label="Model" value={screen.model} />
                 <Row label="Android" value={screen.android_version ? `${screen.android_version} (API ${screen.sdk_int})` : null} />
+                {/* Whether this panel can be recognised again after being wiped. The player
+                    has always worked this out; it was never sent, so an operator found out
+                    the answer by finding a duplicate screen in their fleet. */}
+                <Row label="Survives a wipe" value={identityLabel(screen.identity_source)} />
                 <Row label="Resolution" value={screen.screen_width ? `${screen.screen_width}×${screen.screen_height}` : null} />
                 <Row label="Storage total" value={screen.total_storage_mb ? `${screen.total_storage_mb} MB` : null} />
                 <Row label="Storage free" value={screen.free_storage_mb ? `${screen.free_storage_mb} MB` : null} />

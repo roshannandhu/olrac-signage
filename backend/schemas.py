@@ -311,6 +311,10 @@ class ScreenResponse(ScreenBase):
     max_decode_height: Optional[int] = None
     manufacturer: Optional[str] = None
     model: Optional[str] = None
+    # "serial" | "android_id" | "random" | None (registered before this was recorded).
+    # Decides whether this panel can be recognised again after being wiped, which is
+    # otherwise invisible until a duplicate appears in the fleet.
+    identity_source: Optional[str] = None
     android_version: Optional[str] = None
     sdk_int: Optional[int] = None
     network_type: Optional[str] = None
@@ -621,6 +625,11 @@ class RegisterRequest(BaseModel):
     hardware_name: Optional[str] = None
     device_model: Optional[str] = None
     manufacturer: Optional[str] = None
+    # Which identifier the panel could actually produce: "serial" survives a factory reset,
+    # "android_id" survives a reinstall but not a reset, "random" survives neither. Recorded
+    # so the fleet can show which screens would come back as duplicates if they were wiped,
+    # which was previously knowable only after it happened.
+    identity_source: Optional[str] = None
 
 
 class RegisterResponse(BaseModel):

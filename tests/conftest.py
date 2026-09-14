@@ -107,6 +107,8 @@ ISOLATED_SCRIPTS = {
     "test_admin_lifecycle_controls.py",
     # One definition of a workspace's storage, and bucket objects attributed to it.
     "test_storage_accounting.py",
+    # A reinstalled panel comes back as itself; only removal wipes it.
+    "test_screen_reconnect.py",
 }
 
 # Pure-logic tests: no database, no import-time engine, safe to run in-process.
@@ -176,6 +178,7 @@ NEEDS_POSTGRES = ISOLATED_SCRIPTS - {
     "test_subscription_expiry.py",
     "test_admin_lifecycle_controls.py",
     "test_storage_accounting.py",
+    "test_screen_reconnect.py",
 }
 
 
@@ -257,4 +260,28 @@ def pytest_collection_finish(session):
     if missing:
         raise pytest.UsageError(
             f"These files are registered but do not exist: {missing}."
+        )
+
+    # Every isolated script must CHOOSE its database before it imports backend.
+    #
+    # The assignment at the top of this file only protects the pytest path. These scripts are
+    # meant to be run directly (`python tests/test_quotas.py`), and a script that names no
+    # database lets backend/database.py fall back to load_dotenv() -- which on a developer
+    # machine binds the engine to the PRODUCTION Supabase database. Two of them did, and were
+    # found to have created organisations, screens and play logs in production, dated to test
+    # runs. Nothing said so; the tests passed either way, which is why it went unnoticed.
+    #
+    # Checked by reading the source rather than by running it, because by the time the module
+    # is imported the damage is already done.
+    stray = []
+    for script in sorted(ISOLATED_SCRIPTS):
+        source = (directory / script).read_text(encoding="utf-8", errors="ignore")
+        before_backend = source.split("import backend", 1)[0].split("from backend", 1)[0]
+        if "DATABASE_URL" not in before_backend:
+            stray.append(script)
+    if stray:
+        raise pytest.UsageError(
+            "These scripts do not set DATABASE_URL before importing backend, so run on "
+            f"their own they write to whatever backend/.env points at: {stray}. Set "
+            'os.environ["DATABASE_URL"] to a throwaway database at the top of each.'
         )

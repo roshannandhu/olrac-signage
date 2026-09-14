@@ -156,9 +156,13 @@ class MainActivity : ComponentActivity() {
                 )
             } else {
                 when (val state = launchState) {
+                    // Also the state shown while the boot reconnect is retrying, so the
+                    // wording has to hold for a TV that cannot reach the server yet. Saying
+                    // it is reconnecting is what stops an installer typing in a pairing code
+                    // for a screen that is already claimed and simply offline.
                     LaunchState.CheckingLocalState -> BrandedMessage(
                         title = "OLRAC Signage",
-                        detail = "Preparing player..."
+                        detail = "Reconnecting to your workspace..."
                     )
 
                     is LaunchState.Playing -> PlayerScreen()
@@ -374,14 +378,35 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        val registration = try { register(deviceId) } catch (_: Exception) { null }
-        if (registration != null && registration.status != LaunchStateResolver.WAITING_PAIRING) {
-            completePairing(registration.screenName, pairCode = null)
-            return
-        }
+        // Keep asking until the server ANSWERS. Failing to reach it is not a statement about
+        // whether this screen is claimed, and treating it as one is what stranded panels on
+        // the pairing screen: this ran once, and any exception -- a boot that beats Wi-Fi
+        // association after a power cut, a cold backend taking longer than the timeout, a
+        // momentary DNS failure -- dropped a perfectly well-claimed screen onto the sign-in
+        // form, where nothing ever retried. Someone had to walk up to it.
+        //
+        // Only the server saying "waiting_pairing" ends this loop at the sign-in screen,
+        // because that is the one answer that actually means "nobody owns this TV".
+        var backoffMs = RECONNECT_FIRST_RETRY_MS
+        while (true) {
+            val registration = try { register(deviceId) } catch (_: Exception) { null }
 
-        // Unprovisioned: wait for someone to sign in.
-        launchState = LaunchState.SignIn()
+            if (registration != null) {
+                if (registration.status != LaunchStateResolver.WAITING_PAIRING) {
+                    // Recognised -- by device id, or by hardware identity after a reinstall.
+                    completePairing(registration.screenName, pairCode = null)
+                } else {
+                    launchState = LaunchState.SignIn()
+                }
+                return
+            }
+
+            // Unreachable. Say so rather than showing a pairing code the operator might
+            // start typing, and try again shortly.
+            launchState = LaunchState.CheckingLocalState
+            delay(backoffMs)
+            backoffMs = (backoffMs * 2).coerceAtMost(RECONNECT_MAX_RETRY_MS)
+        }
     }
 
     /**
@@ -694,7 +719,8 @@ class MainActivity : ComponentActivity() {
                 installation_id = deviceState.installationId,
                 hardware_name = deviceState.hardwareName,
                 device_model = deviceState.deviceModel,
-                manufacturer = deviceState.manufacturer
+                manufacturer = deviceState.manufacturer,
+                identity_source = deviceState.identitySource
             )
         )
         if (!response.isSuccessful) {
@@ -784,6 +810,13 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val PAIRING_RETRY_MS = 5_000L
+
+        // Boot reconnect backoff. Starts quick because the common case is a TV that booted a
+        // few seconds before its Wi-Fi associated, and widens to a minute so a panel left
+        // running through a long outage is not hammering a server that is already down. It
+        // never gives up: the screen is claimed, and the only thing missing is the network.
+        private const val RECONNECT_FIRST_RETRY_MS = 3_000L
+        private const val RECONNECT_MAX_RETRY_MS = 60_000L
 
         // How long to keep watching for the browser half to bind this screen. Generous
         // because it is a person signing into Google on a TV remote, which is slow.

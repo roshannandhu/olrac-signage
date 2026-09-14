@@ -166,6 +166,12 @@ export interface Screen {
   max_decode_height: number | null
   manufacturer: string | null
   model: string | null
+  /**
+   * Which identifier this panel could produce: 'serial' | 'android_id' | 'random'.
+   * Decides whether it can be recognised again after a wipe. null on screens that
+   * registered before it was recorded.
+   */
+  identity_source?: string | null
   android_version: string | null
   sdk_int: number | null
   network_type: string | null

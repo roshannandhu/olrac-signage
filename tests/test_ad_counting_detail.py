@@ -1,3 +1,4 @@
+import pathlib
 import os
 import sys
 import uuid
@@ -5,6 +6,23 @@ from datetime import datetime, timedelta, timezone
 
 # Ensure project root is in sys.path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Its OWN database, chosen BEFORE backend is imported.
+#
+# This file set no DATABASE_URL at all, so running it directly -- which is how every script
+# here is meant to be run -- let backend/database.py fall back to load_dotenv() and bind the
+# engine to whatever backend/.env pointed at. On a developer machine that is the PRODUCTION
+# Supabase database, and this script creates an organisation, a screen and play logs. Rows
+# named "Ad Test Org" and "BTF Test Org" were found sitting in production, dated to test runs.
+#
+# conftest.py already guards the pytest path by setting DATABASE_URL before collection; it
+# cannot help a script run on its own, which is why the choice belongs here.
+import tempfile
+_db_path = pathlib.Path(tempfile.gettempdir()) / f"olrac-adcount-{uuid.uuid4().hex}.db"
+os.environ["DATABASE_URL"] = f"sqlite:///{_db_path}"
+os.environ.setdefault("SECRET_KEY", "pytest-isolated")
+os.environ.setdefault("AWS_ACCESS_KEY_ID", "mock")
+os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "mock")
 
 from fastapi.testclient import TestClient
 from backend.main import app

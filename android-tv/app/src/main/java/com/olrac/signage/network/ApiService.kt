@@ -12,7 +12,13 @@ data class RegisterRequest(
     val installation_id: String? = null,
     val hardware_name: String? = null,
     val device_model: String? = null,
-    val manufacturer: String? = null
+    val manufacturer: String? = null,
+    // Which identifier actually answered: "serial" survives a factory reset, "android_id"
+    // survives a reinstall but not a reset, "random" survives neither. DeviceState has
+    // always worked this out and its own comment said it was reported so an operator could
+    // tell why a screen did or did not come back as itself -- it was never actually sent,
+    // so the fleet had no way to show which panels would duplicate if wiped.
+    val identity_source: String? = null
 )
 data class ScreenResponse(
     val pair_code: String? = null,

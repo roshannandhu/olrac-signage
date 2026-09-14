@@ -21,7 +21,7 @@ import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
-import { assetOrientation, clipDuration, expiryLabel, relativeTime } from '@/lib/format'
+import { assetOrientation, clipDuration, expiryLabel, relativeTime, rupees } from '@/lib/format'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import type { ContentItem } from '@/lib/types'
@@ -111,6 +111,13 @@ export default function ContentPage() {
   }, [content, search, sort, tagFilter])
 
   const bulk = useBulkSelection(filtered)
+
+  // Which of the selected assets carry a booking, so the bulk dialog can name them.
+  const soldInSelection = useMemo(
+    () => content.filter((item) => bulk.selected.includes(item.id) && item.placement_id),
+    [content, bulk.selected],
+  )
+
 
   const bulkDelete = useMutation({
     mutationFn: async () => {
@@ -823,6 +830,20 @@ export default function ContentPage() {
               They are removed from every playlist, and their files and transcoded renditions are deleted from disk. Players stop using them on the next sync.
             </DialogDescription>
           </DialogHeader>
+          {/* Same warning as the single delete, counted. Selecting a page of assets and
+              deleting is exactly where a sold advert goes unnoticed. */}
+          {soldInSelection.length > 0 && (
+            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-sm">
+              <p className="font-semibold text-foreground">
+                {soldInSelection.length} of these {soldInSelection.length === 1 ? 'is' : 'are'} sold.
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                {soldInSelection.slice(0, 3).map((item) => item.client_name || item.name).join(', ')}
+                {soldInSelection.length > 3 ? ` and ${soldInSelection.length - 3} more` : ''}.
+                Their bookings and payment records are deleted too. Past play history is kept.
+              </p>
+            </div>
+          )}
           <DialogFooter showCloseButton>
             <Button variant="destructive" disabled={bulkDelete.isPending} onClick={() => bulkDelete.mutate()}>
               {bulkDelete.isPending ? 'Deleting…' : `Delete ${bulk.selected.length}`}
@@ -833,7 +854,32 @@ export default function ContentPage() {
 
       <Dialog open={Boolean(deleteItem)} onOpenChange={(open) => !open && setDeleteItem(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Delete “{deleteItem?.name}”?</DialogTitle><DialogDescription>This removes the asset from every playlist. Players will stop using it on their next sync.</DialogDescription></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Delete &ldquo;{deleteItem?.name}&rdquo;?</DialogTitle>
+            <DialogDescription>
+              This removes the asset from every playlist. Players will stop using it on their next sync.
+            </DialogDescription>
+          </DialogHeader>
+          {/* The booking goes with it. AdPlacement.content_id is ON DELETE CASCADE, so
+              deleting a creative takes the sale, its locations, its extensions and its
+              payment record with it -- and the dialog used to mention only playlists, so a
+              tenant tidying their library destroyed an invoice without being told. Play
+              history survives (PlayLog.media_id carries no foreign key, deliberately), so
+              past reports still add up. */}
+          {deleteItem?.placement_id && (
+            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-sm">
+              <p className="font-semibold text-foreground">This advert is sold.</p>
+              <p className="mt-1 text-muted-foreground">
+                {deleteItem.client_name ? <><span className="text-foreground">{deleteItem.client_name}</span>&nbsp;&middot;&nbsp;</> : null}
+                {deleteItem.placement_price_paise ? <>{rupees(deleteItem.placement_price_paise)}&nbsp;&middot;&nbsp;</> : null}
+                {deleteItem.placement_ends_at ? <>runs until {new Date(deleteItem.placement_ends_at).toLocaleDateString()}</> : null}
+              </p>
+              <p className="mt-2 text-muted-foreground">
+                Deleting it also deletes the booking and its payment record. Past play history
+                and completed reports are kept.
+              </p>
+            </div>
+          )}
           <DialogFooter showCloseButton><Button variant="destructive" disabled={deleteMutation.isPending} onClick={() => deleteItem && deleteMutation.mutate(deleteItem.id)}>{deleteMutation.isPending ? 'Deleting…' : 'Delete media'}</Button></DialogFooter>
         </DialogContent>
       </Dialog>

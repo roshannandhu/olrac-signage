@@ -661,6 +661,28 @@ async def health_check(db: Session = Depends(database.get_db)):
             "jobs are stopped"
         )
 
+    # Which storage variables this process can actually SEE.
+    #
+    # Names only, never values. "I saved them in Render and nothing changed" is otherwise
+    # undiagnosable from outside: the two failure modes -- a variable spelled slightly wrong,
+    # and a variable set on a different service -- look identical to a missing one, and the
+    # only person who can tell them apart is the one who cannot see inside the process.
+    #
+    # `unexpected` is the one that finds a typo: AWS_ACCES_KEY_ID is reported by name, so the
+    # mistake is visible instead of silent.
+    known = {"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION",
+             "S3_ENDPOINT_URL", "S3_BUCKET_NAME", "R2_PUBLIC_BASE_URL"}
+    seen = {
+        name for name in os.environ
+        if name.startswith(("AWS_", "S3_", "R2_")) and (os.environ[name] or "").strip()
+    }
+    storage_env = {
+        "set": sorted(seen & known),
+        "missing": sorted(known - seen),
+        # Anything AWS_/S3_/R2_-shaped that this code never reads -- almost always a typo.
+        "unexpected": sorted(seen - known),
+    }
+
     # Named for the same reason legacy device auth is: it is a setting that silently turns
     # a commercial rule off, and nothing else would ever say so.
     from .billing import mock_payments_enabled
@@ -685,6 +707,8 @@ async def health_check(db: Session = Depends(database.get_db)):
             else "local disk (ephemeral)"
         ),
         "email": "configured" if email_ready else "not configured (SMTP_HOST/SMTP_FROM unset)",
+        # Names only. See the note where this is built.
+        "storage_env": storage_env,
         # Absent when the boot migration succeeded, which is the normal case.
         "schema_migration_error": SCHEMA_MIGRATION_ERROR,
         # Loud on purpose: these are the states where everything looks fine and either

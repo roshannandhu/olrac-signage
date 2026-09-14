@@ -51,7 +51,9 @@ Redis.zip
 !frontend/public/demo-media/*.mp4
 
 # Graphify cache & scratch
-graphify-out/cache/
+# Generated knowledge-graph output. 304 files of it were committed -- regenerable analysis
+# artefacts that change on every run, so every run produced a diff nobody reads.
+graphify-out/
 scratch/
 *.png
 !frontend/public/**/*.png

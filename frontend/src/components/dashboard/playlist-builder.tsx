@@ -9,7 +9,7 @@ import { CalendarClock, Check, ChevronDown, Clock3, GripVertical, ListVideo, Plu
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { ErrorState } from '@/components/dashboard/error-state'
-import { CreateBookingModal } from '@/components/dashboard/create-booking-modal'
+import { BookOrExtendDialog } from '@/components/dashboard/book-or-extend-dialog'
 import { MediaThumbnail } from '@/components/dashboard/media-thumbnail'
 import { PageHeader } from '@/components/dashboard/page-header'
 import { Badge } from '@/components/ui/badge'
@@ -351,8 +351,10 @@ export function PlaylistBuilder({ playlistId, showHeader = true }: { playlistId:
   // effective_playlist_id, not playlist_id, so a screen that inherits this playlist from
   // its group counts -- that is still a screen showing this loop.
   const screensQuery = useQuery({ queryKey: ['screens'], queryFn: api.getScreens })
-  const screensOnThisPlaylist = useMemo(
-    () => (screensQuery.data || []).filter((screen) => screen.effective_playlist_id === playlistId).map((screen) => screen.id),
+  // The screens themselves, not just their ids: deciding whether one is already on a booking
+  // means checking the groups it belongs to as well as the booking's direct screen targets.
+  const screensShowingThisPlaylist = useMemo(
+    () => (screensQuery.data || []).filter((screen) => screen.effective_playlist_id === playlistId),
     [screensQuery.data, playlistId],
   )
   const removeMutation = useMutation({ mutationFn: (itemId: number) => api.removePlaylistItem(playlistId, itemId), onSuccess: () => { invalidate(); toast.success('Item removed') }, onError: (error: Error) => toast.error(error.message) })
@@ -413,22 +415,14 @@ export function PlaylistBuilder({ playlistId, showHeader = true }: { playlistId:
         </aside>
       </div>
 
-      {/* Booking modal with pre-selected screens for this playlist loop */}
+      {/* Adds to the booking this advert already has, or starts one if it has none. Both
+          the client prefill and the pre-selected screens now live inside that dialog. */}
       {bookingFor && (
-        <CreateBookingModal
+        <BookOrExtendDialog
+          content={bookingFor}
+          screens={screensShowingThisPlaylist}
           open={Boolean(bookingFor)}
           onOpenChange={(next) => { if (!next) setBookingFor(null) }}
-          contentId={bookingFor.id}
-          contentTitle={bookingFor.name}
-          defaultScreenIds={screensOnThisPlaylist}
-          // The advert already knows who it belongs to -- client_id and client_name sit on
-          // the content row, and the whole row is in hand here. Leaving them out made this
-          // the one place that asked the operator to name a client the system had already
-          // been told, and the Ads page (ad-bookings.tsx) has always passed them. Asking
-          // again invites a second Client row for an advertiser who already exists, spelled
-          // slightly differently -- and those do not merge.
-          initialClientId={bookingFor.client_id ?? null}
-          initialAdvertiser={bookingFor.client_name ?? ''}
         />
       )}
     </div>

@@ -90,7 +90,7 @@ def main():
     print("[2/3] Connecting to Cloudflare R2...")
     client, bucket_name = get_s3_client()
     try:
-        client.head_bucket(Bucket=bucket_name)
+        client.list_objects_v2(Bucket=bucket_name, MaxKeys=1)
         print(f"      Connected successfully to bucket '{bucket_name}'.\n")
     except ClientError as exc:
         sys.exit(f"[ERROR] Cannot reach bucket '{bucket_name}': {exc}")

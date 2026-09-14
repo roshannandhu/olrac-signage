@@ -1636,6 +1636,26 @@ async def sync_tv(
     if screen.group and screen.group.updated_at > marker:
         marker = screen.group.updated_at
 
+    # A new player build makes this sync fresh too.
+    #
+    # The marker was built only from playlist, group and assignment times, so a screen whose
+    # content had settled asked "anything since X?" and was told 204 with an empty body --
+    # for ever. The player reads the update offer out of that body, so it never learned a new
+    # APK existed: publishing a release moved nothing, and every TV in the fleet stayed on
+    # whatever was last installed by hand. That is why app_releases sat empty and nobody
+    # noticed the over-the-air path had never once worked end to end.
+    #
+    # Folding the newest release's timestamp in costs one indexed query and self-settles: the
+    # screen picks up the new marker with the body, and is back on 204 from the next sync.
+    newest_release = (
+        db.query(models.AppRelease.created_at)
+        .order_by(models.AppRelease.created_at.desc())
+        .limit(1)
+        .scalar()
+    )
+    if newest_release and as_aware_utc(newest_release) > marker:
+        marker = newest_release
+
     marker = as_aware_utc(marker)
     if since and marker <= as_aware_utc(since) and not pending_command:
         return Response(

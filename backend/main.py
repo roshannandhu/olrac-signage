@@ -506,7 +506,7 @@ def _serve_media_from_database(key: str, range_header: str | None):
 
 @app.get("/api/media/{key:path}")
 @app.head("/api/media/{key:path}")
-def serve_media(key: str, request: Request):
+def serve_media(key: str, request: Request = None):
     """Stable URL for a stored object; signs the real one fresh on every request.
 
     This is the only place a media signature is produced. `resolve_media_url` hands out
@@ -548,7 +548,8 @@ def serve_media(key: str, request: Request):
         # ponytail: bytes through Postgres is slower and pricier than object storage and is
         # meant as a bridge, not a home. Set credentials or publish the bucket and this
         # branch stops being reached.
-        served = _serve_media_from_database(key, request.headers.get("range"))
+        range_hdr = request.headers.get("range") if request else None
+        served = _serve_media_from_database(key, range_hdr)
         if served is not None:
             return served
         # Local storage is served by the /uploads mount above and never reaches here, so

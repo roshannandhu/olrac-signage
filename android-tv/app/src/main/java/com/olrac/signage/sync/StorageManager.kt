@@ -106,6 +106,34 @@ class StorageManager(private val context: Context) {
     }
 
     /**
+     * Checks whether an existing file on disk matches the expected SHA-256 digest or size.
+     */
+    fun verifyFileIntegrity(file: File, expectedSha256: String?, expectedSizeBytes: Long?): Boolean {
+        if (!file.isFile || file.length() == 0L) return false
+        if (!expectedSha256.isNullOrEmpty()) {
+            return try {
+                val md = MessageDigest.getInstance("SHA-256")
+                file.inputStream().use { input ->
+                    val buffer = ByteArray(8192)
+                    var bytesRead: Int
+                    while (input.read(buffer).also { bytesRead = it } != -1) {
+                        md.update(buffer, 0, bytesRead)
+                    }
+                }
+                val actualSha256 = md.digest().joinToString("") { "%02x".format(it) }
+                actualSha256.equals(expectedSha256, ignoreCase = true)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed computing hash for ${file.name}", e)
+                false
+            }
+        }
+        if (expectedSizeBytes != null && expectedSizeBytes > 0) {
+            return file.length() == expectedSizeBytes
+        }
+        return true
+    }
+
+    /**
      * Frees room for an incoming download.
      *
      * [protectedNames] must contain every file the player may currently be reading —

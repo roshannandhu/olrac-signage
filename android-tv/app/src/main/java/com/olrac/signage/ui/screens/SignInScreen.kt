@@ -29,16 +29,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.olrac.signage.data.LaunchState
 
+import androidx.compose.material3.TextButton
+
 @Composable
 fun SignInScreen(
     state: LaunchState.SignIn,
-    serverUrl: String,
-    serverError: String?,
-    defaultHome: Boolean,
     defaultScreenName: String = "",
     onUseGoogle: (String) -> Unit,
-    onSaveServer: (String) -> Unit,
-    onChooseHome: () -> Unit
+    onUsePairingCode: () -> Unit,
+    onOpenSettings: () -> Unit = {}
 ) {
     val displayModel = defaultScreenName.ifBlank { "Android TV Screen" }
 
@@ -65,7 +64,7 @@ fun SignInScreen(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
         )
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(28.dp))
 
         // Detected TV Hardware Device Name Card
         Surface(
@@ -132,7 +131,7 @@ fun SignInScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         // Official Google Sign-In Button
         Button(
@@ -163,14 +162,42 @@ fun SignInScreen(
             }
         }
 
+        Spacer(modifier = Modifier.height(14.dp))
+
+        // Pairing Code Button
+        Button(
+            onClick = onUsePairingCode,
+            enabled = !state.busy,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF1E293B),
+                contentColor = Color.White
+            ),
+            border = BorderStroke(1.dp, Color(0xFF334155))
+        ) {
+            Text(
+                "Use 6-Digit Pairing Code",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium,
+                color = Color.White
+            )
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
-        ServerControls(
-            serverUrl = serverUrl,
-            serverError = serverError,
-            defaultHome = defaultHome,
-            onSave = onSaveServer,
-            onChooseHome = onChooseHome
-        )
+
+        TextButton(
+            onClick = onOpenSettings,
+            enabled = !state.busy
+        ) {
+            Text(
+                "Device & Server Settings",
+                color = Color(0xFF64748B),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
     }
 }
 

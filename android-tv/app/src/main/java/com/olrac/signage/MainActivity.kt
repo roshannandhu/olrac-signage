@@ -93,14 +93,14 @@ class MainActivity : ComponentActivity() {
         deviceState = DeviceState(this)
         val deviceId = deviceState.deviceId
 
-        // The persisted flag is intentionally read before rendering or touching the network.
         val forceSignIn = intent?.getBooleanExtra("show_signin", false) ?: false
-        launchState = if (forceSignIn) {
-            LaunchState.SignIn()
+        if (forceSignIn) {
+            deviceState.clearPairing()
+            launchState = LaunchState.SignIn()
         } else if (deviceState.isPaired) {
-            LaunchState.Playing(deviceState.screenName)
+            launchState = LaunchState.Playing(deviceState.screenName)
         } else {
-            LaunchState.CheckingLocalState
+            launchState = LaunchState.CheckingLocalState
         }
 
         PlaybackService.start(this, launchPlayer = false)
@@ -146,10 +146,8 @@ class MainActivity : ComponentActivity() {
                     onSave = ::saveServerUrl,
                     onChooseHome = ::requestHomeRole,
                     onUnlink = {
-                        deviceState.clearPairing()
                         showServerSetup = false
-                        launchState = LaunchState.SignIn()
-                        rearmLockTask()
+                        com.olrac.signage.boot.PlayerLauncher.handleUnpairedOrDeleted(this@MainActivity)
                     },
                     onClose = {
                         showServerSetup = false
@@ -166,23 +164,21 @@ class MainActivity : ComponentActivity() {
                     is LaunchState.Playing -> PlayerScreen()
                     is LaunchState.SignIn -> {
                         val scope = rememberCoroutineScope()
-                        // Ask once per visit which routes this server offers. Keyed on the
-                        // base URL so pointing the TV at a different server re-asks rather
-                        // than keeping the previous server's answer.
                         LaunchedEffect(ApiClient.effectiveBaseUrl(this@MainActivity)) {
                             refreshAuthMethods()
                         }
                         SignInScreen(
                             state = state,
-                            serverUrl = ApiClient.effectiveBaseUrl(this),
-                            serverError = serverError,
-                            defaultHome = defaultHome,
                             defaultScreenName = deviceState.hardwareName,
                             onUseGoogle = { screenName ->
                                 scope.launch { startGoogleSignIn(deviceId, screenName) }
                             },
-                            onSaveServer = ::saveServerUrl,
-                            onChooseHome = ::requestHomeRole
+                            onUsePairingCode = {
+                                scope.launch { usePairingCode(deviceId) }
+                            },
+                            onOpenSettings = {
+                                showPinPrompt = true
+                            }
                         )
                     }
 
@@ -198,11 +194,7 @@ class MainActivity : ComponentActivity() {
 
                     is LaunchState.Pairing -> PairingScreen(
                         state = state,
-                        serverUrl = ApiClient.effectiveBaseUrl(this),
-                        serverError = serverError,
-                        defaultHome = defaultHome,
-                        onSaveServer = ::saveServerUrl,
-                        onChooseHome = ::requestHomeRole
+                        onBackToSignIn = { launchState = LaunchState.SignIn() }
                     )
                 }
             }
@@ -247,6 +239,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
+        setIntent(intent)
+
+        if (intent?.getBooleanExtra("show_signin", false) == true) {
+            deviceState.clearPairing()
+            launchState = LaunchState.SignIn()
+            return
+        }
 
         // Handle Google OAuth Deep Link Return
         val data = intent?.data

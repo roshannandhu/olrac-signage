@@ -208,6 +208,7 @@ object PlayerLauncher {
             // 4. Launch MainActivity with clean task flags to show Google Sign-In / Pairing
             val intent = Intent(appContext, com.olrac.signage.MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                putExtra("show_signin", true)
             }
             appContext.startActivity(intent)
         } catch (e: Exception) {

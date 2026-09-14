@@ -676,11 +676,21 @@ async def health_check(db: Session = Depends(database.get_db)):
         name for name in os.environ
         if name.startswith(("AWS_", "S3_", "R2_")) and (os.environ[name] or "").strip()
     }
+    # A value that is present but is the literal placeholder `mock`, which `_setting` maps to
+    # "not configured" outside the test suite. Indistinguishable from a real key in the list
+    # above, and it is the one state that makes a correctly-saved variable do nothing -- so
+    # it gets named rather than inferred. Still names only: whether a value equals a known
+    # placeholder reveals nothing a real secret would.
+    placeholder = sorted(
+        name for name in seen & known
+        if os.environ[name].strip().lower() in {"mock", "changeme", "your-key", "xxx"}
+    )
     storage_env = {
         "set": sorted(seen & known),
         "missing": sorted(known - seen),
         # Anything AWS_/S3_/R2_-shaped that this code never reads -- almost always a typo.
         "unexpected": sorted(seen - known),
+        "placeholder": placeholder,
     }
 
     # Named for the same reason legacy device auth is: it is a setting that silently turns

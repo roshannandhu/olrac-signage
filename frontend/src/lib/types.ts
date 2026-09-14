@@ -192,7 +192,8 @@ export interface Plan {
   // One-time charge for `duration_days` of access — what the storefront sells on.
   price_paise: number
   duration_days: number
-  max_screens: number
+  // null = no screen limit; 0 = a package granting none. See Package above.
+  max_screens: number | null
   max_clients: number
   max_storage_bytes: number
   feature_flags: Record<string, boolean>
@@ -577,6 +578,11 @@ export interface TenantSummary {
   subscription_status?: string | null
   billing_period?: string | null
   current_period_end?: string | null
+  // null = unlimited, same as max_screens / max_ad_slots above.
+  max_clients?: number | null
+  clients_used?: number
+  /** What this workspace's package grants it. The numbers never showed this. */
+  feature_flags?: Record<string, boolean>
 }
 
 export interface TenantScreen {
@@ -642,7 +648,9 @@ export interface Package {
   yearly_price_paise: number
   price_paise: number
   duration_days: number
-  max_screens: number
+  // null = no screen limit. 0 stays a real limit of zero, unlike the three below where 0
+  // IS the unlimited marker — see UNLIMITED in the admin router.
+  max_screens: number | null
   max_clients: number
   max_storage_bytes: number
   max_ad_slots: number

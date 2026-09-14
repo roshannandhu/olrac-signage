@@ -54,7 +54,13 @@ class Plan(Base):
     slug = Column(String, unique=True, index=True, nullable=False)
     monthly_price_paise = Column(Integer, nullable=False, default=0)
     yearly_price_paise = Column(Integer, nullable=False, default=0)
-    max_screens = Column(Integer, nullable=False)
+    # NULL = no screen limit. 0 stays a real limit of zero, so a package that grants no
+    # screens is still expressible -- unlike max_ad_slots and max_clients below, where 0 IS
+    # the unlimited marker. The asymmetry is deliberate and the reason NULL had to be added:
+    # there was previously no value meaning "unlimited screens" at all.
+    max_screens = Column(Integer, nullable=True)
+    # 0 = unlimited, matching max_ad_slots and max_clients rather than meaning "no storage",
+    # which no package has ever wanted and which would refuse every upload.
     max_storage_bytes = Column(BigInteger, nullable=False)
     # 0 = unlimited, matching Organization.max_ad_slots. A package carries the default;
     # Organization.max_ad_slots overrides it for one tenant without editing the package.

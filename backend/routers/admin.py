@@ -51,7 +51,8 @@ class PlanOut(BaseModel):
     # The one-time price the storefront charges for `duration_days` of access.
     price_paise: int
     duration_days: int
-    max_screens: int
+    # None = no screen limit. 0 stays a real limit of zero.
+    max_screens: Optional[int] = None
     max_clients: int
     max_storage_bytes: int
     max_ad_slots: int
@@ -68,11 +69,13 @@ class PlanWrite(BaseModel):
     yearly_price_paise: int = Field(default=0, ge=0)
     price_paise: int = Field(default=0, ge=0)
     duration_days: int = Field(default=30, ge=1)
-    # 0 = unlimited throughout, matching Organization.max_screens / max_ad_slots.
-    max_screens: int = Field(default=0, ge=0)
-    max_clients: int = Field(default=0, ge=0)
-    max_storage_bytes: int = Field(default=10 * 1024 * 1024 * 1024, ge=0)
-    max_ad_slots: int = Field(default=0, ge=0)
+    # -1 = unlimited, on every one of these four. Screens store it as NULL and the other
+    # three as 0, because 0 already means unlimited there and means zero for screens -- the
+    # mapping lives in `_limit` so no caller has to remember which is which.
+    max_screens: int = Field(default=0, ge=-1)
+    max_clients: int = Field(default=0, ge=-1)
+    max_storage_bytes: int = Field(default=10 * 1024 * 1024 * 1024, ge=-1)
+    max_ad_slots: int = Field(default=0, ge=-1)
     feature_flags: Dict[str, bool] = Field(default_factory=dict)
     is_active: bool = True
 
@@ -83,10 +86,10 @@ class PlanPatch(BaseModel):
     yearly_price_paise: Optional[int] = Field(default=None, ge=0)
     price_paise: Optional[int] = Field(default=None, ge=0)
     duration_days: Optional[int] = Field(default=None, ge=1)
-    max_screens: Optional[int] = Field(default=None, ge=0)
-    max_clients: Optional[int] = Field(default=None, ge=0)
-    max_storage_bytes: Optional[int] = Field(default=None, ge=0)
-    max_ad_slots: Optional[int] = Field(default=None, ge=0)
+    max_screens: Optional[int] = Field(default=None, ge=-1)
+    max_clients: Optional[int] = Field(default=None, ge=-1)
+    max_storage_bytes: Optional[int] = Field(default=None, ge=-1)
+    max_ad_slots: Optional[int] = Field(default=None, ge=-1)
     feature_flags: Optional[Dict[str, bool]] = None
     is_active: Optional[bool] = None
 
@@ -115,6 +118,13 @@ class TenantSummaryOut(BaseModel):
     max_screens_override: int = 0
     max_ad_slots_override: int = 0
     ad_slots_used: int = 0
+    # None = unlimited on each of these, matching max_screens / max_ad_slots above.
+    max_clients: Optional[int] = None
+    clients_used: int = 0
+    # What this workspace's package actually grants it. Absent until now, so the console
+    # could show an operator a tenant's screen and ad limits but never which features they
+    # had -- the one part of a package that cannot be inferred from the numbers.
+    feature_flags: Dict[str, bool] = Field(default_factory=dict)
     storage_used_bytes: int = 0
     storage_quota_bytes: int = 0
     rejection_reason: Optional[str] = None
@@ -189,15 +199,34 @@ class SubscriptionUpdateRequest(BaseModel):
     status: Optional[Literal["active", "expired"]] = None
 
 
+UNLIMITED = -1
+
+
+def _screen_limit(value: int) -> Optional[int]:
+    """A screen cap as stored: -1 becomes NULL, which is what "no limit" is for screens.
+
+    Screens cannot use 0 for unlimited the way ad slots and clients do -- 0 there is a real
+    package granting no screens, and test_tenant_isolation enrols against exactly that. So
+    the API takes one marker for all four limits and this decides where it lands.
+    """
+    return None if value == UNLIMITED else value
+
+
+def _zero_is_unlimited(value: int) -> int:
+    """Ad slots, clients and storage: -1 and 0 both already mean no limit."""
+    return 0 if value == UNLIMITED else value
+
+
 class GrantRequest(BaseModel):
     """Put one workspace on limits of your own, rather than on a published package.
 
     Everything is optional; anything left out keeps the value the workspace already has.
+    **-1 means unlimited** on each of the four numbers.
     """
-    max_screens: Optional[int] = Field(default=None, ge=0)
-    max_ad_slots: Optional[int] = Field(default=None, ge=0)
-    max_clients: Optional[int] = Field(default=None, ge=0)
-    max_storage_bytes: Optional[int] = Field(default=None, ge=0)
+    max_screens: Optional[int] = Field(default=None, ge=UNLIMITED)
+    max_ad_slots: Optional[int] = Field(default=None, ge=UNLIMITED)
+    max_clients: Optional[int] = Field(default=None, ge=UNLIMITED)
+    max_storage_bytes: Optional[int] = Field(default=None, ge=UNLIMITED)
     features: Optional[dict[str, bool]] = None
     days: Optional[int] = Field(default=None, ge=1, le=3650)
     name: Optional[str] = None
@@ -280,6 +309,11 @@ def _summarise(db: Session, org: models.Organization) -> TenantSummaryOut:
         max_screens_override=org.max_screens or 0,
         max_ad_slots_override=org.max_ad_slots or 0,
         ad_slots_used=ads_used,
+        max_clients=org.effective_max_clients,
+        clients_used=db.query(models.Client).filter(
+            models.Client.organization_id == org.id
+        ).count(),
+        feature_flags=plan_features(org.plan) if org.plan else {},
         storage_used_bytes=int(storage_used),
         storage_quota_bytes=org.storage_quota_bytes,
         rejection_reason=org.rejection_reason,
@@ -584,13 +618,13 @@ def grant_custom_limits(
         plan.name = req.name
 
     if req.max_screens is not None:
-        plan.max_screens = req.max_screens
+        plan.max_screens = _screen_limit(req.max_screens)
     if req.max_ad_slots is not None:
-        plan.max_ad_slots = req.max_ad_slots
+        plan.max_ad_slots = _zero_is_unlimited(req.max_ad_slots)
     if req.max_clients is not None:
-        plan.max_clients = req.max_clients
+        plan.max_clients = _zero_is_unlimited(req.max_clients)
     if req.max_storage_bytes is not None:
-        plan.max_storage_bytes = req.max_storage_bytes
+        plan.max_storage_bytes = _zero_is_unlimited(req.max_storage_bytes)
     if req.days is not None:
         plan.duration_days = req.days
     if req.features is not None:

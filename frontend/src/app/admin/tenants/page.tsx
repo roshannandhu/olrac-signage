@@ -4,10 +4,11 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  CalendarPlus, CalendarX, CheckCircle, Clock, Film, Gauge, MonitorPlay, RefreshCw, Users, XCircle,
+  CalendarPlus, CalendarX, CheckCircle, Clock, Film, Gauge, MonitorPlay, RefreshCw, Sliders, Users, XCircle,
 } from 'lucide-react'
 import { adminApi } from '@/lib/api'
 import type { TenantSummary } from '@/lib/types'
+import { GrantLimitsDialog } from '@/components/admin/grant-limits-dialog'
 import {
   Feedback, PageHeader, QuotaBar, StatCard, StatusPill, formatBytes,
 } from '@/components/admin/admin-ui'
@@ -51,10 +52,36 @@ function PlanWindow({ tenant }: { tenant: TenantSummary }) {
   )
 }
 
+/**
+ * What this tenant's package actually grants, as initials.
+ *
+ * The console could show an operator a workspace's screens, ad slots and storage but never
+ * its features -- the one part of a package that cannot be read off the numbers, and the
+ * part they are most often asked to change for a single customer.
+ */
+function Features({ tenant }: { tenant: TenantSummary }) {
+  const on = Object.entries(tenant.feature_flags ?? {}).filter(([, enabled]) => enabled)
+  if (on.length === 0) return <span className="text-xs text-muted-foreground">None</span>
+  return (
+    <div className="flex flex-wrap gap-1">
+      {on.map(([key]) => (
+        <span
+          key={key}
+          title={key.replace(/_/g, ' ')}
+          className="rounded border border-violet-500/20 bg-violet-500/10 px-1.5 py-0.5 text-[10px] uppercase text-violet-400"
+        >
+          {key.split('_').map((word) => word[0]).join('')}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 export default function AdminTenantsPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [quotaFor, setQuotaFor] = useState<TenantSummary | null>(null)
+  const [grantFor, setGrantFor] = useState<TenantSummary | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
 
@@ -124,6 +151,13 @@ export default function AdminTenantsPage() {
 
       <Feedback ok={message} error={error} />
 
+      {grantFor && (
+        <GrantLimitsDialog
+          tenant={grantFor}
+          onClose={() => { setGrantFor(null); done(`Limits updated for ${grantFor.name}.`) }}
+        />
+      )}
+
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Active workspaces" value={totals.active} icon={CheckCircle} accent="emerald" />
         <StatCard label="Pending approvals" value={totals.pending} icon={Clock} accent="amber" />
@@ -158,6 +192,7 @@ export default function AdminTenantsPage() {
                   <th className="p-4 text-left">Package</th>
                   <th className="p-4 text-left">Status</th>
                   <th className="p-4 text-left">Plan window</th>
+                  <th className="p-4 text-left">Features</th>
                   <th className="p-4 text-left">Screens</th>
                   <th className="p-4 text-left">Ad slots</th>
                   <th className="p-4 text-left">Storage</th>
@@ -177,10 +212,14 @@ export default function AdminTenantsPage() {
                     <td className="p-4 text-xs text-muted-foreground">{tenant.plan_name ?? '—'}</td>
                     <td className="p-4"><StatusPill status={tenant.status} /></td>
                     <td className="p-4"><PlanWindow tenant={tenant} /></td>
+                    <td className="p-4"><Features tenant={tenant} /></td>
                     <td className="w-32 p-4"><QuotaBar used={tenant.screens_count} max={tenant.max_screens} /></td>
                     <td className="w-32 p-4"><QuotaBar used={tenant.ad_slots_used} max={tenant.max_ad_slots} /></td>
                     <td className="p-4 text-xs text-muted-foreground">
-                      {formatBytes(tenant.storage_used_bytes)} / {formatBytes(tenant.storage_quota_bytes)}
+                      {/* 0 is the unlimited marker, so rendering it through formatBytes
+                          would read "0 B" — the exact opposite of what it means. */}
+                      {formatBytes(tenant.storage_used_bytes)} /{' '}
+                      {tenant.storage_quota_bytes ? formatBytes(tenant.storage_quota_bytes) : 'No limit'}
                     </td>
                     <td className="p-4 pr-5">
                       <div className="flex items-center justify-end gap-2">
@@ -190,6 +229,14 @@ export default function AdminTenantsPage() {
                         >
                           <Gauge className="size-3" />
                           Limits
+                        </button>
+                        <button
+                          onClick={() => { setGrantFor(tenant); setMessage(''); setError('') }}
+                          title="Set this tenant's screens, ads, clients, storage and features"
+                          className="flex items-center gap-1.5 rounded-lg border border-fuchsia-500/20 bg-fuchsia-500/10 px-3 py-1.5 text-xs text-fuchsia-400 transition-all hover:bg-fuchsia-500/20"
+                        >
+                          <Sliders className="size-3" />
+                          Grant
                         </button>
                         <button
                           onClick={() => setPlanWindow.mutate({ id: tenant.id, body: { extend_days: 30 } })}
@@ -264,7 +311,9 @@ function QuotaDialog({
   tenant, packages, saving, onCancel, onSave,
 }: {
   tenant: TenantSummary
-  packages: { id: number; name: string; max_screens: number; max_ad_slots: number; is_active: boolean }[]
+  // max_screens is nullable now: null is a package with NO screen limit, which is a
+  // different thing from 0 (a package granting none) and must not be rendered as one.
+  packages: { id: number; name: string; max_screens: number | null; max_ad_slots: number; is_active: boolean }[]
   saving: boolean
   onCancel: () => void
   onSave: (body: { plan_id?: number; max_screens: number; max_ad_slots: number }) => void
@@ -281,7 +330,10 @@ function QuotaDialog({
   const choosePackage = (value: number | '') => {
     setPlanId(value)
     const pkg = packages.find((p) => p.id === value)
-    if (pkg) { setScreens(pkg.max_screens); setAds(pkg.max_ad_slots) }
+    // A package with no screen limit pre-fills 0, which on THIS field means "no override,
+    // follow the package" — so the tenant keeps the package's unlimited rather than being
+    // pinned to a number. Use the Grant dialog to give one tenant their own unlimited.
+    if (pkg) { setScreens(pkg.max_screens ?? 0); setAds(pkg.max_ad_slots) }
   }
 
   return (

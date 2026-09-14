@@ -216,7 +216,10 @@ def upload_content(
     ).join(
         models.Content, models.Content.id == models.MediaRendition.content_id
     ).filter(models.Content.organization_id == scope.organization_id).scalar()
-    if used_bytes + file_size_bytes > organization.storage_quota_bytes:
+    # 0 = unlimited, the same as ad slots and clients. Read literally it meant "no storage
+    # at all", so an operator granting a tenant unlimited everything would have refused
+    # every upload they made -- and nothing in the product ever wanted a zero-byte package.
+    if organization.storage_quota_bytes and used_bytes + file_size_bytes > organization.storage_quota_bytes:
         remaining = max(organization.storage_quota_bytes - used_bytes, 0)
         raise HTTPException(
             status_code=413,

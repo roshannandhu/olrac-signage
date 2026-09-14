@@ -218,9 +218,19 @@ export default function ActivateWorkspacePage() {
                     <span className="ml-1 text-sm font-normal text-muted-foreground">/ {plan.duration_days} days</span>
                   </p>
                   <ul className="mt-6 space-y-2.5 text-sm text-muted-foreground">
-                    <Line>{plan.max_screens > 0 ? `${plan.max_screens} TVs` : 'Unlimited TVs'}</Line>
+                    {/* null is unlimited; 0 is a package that grants none. This used to
+                        read `max_screens > 0 ? n : 'Unlimited'`, which advertised a
+                        zero-screen package as unlimited — the one case where the storefront
+                        promised the exact opposite of what the quota would enforce. */}
+                    <Line>
+                      {plan.max_screens == null
+                        ? 'Unlimited TVs'
+                        : plan.max_screens > 0
+                          ? `${plan.max_screens} TVs`
+                          : 'No TVs included'}
+                    </Line>
                     <Line>{plan.max_clients > 0 ? `${plan.max_clients} clients` : 'Unlimited clients'}</Line>
-                    <Line>{gb(plan.max_storage_bytes)} storage</Line>
+                    <Line>{plan.max_storage_bytes ? `${gb(plan.max_storage_bytes)} storage` : 'Unlimited storage'}</Line>
                     {features.map((f) => <Line key={f}>{f.replaceAll('_', ' ')}</Line>)}
                   </ul>
                   <Button

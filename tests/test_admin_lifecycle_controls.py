@@ -109,6 +109,62 @@ def run() -> None:
     check(org.effective_max_clients == 7, "re-grant wiped a field it was not given")
     db.close()
 
+    # ---------------------------------------------------------------- unlimited
+    # -1 means "no limit" on all four. Screens is the one that had no way to say it at all:
+    # 0 there is a real cap of zero, so an operator granting "unlimited" would have taken
+    # every television off the tenant instead of giving them more.
+    unlimited = client.post(f"/api/admin/tenants/{tenant_id}/grant", headers=headers, json={
+        "max_screens": -1, "max_ad_slots": -1, "max_clients": -1, "max_storage_bytes": -1,
+    })
+    check(unlimited.status_code == 200, f"unlimited grant failed: {unlimited.text}")
+    body = unlimited.json()
+    check(body["max_screens"] is None, f"unlimited screens reported as {body['max_screens']}")
+    check(body["max_ad_slots"] is None, f"unlimited ad slots reported as {body['max_ad_slots']}")
+    check(body["max_clients"] is None, f"unlimited clients reported as {body['max_clients']}")
+
+    db = database.SessionLocal()
+    org = db.query(models.Organization).filter(models.Organization.id == tenant_id).one()
+    check(org.plan.max_screens is None, "unlimited screens must store NULL, not 0")
+    check(org.effective_max_screens is None,
+          f"effective screen limit is {org.effective_max_screens}, expected no limit")
+    check(org.storage_quota_bytes == 0, "unlimited storage must store 0")
+    db.close()
+
+    # And the enforcement actually lets them through, which is the whole point.
+    from backend.routers.screens import ensure_screen_quota
+    db = database.SessionLocal()
+    try:
+        ensure_screen_quota(db, tenant_id, "add another screen")
+    except Exception as exc:  # noqa: BLE001
+        check(False, f"unlimited screens still refused a screen: {exc}")
+    finally:
+        db.close()
+
+    # Zero must still mean zero, or a package granting no screens becomes ungrantable.
+    zeroed = client.post(f"/api/admin/tenants/{tenant_id}/grant", headers=headers,
+                         json={"max_screens": 0})
+    check(zeroed.json()["max_screens"] == 0, "a zero screen cap was read as unlimited")
+    db = database.SessionLocal()
+    try:
+        ensure_screen_quota(db, tenant_id, "add another screen")
+        check(False, "a zero screen cap allowed a screen")
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+    # Put it back so the subscription checks below run on a sane workspace.
+    client.post(f"/api/admin/tenants/{tenant_id}/grant", headers=headers,
+                json={"max_screens": 50, "max_storage_bytes": 10_000_000})
+
+    # ---------------------------------------------------------------- features visible
+    listed = client.get("/api/admin/tenants", headers=headers).json()
+    row = next((t for t in listed if t["id"] == tenant_id), None)
+    check(row is not None, "granted tenant missing from the admin list")
+    check(row is not None and row.get("feature_flags", {}).get("emergency_alert") is True,
+          f"the console cannot see this tenant's features: {row and row.get('feature_flags')}")
+    check(row is not None and "clients_used" in row, "clients usage not reported to the console")
+
     # ---------------------------------------------------------------- subscription
     extended = client.patch(f"/api/admin/tenants/{tenant_id}/subscription", headers=headers,
                             json={"extend_days": 30, "billing_period": "monthly"})

@@ -4,7 +4,9 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.olrac.signage.device.DeviceOwnerManager
@@ -80,15 +82,36 @@ object UpdateManager {
     }
 
     private fun installUpdate(context: Context, apkFile: File, versionCode: Int) {
-        // Silent when this player is the device owner, which is the only way Android lets an
-        // app install a package without a human. Everything else -- the session, the digest,
-        // the download -- is identical either way; the difference is entirely whether the
-        // platform trusts the caller, so the attempt is made the same way regardless and the
-        // fallback exists only for panels that were never provisioned.
-        val silent = DeviceOwnerManager.isDeviceOwner(context)
-        Log.d(TAG, "Installing $versionCode (deviceOwner=$silent, unattended=${silent})")
+        // Two separate routes to installing without a human, and a panel only needs ONE.
+        //
+        // Device owner is the one this started with, and it is the only route on Android 11
+        // and below. It also has to be set up before the screen is used -- a provisioned TV
+        // cannot become device owner later without a factory reset -- so every panel that
+        // was put into service by installing the APK by hand is permanently ineligible, and
+        // those are exactly the ones nobody wants to drive to.
+        //
+        // The second route is a SELF-update, which Android 12 added and which needs no
+        // provisioning at all: an app holding UPDATE_PACKAGES_WITHOUT_USER_ACTION may
+        // replace itself with no dialog as long as it asks, via setRequireUserAction. The
+        // manifest has declared that permission the whole time -- nothing ever asked, so
+        // the platform applied its default of USER_ACTION_UNSPECIFIED and put up the
+        // confirmation prompt on every non-device-owner screen.
+        //
+        // The hint is only that. The system ignores it if this build is not the package's
+        // installer of record, and the fallback below still catches that -- so the first
+        // update on a hand-installed panel may ask once, and after it lands this player is
+        // the installer of record and every later one is silent.
+        val deviceOwner = DeviceOwnerManager.isDeviceOwner(context)
         val packageInstaller = context.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+        }
+        // Says this replacement is policy rather than something a person chose, which is
+        // what keeps some OEM firmware from raising its own prompt over the platform's.
+        runCatching { params.setInstallReason(PackageManager.INSTALL_REASON_POLICY) }
+        val unattended = deviceOwner || Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        Log.d(TAG, "Installing $versionCode (deviceOwner=$deviceOwner, unattended=$unattended)")
         var session: PackageInstaller.Session? = null
 
         try {

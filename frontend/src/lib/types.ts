@@ -674,3 +674,28 @@ export interface PackageWrite {
   feature_flags: Record<string, boolean>
   is_active: boolean
 }
+
+export interface StorageTenant {
+  organization_id: number | null
+  name: string
+  prefix: string
+  bucket_bytes: number
+  bucket_objects: number
+  /** What the database says. Differs from bucket_bytes when objects were orphaned. */
+  database_bytes: number
+  quota_bytes: number
+}
+
+export interface PlatformStorage {
+  configured: boolean
+  error?: string | null
+  bucket?: string | null
+  endpoint?: string | null
+  total_bytes: number
+  object_count: number
+  /** Object storage has no fixed size, so "left" only means something against this. */
+  budget_bytes?: number | null
+  committed_quota_bytes: number
+  cached: boolean
+  tenants: StorageTenant[]
+}

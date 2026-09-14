@@ -208,14 +208,9 @@ def upload_content(
     # video really occupies -- a transcode adds a full-size master and a smaller copy on
     # top -- so a 10GB quota let through nearer 25GB of objects and the bucket filled
     # while the dashboard still reported plenty of room.
-    used_bytes = scope.query(models.Content).with_entities(
-        func.coalesce(func.sum(models.Content.file_size_bytes), 0)
-    ).scalar()
-    used_bytes += scope.db.query(
-        func.coalesce(func.sum(models.MediaRendition.file_size_bytes), 0)
-    ).join(
-        models.Content, models.Content.id == models.MediaRendition.content_id
-    ).filter(models.Content.organization_id == scope.organization_id).scalar()
+    from ..services.storage_service import organization_storage_used
+
+    used_bytes = organization_storage_used(scope.db, scope.organization_id)
     # 0 = unlimited, the same as ad slots and clients. Read literally it meant "no storage
     # at all", so an operator granting a tenant unlimited everything would have refused
     # every upload they made -- and nothing in the product ever wanted a zero-byte package.

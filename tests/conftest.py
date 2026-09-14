@@ -105,6 +105,8 @@ ISOLATED_SCRIPTS = {
     "test_subscription_expiry.py",
     # The operator setting a paid window, and granting limits of their own.
     "test_admin_lifecycle_controls.py",
+    # One definition of a workspace's storage, and bucket objects attributed to it.
+    "test_storage_accounting.py",
 }
 
 # Pure-logic tests: no database, no import-time engine, safe to run in-process.
@@ -173,6 +175,7 @@ NEEDS_POSTGRES = ISOLATED_SCRIPTS - {
     # a machine with no Postgres would skip them and report a green run that proved nothing.
     "test_subscription_expiry.py",
     "test_admin_lifecycle_controls.py",
+    "test_storage_accounting.py",
 }
 
 

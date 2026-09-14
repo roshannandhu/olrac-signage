@@ -283,9 +283,12 @@ def _summarise(db: Session, org: models.Organization) -> TenantSummaryOut:
     )
     from sqlalchemy import func
 
-    storage_used = db.query(
-        func.coalesce(func.sum(models.Content.file_size_bytes), 0)
-    ).filter(models.Content.organization_id == org.id).scalar() or 0
+    # Content AND renditions, the same sum the quota is enforced against. Summing only
+    # Content showed roughly a third of the truth, so an operator looked at "3 GB of 10 GB"
+    # for a workspace that was actually full and being refused uploads.
+    from ..services.storage_service import organization_storage_used
+
+    storage_used = organization_storage_used(db, org.id)
 
     return TenantSummaryOut(
         id=org.id,
@@ -497,6 +500,114 @@ def approve_tenant(
         org.name, org.id, scope.user.username, org.plan_id, org.max_screens, org.max_ad_slots,
     )
     return _summarise(db, org)
+
+
+class StorageTenantOut(BaseModel):
+    organization_id: Optional[int] = None
+    name: str
+    prefix: str
+    bucket_bytes: int = 0
+    bucket_objects: int = 0
+    # What the database says this workspace holds. Differs from bucket_bytes when objects
+    # were orphaned by a deletion that did not reach the bucket, or uploaded under an older
+    # prefix -- which is the whole reason both numbers are here.
+    database_bytes: int = 0
+    quota_bytes: int = 0
+
+
+class StorageOut(BaseModel):
+    configured: bool
+    error: Optional[str] = None
+    bucket: Optional[str] = None
+    endpoint: Optional[str] = None
+    total_bytes: int = 0
+    object_count: int = 0
+    # What the operator has said they are willing to pay for, if anything. Object storage
+    # has no fixed size -- R2 and S3 both bill per GB stored with no ceiling -- so "how much
+    # is left" only means something against a budget somebody chose.
+    budget_bytes: Optional[int] = None
+    # Every workspace's quota added up. Not a prediction of the bill: quotas are promises
+    # about what a tenant MAY use, and overselling them is normal.
+    committed_quota_bytes: int = 0
+    cached: bool = False
+    tenants: List[StorageTenantOut] = Field(default_factory=list)
+
+
+@router.get("/storage", response_model=StorageOut)
+def platform_storage(
+    refresh: bool = False,
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    """What the object store actually holds, and which workspace put it there.
+
+    Per-tenant quotas answer "what may this workspace use". This answers "what am I being
+    billed for", which nothing did -- the bucket is the thing with a cost attached, and it
+    drifts from the database through orphans and renditions of deleted content.
+
+    Measured by walking the bucket, cached for a few minutes because LIST is charged per
+    request; `?refresh=true` forces it.
+    """
+    from ..media_urls import get_s3_config
+    from ..services.storage_service import (
+        bucket_usage,
+        organization_id_from_prefix,
+        organization_storage_used,
+    )
+
+    usage = bucket_usage(force=refresh)
+    organizations = {org.id: org for org in db.query(models.Organization).all()}
+
+    rows: List[StorageTenantOut] = []
+    seen: set[int] = set()
+    for prefix, totals in sorted(
+        usage["by_prefix"].items(), key=lambda item: -item[1]["bytes"]
+    ):
+        org_id = organization_id_from_prefix(prefix)
+        org = organizations.get(org_id) if org_id else None
+        if org:
+            seen.add(org.id)
+        rows.append(StorageTenantOut(
+            organization_id=org.id if org else None,
+            # A prefix naming no workspace is still real bytes on the bill, so it is listed
+            # rather than dropped -- that is how an orphan becomes visible at all.
+            name=org.name if org else f"Unattributed ({prefix})",
+            prefix=prefix,
+            bucket_bytes=totals["bytes"],
+            bucket_objects=totals["objects"],
+            database_bytes=organization_storage_used(db, org.id) if org else 0,
+            quota_bytes=org.storage_quota_bytes if org else 0,
+        ))
+
+    # Workspaces holding nothing in the bucket still belong in the list, or a tenant whose
+    # uploads all failed looks identical to one that has none.
+    for org in organizations.values():
+        if org.id in seen:
+            continue
+        database_bytes = organization_storage_used(db, org.id)
+        if database_bytes or org.storage_quota_bytes:
+            rows.append(StorageTenantOut(
+                organization_id=org.id,
+                name=org.name,
+                prefix=f"org-{org.id}",
+                database_bytes=database_bytes,
+                quota_bytes=org.storage_quota_bytes,
+            ))
+
+    budget = os.getenv("PLATFORM_STORAGE_BUDGET_BYTES", "").strip()
+    config = get_s3_config()
+    return StorageOut(
+        configured=usage["configured"],
+        error=usage.get("error"),
+        bucket=usage.get("bucket") or config["bucket"],
+        endpoint=config["endpoint_url"],
+        total_bytes=usage["total_bytes"],
+        object_count=usage["object_count"],
+        budget_bytes=int(budget) if budget.isdigit() else None,
+        committed_quota_bytes=sum(o.storage_quota_bytes or 0 for o in organizations.values()),
+        cached=bool(usage.get("cached")),
+        tenants=rows,
+    )
 
 
 @router.patch("/tenants/{org_id}/subscription", response_model=TenantSummaryOut)

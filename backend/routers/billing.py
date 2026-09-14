@@ -76,9 +76,11 @@ def billing_summary(scope: TenantScope = Depends(get_tenant_scope)):
         scope.db.add(subscription)
         scope.db.commit()
         scope.db.refresh(subscription)
-    storage_used = scope.query(models.Content).with_entities(
-        func.coalesce(func.sum(models.Content.file_size_bytes), 0)
-    ).scalar()
+    # Renditions included, matching what the upload route refuses on. Without them this
+    # page told a tenant they had room and the next upload returned 413.
+    from ..services.storage_service import organization_storage_used
+
+    storage_used = organization_storage_used(scope.db, scope.organization_id)
     screens_used = scope.query(models.Screen).filter(
         models.Screen.status != "waiting_pairing"
     ).count()

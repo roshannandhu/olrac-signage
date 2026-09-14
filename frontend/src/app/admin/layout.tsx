@@ -9,7 +9,7 @@ import { isSuperAdmin } from '@/lib/roles'
 import { useAuthStore } from '@/lib/store'
 import {
   ShieldCheck, Users, Film, LogOut, ChevronRight, LayoutDashboard,
-  BarChart3, Package, Bell, Rocket, QrCode, Menu, X, Activity
+  BarChart3, Package, Bell, Rocket, QrCode, Menu, X, Activity, HardDrive
 } from 'lucide-react'
 
 // Platform operator navigation items
@@ -18,6 +18,7 @@ const navItems = [
   { href: '/admin/approvals', label: 'Approvals Queue', icon: ShieldCheck },
   { href: '/admin/tenants', label: 'All Tenants', icon: Users },
   { href: '/admin/packages', label: 'Packages', icon: Package },
+  { href: '/admin/storage', label: 'Storage', icon: HardDrive },
   { href: '/admin/releases', label: 'App Releases', icon: Rocket },
   { href: '/admin/fleet', label: 'Fleet Versions', icon: Activity },
   { href: '/admin/provisioning', label: 'Zero-Touch Provisioning', icon: QrCode },

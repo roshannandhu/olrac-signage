@@ -246,16 +246,28 @@ private fun StartAfterRestartControls() {
             color = Color(0xFFFFC46B),
             textAlign = TextAlign.Center
         )
-        Text(
-            text = "Allow \"Display over other apps\" for OLRAC Signage. If the button lands on a " +
-                "list, choose OLRAC Signage and switch it on. On most TVs it is under Settings → " +
-                "Apps → Special app access → Display over other apps.",
-            color = Color.LightGray,
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        Button(onClick = ::openOverlaySettings, colors = secondaryButtonColors(), modifier = Modifier.fillMaxWidth()) {
-            Text("Allow OLRAC to open after restart")
+        // Low-RAM TVs show the overlay switch but never apply it; the launcher button above is
+        // the way on those.
+        val lowRam = remember { context.getSystemService(android.app.ActivityManager::class.java).isLowRamDevice }
+        if (lowRam) {
+            Text(
+                text = "On this TV use \"Choose OLRAC as TV launcher\" above and answer Yes. " +
+                    "\"Display over other apps\" does not work on this model.",
+                color = Color.LightGray,
+                textAlign = TextAlign.Center
+            )
+        } else {
+            Text(
+                text = "Allow \"Display over other apps\" for OLRAC Signage. If the button lands on a " +
+                    "list, choose OLRAC Signage and switch it on. On most TVs it is under Settings → " +
+                    "Apps → Special app access → Display over other apps.",
+                color = Color.LightGray,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            Button(onClick = ::openOverlaySettings, colors = secondaryButtonColors(), modifier = Modifier.fillMaxWidth()) {
+                Text("Allow OLRAC to open after restart")
+            }
         }
     }
     openError?.let {

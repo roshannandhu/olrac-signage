@@ -2,6 +2,7 @@ package com.olrac.signage
 
 import android.content.Context
 import android.app.role.RoleManager
+import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -337,6 +338,7 @@ class MainActivity : ComponentActivity() {
             DeviceOwnerManager.applyKioskPolicy(this)
         }
         defaultHome = isDefaultHomeLauncher()
+        askOnceToBecomeHome()
         hideSystemBars()
         // Backstop: re-pin whenever we are back on the player with no maintenance surface
         // open -- covers a cancelled pin, a wrong pin, and returning from the system
@@ -906,15 +908,47 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * The system's "use OLRAC as your home app?" dialog.
+     *
+     * It must be opened for a result. Opened with startActivity it has no calling package, and
+     * the permission controller closes it without showing anything -- which is why "Choose OLRAC
+     * as TV launcher" never did anything on the KONKA.
+     */
+    private val homeRoleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        defaultHome = isDefaultHomeLauncher()
+        android.util.Log.i("MainActivity", "Home role request finished: held=$defaultHome")
+    }
+
     private fun requestHomeRole() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val roleManager = getSystemService(RoleManager::class.java)
             if (roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
-                startActivity(roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME))
-                return
+                runCatching { homeRoleRequest.launch(roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)) }
+                    .onSuccess { return }
             }
         }
-        startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+        runCatching { startActivity(Intent(Settings.ACTION_HOME_SETTINGS)) }
+    }
+
+    /**
+     * On a TV that cannot bring the player back after a restart, ask once to become its home app.
+     *
+     * Android 10+ lets an app open itself after boot only as device owner, with "Display over
+     * other apps", or as the home app. The KONKA is a low-RAM TV, where the overlay switch never
+     * takes effect, so the home app is the one way left -- and the system opens the home app
+     * first after every restart. One "Yes" on the system's own dialog; asked a single time, after
+     * that only from the maintenance screen.
+     */
+    private fun askOnceToBecomeHome() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || defaultHome) return
+        if (com.olrac.signage.boot.PlayerLauncher.canStartFromBackground(this)) return
+        if (showPinPrompt || showServerSetup || operatorExited()) return
+        val prefs = getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
+        if (prefs.contains(PREF_HOME_ROLE_ASKED_AT)) return
+        if (!getSystemService(RoleManager::class.java).isRoleAvailable(RoleManager.ROLE_HOME)) return
+        prefs.edit().putLong(PREF_HOME_ROLE_ASKED_AT, System.currentTimeMillis()).apply()
+        requestHomeRole()
     }
 
     private fun isDefaultHomeLauncher(): Boolean {
@@ -949,6 +983,7 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val PREF_PLAYER_RESUMED_AT = "player_last_resumed_at"
         const val PREF_OPERATOR_EXIT_AT = "operator_exit_at"
+        private const val PREF_HOME_ROLE_ASKED_AT = "home_role_asked_at"
 
         /** Whether the player is on screen. Read by PlaybackService, which shares the process. */
         @Volatile var visible = false

@@ -65,7 +65,11 @@ object PlayerLauncher {
      * Whether this panel can actually raise its own window.
      */
     fun canStartFromBackground(context: Context): Boolean =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || Settings.canDrawOverlays(context)
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || Settings.canDrawOverlays(context) ||
+            runCatching {
+                context.getSystemService(android.app.role.RoleManager::class.java)
+                    .isRoleHeld(android.app.role.RoleManager.ROLE_HOME)
+            }.getOrDefault(false)
 
     private fun warnIfBackgroundStartsWillBeRefused(context: Context, reason: String) {
         if (canStartFromBackground(context)) return

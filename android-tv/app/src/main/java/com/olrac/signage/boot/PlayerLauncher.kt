@@ -46,12 +46,9 @@ object PlayerLauncher {
         warnIfBackgroundStartsWillBeRefused(context, reason)
         val intent = playerIntent(context)
 
-        // 1. Accessibility Service privileged launch (bypasses all Android 14 background activity restrictions)
-        if (WatchdogAccessibilityService.bringToFront(context, reason)) {
-            Log.i(TAG, "Successfully brought player to front via Accessibility Service (reason=$reason)")
-        }
-
-        // 2. Direct startActivity (works on Device Owner and stock devices)
+        // 1. Direct startActivity. Allowed from the background on Android 10+ only for a device
+        //    owner or an app granted "Display over other apps" -- which is why that permission,
+        //    not an accessibility service, is what makes a TV reopen the player after a restart.
         attemptDirectStart(context, intent, reason)
 
         // 3. High-priority Full-Screen Intent Notification (guaranteed foreground takeover on Android 10-14)

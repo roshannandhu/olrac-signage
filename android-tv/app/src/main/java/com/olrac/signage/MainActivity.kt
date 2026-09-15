@@ -1,5 +1,6 @@
 package com.olrac.signage
 
+import android.content.Context
 import android.app.role.RoleManager
 import android.content.Intent
 import android.net.Uri
@@ -230,6 +231,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // With BootReceiver's timestamp, tells a remote report whether a restart reopened the player.
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .putLong(PREF_PLAYER_RESUMED_AT, System.currentTimeMillis()).apply()
         if (launchState is LaunchState.SignIn && !deviceState.isPaired) {
             launchState = LaunchState.SignIn(busy = false)
         }
@@ -846,6 +850,7 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        const val PREF_PLAYER_RESUMED_AT = "player_last_resumed_at"
         private const val PAIRING_RETRY_MS = 5_000L
 
         // Boot reconnect backoff. Starts quick because the common case is a TV that booted a

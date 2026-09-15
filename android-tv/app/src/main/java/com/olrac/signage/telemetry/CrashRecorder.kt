@@ -5,8 +5,8 @@ import android.content.Context
 /**
  * Keeps the last crash where a remote diagnostics report can read it.
  *
- * A TV that nobody can reach cannot hand over a logcat. If the watchdog or the player dies on
- * start -- which Android shows only as a switch that turned itself back off -- this is the one
+ * A TV that nobody can reach cannot hand over a logcat. If the player dies -- on a restart above
+ * all, where it shows only as a TV that did not come back to the player -- this is the one
  * record of why. Chains to the existing handler so the process still crashes as normal.
  */
 object CrashRecorder {

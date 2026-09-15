@@ -1,7 +1,6 @@
 package com.olrac.signage.ui.screens
 
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.layout.Column
@@ -26,7 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.olrac.signage.boot.WatchdogStatus
+import com.olrac.signage.boot.PlayerLauncher
 import kotlinx.coroutines.delay
 
 @Composable
@@ -40,7 +39,7 @@ fun ServerSetupScreen(
     onClose: () -> Unit
 ) {
     SetupSurface {
-      // Scrolls because it no longer fits a TV at 48dp padding once the watchdog section is
+      // Scrolls because it no longer fits a TV at 48dp padding once the restart section is
       // in, and an unscrollable column simply drops "Return to player" off the bottom edge.
       // D-pad focus brings each control into view as it moves.
       Column(
@@ -130,101 +129,70 @@ fun ServerControls(
     }
 
     Spacer(modifier = Modifier.height(18.dp))
-    WatchdogControls()
+    StartAfterRestartControls()
 }
 
 /**
- * Whether the watchdog is on, and the way to turn it on from the TV itself.
+ * Whether this TV will reopen the player by itself after a restart, and the one switch that
+ * makes it do so.
  *
- * Installed from a file, this app has its accessibility switch locked by Android 13+ and the
- * only unlock is a person in App info. The steps are shown whenever the watchdog is off,
- * because whether the switch is locked cannot be read from inside the app. They are in the
- * order Android enforces: "Allow restricted settings" does not appear in App info until
- * someone has first tried the locked switch and been refused. On a TV that is not locked,
- * step 1 simply turns it on and the rest never matter.
+ * On Android 10+ an app may bring itself to the front from the background only as the device
+ * owner or with "Display over other apps". The boot receiver runs on every restart either way;
+ * without that permission Android silently refuses the launch, so the TV comes back to its own
+ * home screen and stays there. An accessibility watchdog used to be the workaround, and Android
+ * 13+ locks that switch for any app installed from a file -- which is every TV this is put on.
+ * This permission is not under that lock, and needs only the remote.
  */
 @Composable
-private fun WatchdogControls() {
+private fun StartAfterRestartControls() {
     val context = LocalContext.current
-    var enabled by remember { mutableStateOf(WatchdogStatus.isEnabled(context)) }
+    var allowed by remember { mutableStateOf(PlayerLauncher.canStartFromBackground(context)) }
     var openError by remember { mutableStateOf<String?>(null) }
 
-    // Re-read while this screen is up: the change happens in Settings, and the installer
-    // comes back here expecting to see it. One cheap read, so polling is fine.
+    // Re-read while this screen is up: the switch is flipped in Settings, and whoever flips it
+    // comes back here expecting to see it confirmed.
     LaunchedEffect(Unit) {
         while (true) {
             delay(2_000)
-            enabled = WatchdogStatus.isEnabled(context)
+            allowed = PlayerLauncher.canStartFromBackground(context)
         }
     }
 
-    fun open(intent: Intent, what: String) {
-        openError = try {
-            context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            null
-        } catch (e: Exception) {
-            "This TV has no $what screen."
-        }
-    }
-    val openAccessibility = { open(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS), "accessibility settings") }
-    val openAppInfo = {
-        open(
-            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}")),
-            "app info"
+    // TV settings apps differ: try this app's own page, then the full list, then Settings.
+    fun openOverlaySettings() {
+        val attempts = listOf(
+            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")),
+            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),
+            Intent(Settings.ACTION_SETTINGS),
         )
+        openError = if (attempts.any { intent ->
+                runCatching { context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+            }) null else "This TV has no settings screen that can be opened from here."
     }
 
-    if (enabled) {
+    if (allowed) {
         Text(
-            text = "Watchdog: on — keeps the player in front on this TV",
+            text = "Opens after restart: yes — the player comes up by itself when the TV restarts",
             color = AccentGreen,
             textAlign = TextAlign.Center
         )
     } else {
         Text(
-            text = "Watchdog: off — turn it on so the player recovers after a reboot",
+            text = "Opens after restart: not yet — after a restart this TV stays on its home screen",
             color = Color(0xFFFFC46B),
             textAlign = TextAlign.Center
         )
         Text(
-            text = "If the switch is greyed out (\"Restricted setting\"), Android locked it because " +
-                "this app was installed from a file. Do these in order:",
+            text = "Allow \"Display over other apps\" for OLRAC Signage. If the button lands on a " +
+                "list, choose OLRAC Signage and switch it on. On most TVs it is under Settings → " +
+                "Apps → Special app access → Display over other apps.",
             color = Color.LightGray,
             textAlign = TextAlign.Center
         )
-        Spacer(modifier = Modifier.height(8.dp))
-        Button(onClick = openAccessibility, colors = secondaryButtonColors(), modifier = Modifier.fillMaxWidth()) {
-            Text("1. Accessibility → OLRAC Signage → switch on (try it once even if greyed)")
+        Spacer(modifier = Modifier.height(10.dp))
+        Button(onClick = ::openOverlaySettings, colors = secondaryButtonColors(), modifier = Modifier.fillMaxWidth()) {
+            Text("Allow OLRAC to open after restart")
         }
-        Spacer(modifier = Modifier.height(8.dp))
-        Button(onClick = openAppInfo, colors = secondaryButtonColors(), modifier = Modifier.fillMaxWidth()) {
-            Text("2. If it was greyed: App info → ⋮ menu → Allow restricted settings")
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        Button(onClick = openAccessibility, colors = secondaryButtonColors(), modifier = Modifier.fillMaxWidth()) {
-            Text("3. Back to Accessibility → OLRAC Signage → switch on")
-        }
-        Spacer(modifier = Modifier.height(8.dp))
-        // A TV's settings app is not the phone one, and it may have no "Allow restricted
-        // settings" entry at all -- which leaves steps 2-3 with nothing to press. Android gives
-        // the app itself no way to lift the lock, and an update never clears it, so on a TV the
-        // computer route is the one that reliably works; it is spelled out in full.
-        val isTv = context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
-        Text(
-            text = if (isTv) {
-                "On a TV, App info often has no ⋮ menu. Then unlock it from a computer on the " +
-                    "same network: TV Settings → Device Preferences → About → press Build 7 times; " +
-                    "Developer options → Network debugging ON. Then on the computer:\n" +
-                    "adb connect <TV IP>:5555\n" +
-                    "adb shell appops set ${context.packageName} ACCESS_RESTRICTED_SETTINGS allow\n" +
-                    "and turn the watchdog on with step 3."
-            } else {
-                "No ⋮ menu in App info? From a computer run:\n" +
-                    "adb shell appops set ${context.packageName} ACCESS_RESTRICTED_SETTINGS allow"
-            },
-            color = Color.Gray,
-            textAlign = TextAlign.Center
-        )
     }
     openError?.let {
         Spacer(modifier = Modifier.height(6.dp))

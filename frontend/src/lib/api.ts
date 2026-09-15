@@ -1,6 +1,6 @@
 import { useAuthStore } from './store'
 import type {
-  PlatformStorage, StorageSettings, Package, PackageWrite, FleetOverview, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, Placement, PaymentMethod, PlanOption, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, PurchaseResponse, CustomPlanRequestInput, CustomPlanRequestItem, CustomPlanRequestUpdate, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
+  PlatformStorage, StorageSettings, Package, PackageWrite, FleetOverview, ScreenUpdateResult, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, Placement, PaymentMethod, PlanOption, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, PurchaseResponse, CustomPlanRequestInput, CustomPlanRequestItem, CustomPlanRequestUpdate, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
 
 const PROD_API_URL = 'https://olrac-signage-32lh.onrender.com'
 const configuredUrl = (process.env.NEXT_PUBLIC_API_URL || PROD_API_URL).replace(/\/$/, '')
@@ -704,6 +704,14 @@ export const adminApi = {
   // re-count; the server caches it because LIST is billed per request.
   getStorage: (refresh = false) =>
     fetchWithAuth<PlatformStorage>(`/admin/storage${refresh ? '?refresh=true' : ''}`),
+  // One PIN that opens any screen which has not been given its own. A kiosked panel with no
+  // PIN has no exit at all — home and back are swallowed — so this is the fallback that
+  // stops a factory reset being the only way back in.
+  getMaintenancePin: () => fetchWithAuth<{ pin: string | null }>('/admin/maintenance-pin'),
+  setMaintenancePin: (pin: string) =>
+    fetchWithAuth<{ pin: string | null }>('/admin/maintenance-pin', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin }),
+    }),
   listPackages: () => fetchWithAuth<Package[]>('/admin/plans'),
   createPackage: (body: PackageWrite) =>
     fetchWithAuth<Package>('/admin/plans', {
@@ -718,6 +726,13 @@ export const adminApi = {
 
   // Custom-plan request queue.
   getFleet: () => fetchWithAuth<FleetOverview>('/admin/fleet'),
+  // Make one TV look for its update now. Omit versionCode for the latest released build
+  // (which also clears any pin); pass one to pin the screen to that build.
+  updateScreenNow: (screenId: number, versionCode?: number | null) =>
+    fetchWithAuth<ScreenUpdateResult>(`/releases/screens/${screenId}/update`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(versionCode ? { version_code: versionCode } : {}),
+    }),
   listCustomRequests: () => fetchWithAuth<CustomPlanRequestItem[]>('/admin/custom-requests'),
   priceCustomRequest: (id: number, pricePaise: number) =>
     fetchWithAuth<CustomPlanRequestItem>(`/admin/custom-requests/${id}/price`, {

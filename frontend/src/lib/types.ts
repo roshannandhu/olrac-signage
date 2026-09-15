@@ -172,6 +172,14 @@ export interface Screen {
    * registered before it was recorded.
    */
   identity_source?: string | null
+  /**
+   * Whether this panel installs updates unattended. Android allows a silent install only
+   * for the device owner; every other screen waits behind a confirmation dialog.
+   * null = the player has not reported yet (an older build).
+   */
+  device_owner?: boolean | null
+  /** What actually opens the maintenance door: this screen's PIN, else the platform one. */
+  effective_maintenance_pin?: string | null
   android_version: string | null
   sdk_int: number | null
   network_type: string | null
@@ -619,6 +627,17 @@ export interface TenantUser {
   full_name?: string | null
   role: string
   is_active: boolean
+}
+
+export interface ScreenUpdateResult {
+  screen_id: number
+  name: string | null
+  app_version: string | null
+  target_version_code: number | null
+  offered_version_code: number | null
+  offered_version_name: string | null
+  already_current: boolean
+  online: boolean
 }
 
 export interface FleetScreen {

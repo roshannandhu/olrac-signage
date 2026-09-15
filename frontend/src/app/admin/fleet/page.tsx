@@ -1,10 +1,12 @@
 'use client'
 
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Activity, AlertTriangle, CheckCircle, MonitorPlay, RefreshCw, Rocket } from 'lucide-react'
-import { adminApi } from '@/lib/api'
-import type { FleetScreen } from '@/lib/types'
+import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Activity, AlertTriangle, CheckCircle, Download, MonitorPlay, RefreshCw, Rocket } from 'lucide-react'
+import { adminApi, api } from '@/lib/api'
+import type { AppRelease, FleetScreen } from '@/lib/types'
 import { PageHeader, StatCard } from '@/components/admin/admin-ui'
+import { MaintenancePinCard } from '@/components/admin/maintenance-pin-card'
 
 /**
  * The whole fleet's version spread in one place.
@@ -21,6 +23,11 @@ export default function AdminFleetPage() {
     refetchInterval: 15000,
   })
 
+  // Only builds a screen can actually install: released, and carrying the digest the player
+  // refuses to install without.
+  const { data: releases } = useQuery({ queryKey: ['releases'], queryFn: api.getReleases })
+  const installable = (releases ?? []).filter((r) => r.rollout_state === 'released' && r.sha256)
+
   const versions = data ? Object.entries(data.versions).sort((a, b) => b[1] - a[1]) : []
   const latest = data?.latest_version_name ?? null
 
@@ -35,6 +42,8 @@ export default function AdminFleetPage() {
           Refresh
         </button>
       </PageHeader>
+
+      <MaintenancePinCard />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Total TVs" value={data?.total ?? 0} icon={MonitorPlay} accent="violet" />
@@ -91,7 +100,7 @@ export default function AdminFleetPage() {
           <p className="p-10 text-center text-sm text-muted-foreground">No TVs paired across the fleet yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[1040px] text-sm">
               <thead className="border-b border-border bg-muted text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="p-4 pl-5 text-left">TV</th>
@@ -100,7 +109,8 @@ export default function AdminFleetPage() {
                   <th className="p-4 text-left">Pin</th>
                   <th className="p-4 text-left">Update</th>
                   <th className="p-4 text-left">State</th>
-                  <th className="p-4 pr-5 text-left">Last seen</th>
+                  <th className="p-4 text-left">Last seen</th>
+                  <th className="p-4 pr-5 text-left">Manual update</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -121,7 +131,8 @@ export default function AdminFleetPage() {
                         {s.online ? 'Online' : 'Offline'}
                       </span>
                     </td>
-                    <td className="p-4 pr-5 text-xs text-muted-foreground">{s.last_seen ? new Date(s.last_seen).toLocaleString() : '—'}</td>
+                    <td className="p-4 text-xs text-muted-foreground">{s.last_seen ? new Date(s.last_seen).toLocaleString() : '—'}</td>
+                    <td className="p-4 pr-5"><UpdateNowControl screen={s} releases={installable} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -145,4 +156,64 @@ function UpdateChip({ screen }: { screen: FleetScreen }) {
     return <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-400">up to date</span>
   }
   return <span className="text-xs text-muted-foreground">—</span>
+}
+
+/**
+ * Make one TV look for its update now.
+ *
+ * A screen normally updates itself when a release goes out, but one that failed, was
+ * offline, or had its install prompt dismissed has nothing to tell it to try again short
+ * of publishing yet another build. This is that lever, for a single screen: the latest
+ * released build by default, or a specific one to pin it to.
+ */
+function UpdateNowControl({ screen, releases }: { screen: FleetScreen; releases: AppRelease[] }) {
+  const queryClient = useQueryClient()
+  const [choice, setChoice] = useState<string>('')
+  const [note, setNote] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
+
+  const update = useMutation({
+    mutationFn: () => adminApi.updateScreenNow(screen.id, choice ? Number(choice) : null),
+    onSuccess: (result) => {
+      const build = result.offered_version_name ?? 'the latest build'
+      setNote({
+        tone: 'ok',
+        text: result.already_current
+          ? `Already on ${build}`
+          : result.online
+            ? `Sent — installing ${build}`
+            : `Queued — installs ${build} when it comes online`,
+      })
+      queryClient.invalidateQueries({ queryKey: ['admin', 'fleet'] })
+    },
+    onError: (e: Error) => setNote({ tone: 'err', text: e.message }),
+  })
+
+  return (
+    <div className="flex min-w-[220px] flex-col gap-1">
+      <div className="flex items-center gap-1.5">
+        <select
+          value={choice}
+          onChange={(e) => { setChoice(e.target.value); setNote(null) }}
+          aria-label={`Build for ${screen.name || `screen ${screen.id}`}`}
+          className="rounded-lg border border-border bg-muted px-2 py-1.5 text-xs text-foreground"
+        >
+          <option value="">Latest</option>
+          {releases.map((r) => (
+            <option key={r.version_code} value={r.version_code}>{r.version_name}</option>
+          ))}
+        </select>
+        <button
+          onClick={() => { setNote(null); update.mutate() }}
+          disabled={update.isPending}
+          className="flex items-center gap-1.5 rounded-lg bg-violet-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-600 disabled:opacity-40"
+        >
+          <Download className={`size-3.5 ${update.isPending ? 'animate-pulse' : ''}`} />
+          {update.isPending ? 'Sending…' : 'Update now'}
+        </button>
+      </div>
+      {note && (
+        <span className={`text-[11px] ${note.tone === 'ok' ? 'text-emerald-400' : 'text-rose-400'}`}>{note.text}</span>
+      )}
+    </div>
+  )
 }

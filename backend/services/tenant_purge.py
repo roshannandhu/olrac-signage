@@ -140,17 +140,19 @@ def _deletion_plan(org_id: int):
 
 
 def purge_organization(
-    db: Session, organization: models.Organization, dry_run: bool = False
+    db: Session, organization: models.Organization, dry_run: bool = False,
+    immediately: bool = False,
 ) -> dict:
     """Destroy one workspace completely. The caller owns the transaction boundary.
 
-    Refuses anything not actually due, so a mistaken call site cannot turn this into a
-    delete-any-tenant function.
+    Refuses anything not removed first, so a mistaken call site cannot turn this into a
+    delete-any-tenant function. Refuses anything not yet due unless `immediately` -- the
+    admin's "Delete permanently", which skips the rest of the 30 days on purpose.
     """
     due = purge_due_at(organization)
     if due is None:
         raise ValueError(f"Organization {organization.id} was never removed")
-    if due > models.utcnow():
+    if due > models.utcnow() and not immediately:
         raise ValueError(f"Organization {organization.id} is not due until {due.isoformat()}")
 
     org_id = organization.id

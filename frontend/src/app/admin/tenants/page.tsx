@@ -131,6 +131,12 @@ export default function AdminTenantsPage() {
     onError: failed,
   })
 
+  const deleteNow = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) => adminApi.deleteTenantPermanently(id, name),
+    onSuccess: (report) => done(`${report.name} has been deleted permanently.`),
+    onError: failed,
+  })
+
   const saveQuota = useMutation({
     mutationFn: ({ id, body }: { id: number; body: { plan_id?: number; max_screens: number; max_ad_slots: number } }) =>
       adminApi.updateQuota(id, body),
@@ -261,6 +267,29 @@ export default function AdminTenantsPage() {
                             >
                               <RotateCcw className="size-3" />
                               Restore
+                            </button>
+                            <button
+                              onClick={() => {
+                                const typed = window.prompt(
+                                  `Delete "${tenant.name}" permanently, right now?
+
+Every screen, advert, playlist, user and file in this workspace is erased from the database and storage. This cannot be undone.
+
+Type the workspace name to confirm:`,
+                                )
+                                if (typed !== null && typed.trim() === tenant.name) {
+                                  deleteNow.mutate({ id: tenant.id, name: typed.trim() })
+                                } else if (typed !== null) {
+                                  setMessage('')
+                                  setError('That is not the workspace name — nothing was deleted.')
+                                }
+                              }}
+                              disabled={deleteNow.isPending}
+                              title="Erase this workspace from the database now instead of waiting 30 days"
+                              className="flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/20 px-3 py-1.5 text-xs text-rose-300 transition-all hover:bg-rose-500/30 disabled:opacity-50"
+                            >
+                              <Trash2 className="size-3" />
+                              {deleteNow.isPending ? 'Deleting…' : 'Delete now'}
                             </button>
                           </>
                         ) : (

@@ -714,6 +714,13 @@ export const adminApi = {
     fetchWithAuth<TenantSummary>(`/admin/tenants/${id}`, { method: 'DELETE' }),
   restoreTenant: (id: number) =>
     fetchWithAuth<TenantSummary>(`/admin/tenants/${id}/restore`, { method: 'POST' }),
+  // Skip the rest of the 30 days: rows and files go now. Only for a removed workspace, and the
+  // server checks the typed name as well.
+  deleteTenantPermanently: (id: number, confirmName: string) =>
+    fetchWithAuth<{ name: string; rows: Record<string, number> }>(
+      `/admin/tenants/${id}/permanent?confirm_name=${encodeURIComponent(confirmName)}`,
+      { method: 'DELETE' },
+    ),
 
   // What the bucket actually holds, and which workspace put it there. `refresh` forces a
   // re-count; the server caches it because LIST is billed per request.

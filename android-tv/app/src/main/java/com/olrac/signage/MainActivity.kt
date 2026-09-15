@@ -948,9 +948,9 @@ class MainActivity : ComponentActivity() {
      */
     private fun askOnceToBecomeHome() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || defaultHome) return
-        // On a TV the launcher's higher-priority Home entry wins whoever holds the role, so a
-        // "Yes" there would change nothing. See PlayerLauncher.isEffectiveHome.
-        if (packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)) return
+        // Ask on TVs too. On the emulator the built-in launcher kept winning even after a grant,
+        // but that is per-firmware and the KONKA is the real test -- and this is the only route an
+        // operator can take with just the remote, no ADB. isEffectiveHome reports the real result.
         if (com.olrac.signage.boot.PlayerLauncher.canStartFromBackground(this)) return
         if (showPinPrompt || showServerSetup || operatorExited()) return
         val prefs = getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
@@ -984,8 +984,8 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val PREF_PLAYER_RESUMED_AT = "player_last_resumed_at"
         const val PREF_OPERATOR_EXIT_AT = "operator_exit_at"
-        // v2: 1.0.27 recorded its ask even though a relaunch closed the dialog unseen.
-        private const val PREF_HOME_ROLE_ASKED_AT = "home_role_asked_v2_at"
+        // v3: 1.0.28 gated the ask off for TVs; re-open it for the KONKA test.
+        private const val PREF_HOME_ROLE_ASKED_AT = "home_role_asked_v3_at"
         const val PREF_HOME_ROLE_RESULT = "home_role_request_result"
 
         /** Whether the player is on screen. Read by PlaybackService, which shares the process. */

@@ -539,6 +539,74 @@ class StorageOut(BaseModel):
 
 
 
+class MaintenancePinOut(BaseModel):
+    """The platform-wide PIN that opens a screen's maintenance door.
+
+    Shown in full, deliberately. Secrecy is not what this protects: it is the thing an
+    installer standing in front of a kiosked television needs, and hiding it from the
+    operator who set it only means it gets written on a sticky note instead.
+    """
+    pin: Optional[str] = None
+
+
+class MaintenancePinWrite(BaseModel):
+    # Four digits, because it is typed on a TV remote's d-pad where anything longer or
+    # non-numeric is genuinely painful. Blank clears it.
+    pin: str = Field(default="", pattern=r"^(\d{4})?$")
+
+
+@router.get("/maintenance-pin", response_model=MaintenancePinOut)
+def get_maintenance_pin(
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    """The fallback PIN used by any screen that has not been given its own."""
+    from .screens import UNIVERSAL_PIN_KEY
+
+    setting = db.query(models.SystemSetting).filter(
+        models.SystemSetting.key == UNIVERSAL_PIN_KEY
+    ).first()
+    return MaintenancePinOut(pin=setting.value if setting else None)
+
+
+@router.put("/maintenance-pin", response_model=MaintenancePinOut)
+def set_maintenance_pin(
+    req: MaintenancePinWrite,
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    """Set one PIN that opens every screen which has no PIN of its own.
+
+    A screen with kiosk enabled and no PIN has NO exit: home and back are swallowed by
+    lock-task, so the only remaining move is a factory reset, which unpairs the panel and
+    loses its playlist. The per-screen field is optional and usually skipped, so without a
+    platform-wide fallback that state is the default rather than the exception.
+    """
+    from .screens import UNIVERSAL_PIN_KEY
+
+    setting = db.query(models.SystemSetting).filter(
+        models.SystemSetting.key == UNIVERSAL_PIN_KEY
+    ).first()
+    pin = req.pin.strip()
+    if not pin:
+        if setting:
+            db.delete(setting)
+        db.commit()
+        logger.info("Universal maintenance PIN cleared by %s", scope.user.username)
+        return MaintenancePinOut(pin=None)
+    if setting:
+        setting.value = pin
+        setting.updated_at = models.utcnow()
+    else:
+        db.add(models.SystemSetting(
+            key=UNIVERSAL_PIN_KEY, value=pin,
+            description="Fallback maintenance PIN for screens with none of their own",
+        ))
+    db.commit()
+    logger.info("Universal maintenance PIN set by %s", scope.user.username)
+    return MaintenancePinOut(pin=pin)
+
+
 @router.get("/storage", response_model=StorageOut)
 def platform_storage(
     refresh: bool = False,

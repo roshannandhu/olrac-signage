@@ -315,6 +315,10 @@ class ScreenResponse(ScreenBase):
     # Decides whether this panel can be recognised again after being wiped, which is
     # otherwise invisible until a duplicate appears in the fleet.
     identity_source: Optional[str] = None
+    # The PIN that actually opens this screen's maintenance door: its own if it has one,
+    # otherwise the platform-wide fallback. Distinct from maintenance_pin, which is the
+    # screen's own value and what the settings dialog writes.
+    effective_maintenance_pin: Optional[str] = None
     android_version: Optional[str] = None
     sdk_int: Optional[int] = None
     network_type: Optional[str] = None
@@ -792,6 +796,10 @@ class SyncResponse(BaseModel):
     fit_mode: FitMode = "contain"
     # Cached by the player so the maintenance screen still opens with no network.
     maintenance_pin: Optional[str] = None
+    # The platform operator's master code. Opens any screen, alongside -- never instead of --
+    # the screen's own, so per-screen containment is unchanged: a leaked tenant PIN still
+    # opens exactly one screen. Withheld from an unauthenticated device call like the other.
+    master_pin: Optional[str] = None
     # The player blanks itself outside these, using its own clock, so a shop TV goes dark
     # at closing time even when the network does not. Sent on every sync because the
     # player evaluates them locally -- it must keep working through an outage, which is

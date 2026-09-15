@@ -132,6 +132,36 @@ def presents_valid_device_token(device_id: str, credentials: HTTPAuthorizationCr
 # lost again, because nothing else connects a Python timedelta to a Kotlin Long.
 PAIR_CODE_TTL = timedelta(minutes=1)
 
+UNIVERSAL_PIN_KEY = "universal_maintenance_pin"
+
+
+def effective_maintenance_pin(db: Session, screen) -> str | None:
+    """The screen's own maintenance PIN.
+
+    Every screen has one: the column is NOT NULL with a random default, deliberately per
+    screen so that one leaked code does not open the whole fleet. This is the code a TENANT
+    uses on their own wall.
+    """
+    return (getattr(screen, "maintenance_pin", None) or "").strip() or None
+
+
+def master_maintenance_pin(db: Session) -> str | None:
+    """The platform operator's master code, which opens ANY screen.
+
+    A second code rather than a replacement for the per-screen one. Those answer different
+    needs and collapsing them loses both: a tenant wants a code for their own wall, and the
+    operator supporting a panel they have never seen cannot be reading a different four digits
+    off the dashboard for every screen -- least of all when the reason they are there is that
+    the screen has no network and the dashboard shows nothing useful.
+
+    Held by the operator alone, so it is not shown to tenants. Per-screen containment is
+    unchanged: a leaked tenant PIN still opens exactly one screen.
+    """
+    setting = db.query(models.SystemSetting).filter(
+        models.SystemSetting.key == UNIVERSAL_PIN_KEY
+    ).first()
+    return ((setting.value if setting else "") or "").strip() or None
+
 
 @router.post("/register", response_model=schemas.RegisterResponse)
 # Unauthenticated, and it both creates rows and can hand back a credential, so it needs a
@@ -1153,15 +1183,30 @@ async def get_screens(
     # actually do -- ancestor and dynamic groups included. The bare effective_playlist_id
     # property cannot reach those without spending a query per screen.
     groups = groups_by_id(scope.db, {screen.organization_id for screen in screens})
+    # Read once for the whole fleet rather than per screen: it is one row and every screen
+    # without its own PIN resolves to the same answer.
+    universal_pin = _universal_maintenance_pin(scope.db)
     return [
         schemas.ScreenResponse.model_validate(screen).model_copy(
             update={
                 "latest_screenshot": shots.get(screen.id),
                 "effective_playlist_id": screen.resolve_playlist_id(groups),
+                # What actually opens the maintenance door on THIS screen. Reported beside
+                # maintenance_pin rather than replacing it: that field is the screen's own and
+                # is what the settings dialog edits, while this is the one to put in front of
+                # somebody standing at a kiosked television.
+                "effective_maintenance_pin": (screen.maintenance_pin or "").strip() or universal_pin,
             }
         )
         for screen in screens
     ]
+
+
+def _universal_maintenance_pin(db: Session) -> str | None:
+    setting = db.query(models.SystemSetting).filter(
+        models.SystemSetting.key == UNIVERSAL_PIN_KEY
+    ).first()
+    return ((setting.value if setting else "") or "").strip() or None
 
 
 def _is_recent(last_seen) -> bool:
@@ -1624,7 +1669,8 @@ async def sync_tv(
             playlist=demo_playlist,
             playlist_updated_at=models.utcnow(),
             fit_mode=screen.fit_mode or "contain",
-            maintenance_pin=screen.maintenance_pin if getattr(screen, "authenticated", False) else None,
+            maintenance_pin=effective_maintenance_pin(db, screen) if getattr(screen, "authenticated", False) else None,
+            master_pin=master_maintenance_pin(db) if getattr(screen, "authenticated", False) else None,
             sync_interval_seconds=15,
             operating_mode="always",
             pending_command=pending_command,
@@ -1723,7 +1769,8 @@ async def sync_tv(
         fit_mode=screen.fit_mode or "contain",
         # Withheld from a screen that authenticated with nothing but its device id: this
         # pin unlocks the on-TV maintenance screen, and device ids are guessable.
-        maintenance_pin=screen.maintenance_pin if getattr(screen, "authenticated", False) else None,
+        maintenance_pin=effective_maintenance_pin(db, screen) if getattr(screen, "authenticated", False) else None,
+            master_pin=master_maintenance_pin(db) if getattr(screen, "authenticated", False) else None,
         operating_mode=screen.operating_mode or "always",
         operating_hours=screen.operating_hours,
         playlist=playlist_payload,

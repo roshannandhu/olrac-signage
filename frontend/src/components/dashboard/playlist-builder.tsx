@@ -20,7 +20,6 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
-import { invalidateBookingViews } from '@/lib/query-keys'
 import { assetOrientation, clipDuration, dateTimeLocal, loopDuration } from '@/lib/format'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
@@ -428,7 +427,11 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
     },
     onError: (error: Error, _itemId, context) => { restore(context?.previous); toast.error(error.message) },
     onSuccess: () => toast.success(screenId ? 'Removed from this screen' : 'Item removed'),
-    onSettled: () => invalidateBookingViews(queryClient),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: playlistKey })
+      queryClient.invalidateQueries({ queryKey: ['content'] })
+      queryClient.invalidateQueries({ queryKey: ['screens'] })
+    },
   })
 
   // A booked advert joins this screen on the booking it already has: same client, same paid
@@ -465,7 +468,11 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
       if (/plan|sold \d+ screen/i.test(error.message)) setBookingFor(content)
     },
     onSuccess: () => toast.success('Added to this screen'),
-    onSettled: () => invalidateBookingViews(queryClient),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: playlistKey })
+      queryClient.invalidateQueries({ queryKey: ['content'] })
+      queryClient.invalidateQueries({ queryKey: ['screens'] })
+    },
   })
 
   // Zero-lag instant optimistic update for editing item duration, rotation, schedule, and transition
@@ -499,9 +506,16 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
       restore(context?.previous)
       toast.error(error.message)
     },
-    onSuccess: () => {
-      invalidate()
-      invalidateBookingViews(queryClient)
+    onSuccess: (updated) => {
+      if (updated) {
+        queryClient.setQueryData<Playlist>(playlistKey, (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            items: old.items.map((it) => (it.id === updated.id ? { ...it, ...updated } : it)),
+          }
+        })
+      }
       toast.success('Item settings saved')
     },
     onSettled: () => setSavingItem(null),
@@ -533,9 +547,12 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
       restore(context?.previous)
       toast.error(error.message)
     },
-    onSuccess: (_, variables) => {
-      invalidate()
-      invalidateBookingViews(queryClient)
+    onSuccess: (updatedPlaylist, variables) => {
+      if (updatedPlaylist) {
+        queryClient.setQueryData<Playlist>(playlistKey, updatedPlaylist)
+      } else {
+        queryClient.invalidateQueries({ queryKey: playlistKey })
+      }
       toast.success(variables.applyToAll ? 'Transition applied to every item' : 'Playlist default saved')
     },
   })
@@ -622,7 +639,7 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
     ])
     setTimeout(() => {
       setFlyingItems((prev) => prev.filter((it) => it.id !== flyId))
-    }, 520)
+    }, 240)
 
     if (instant) {
       addBookedMutation.mutate(content)
@@ -665,7 +682,7 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
     ])
     setTimeout(() => {
       setFlyingItems((prev) => prev.filter((it) => it.id !== flyId))
-    }, 520)
+    }, 240)
 
     removeMutation.mutate(item.id)
   }
@@ -733,7 +750,7 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
                 left: 0,
                 top: 0,
                 width: 290,
-                animation: 'flyTranslate 520ms cubic-bezier(0.2, 0.9, 0.3, 1) forwards',
+                animation: 'flyTranslate 240ms cubic-bezier(0.15, 1, 0.3, 1) forwards',
                 '--fly-start-x': `${flying.startX}px`,
                 '--fly-start-y': `${flying.startY}px`,
                 '--fly-end-x': `${flying.targetX}px`,
@@ -750,8 +767,8 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
               )}
               style={{
                 animation: isReverse
-                  ? 'flyElevationReverse 520ms cubic-bezier(0.25, 1, 0.5, 1) forwards'
-                  : 'flyElevationForward 520ms cubic-bezier(0.25, 1, 0.5, 1) forwards',
+                  ? 'flyElevationReverse 240ms cubic-bezier(0.15, 1, 0.3, 1) forwards'
+                  : 'flyElevationForward 240ms cubic-bezier(0.15, 1, 0.3, 1) forwards',
               }}
             >
               <div className="size-11 shrink-0 overflow-hidden rounded-xl bg-black/10 ring-1 ring-black/10 dark:ring-white/10 shadow-sm">

@@ -21,10 +21,10 @@ def _command_key(device_id: str) -> str:
 
 def player_sync_interval_seconds() -> int:
     try:
-        configured = int(os.getenv("PLAYER_SYNC_INTERVAL_SECONDS", "60"))
+        configured = int(os.getenv("PLAYER_SYNC_INTERVAL_SECONDS", "15"))
     except ValueError:
-        configured = 60
-    return max(15, min(configured, 3600))
+        configured = 15
+    return max(5, min(configured, 3600))
 
 
 def screen_offline_after_seconds() -> int:

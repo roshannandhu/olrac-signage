@@ -111,12 +111,17 @@ class MainActivity : ComponentActivity() {
             launchState = LaunchState.CheckingLocalState
         }
         
-        DeviceOwnerManager.applyKioskPolicy(this)
-        if (DeviceOwnerManager.isDeviceOwner(this)) {
-            try {
-                startLockTask()
-            } catch (e: Exception) {
-                // Ignore if it fails
+        if (isHomePressWhileExited()) {
+            // Recreated by a Home press while the operator is outside the player: no kiosk.
+            openSystemLauncher()
+        } else {
+            DeviceOwnerManager.applyKioskPolicy(this)
+            if (DeviceOwnerManager.isDeviceOwner(this)) {
+                try {
+                    startLockTask()
+                } catch (e: Exception) {
+                    // Ignore if it fails
+                }
             }
         }
 
@@ -156,6 +161,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onClose = {
                         showServerSetup = false
+                        DeviceOwnerManager.applyKioskPolicy(this@MainActivity)
                         rearmLockTask()
                     }
                 )
@@ -210,12 +216,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Drop kiosk pinning so the setup screen's system dialogs (launcher-role chooser,
-     *  sign-in browser) can open. Called only AFTER a correct maintenance pin. */
+    /**
+     * Open the maintenance screen's system screens without leaving kiosk. Called only AFTER a
+     * correct maintenance pin.
+     *
+     * This used to stopLockTask(), and that is what threw operators straight back onto the
+     * player after typing the PIN. Whenever the player was running as the home task -- which it
+     * is after every restart or Home press, being the persistent HOME activity -- Android ends
+     * lock task on it by finishing the whole task ("clear-task-all"), then restarts HOME, which
+     * is the player again, freshly created and re-pinned. The maintenance screen was gone before
+     * it was drawn. Seen on the Lenovo TB-8505F at 12:40:45: Unlock tapped, task cleared 83ms
+     * later, a new MainActivity created and locked.
+     *
+     * Kiosk now stays on, and the apps the maintenance buttons open (Settings, the permission
+     * controller) are added to the lock-task allowlist instead, so they can open inside it.
+     * Returning to the player narrows the allowlist back; only Exit ends lock task.
+     */
     private fun enterMaintenance() {
-        if (DeviceOwnerManager.isDeviceOwner(this)) {
-            try { stopLockTask() } catch (e: Exception) {}
-        }
+        DeviceOwnerManager.allowMaintenanceApps(this)
     }
 
     /**
@@ -235,19 +253,50 @@ class MainActivity : ComponentActivity() {
         getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
             .putLong(PREF_OPERATOR_EXIT_AT, System.currentTimeMillis()).apply()
         showServerSetup = false
+        val launcher = systemLauncher()
+        // Home is redirected BEFORE lock task ends: ending it on a home task makes Android
+        // restart HOME, and that has to land on the device's launcher, not on this player.
+        DeviceOwnerManager.releaseKioskPolicy(this, launcher?.let { android.content.ComponentName(it.packageName, it.className) })
+        try { stopLockTask() } catch (e: Exception) {}
+        val opened = openSystemLauncher(launcher)
+        android.util.Log.i("MainActivity", "Operator exit to ${launcher?.packageName ?: "background"} (opened=$opened)")
+    }
+
+    private fun systemLauncher(): com.olrac.signage.data.SystemLauncherPicker.Candidate? {
         val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
         val candidates = packageManager.queryIntentActivities(home, 0).map {
             com.olrac.signage.data.SystemLauncherPicker.Candidate(it.activityInfo.packageName, it.activityInfo.name)
         }
-        val launcher = com.olrac.signage.data.SystemLauncherPicker.pick(candidates, packageName)
-        DeviceOwnerManager.releaseKioskPolicy(this, launcher?.let { android.content.ComponentName(it.packageName, it.className) })
-        try { stopLockTask() } catch (e: Exception) {}
+        return com.olrac.signage.data.SystemLauncherPicker.pick(candidates, packageName)
+    }
+
+    private fun openSystemLauncher(launcher: com.olrac.signage.data.SystemLauncherPicker.Candidate? = systemLauncher()): Boolean {
         val opened = launcher != null && runCatching {
-            startActivity(Intent(home).setClassName(launcher.packageName, launcher.className).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            startActivity(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                    .setClassName(launcher.packageName, launcher.className)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
         }.isSuccess
         if (!opened) moveTaskToBack(true)
-        android.util.Log.i("MainActivity", "Operator exit to ${launcher?.packageName ?: "background"} (opened=$opened)")
+        return opened
     }
+
+    /** Whether the operator has left the player and not deliberately come back to it yet. */
+    private fun operatorExited(): Boolean =
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).contains(PREF_OPERATOR_EXIT_AT)
+
+    /**
+     * A Home press that arrived here while the operator is outside the player.
+     *
+     * Redirecting Home to the device launcher is not enough on its own: on the test tablet Home
+     * still resolved to this player after an exit (it also holds the HOME role), so three presses
+     * pulled the player back and re-locked it. While exited, a HOME intent is passed straight on
+     * to the launcher. Coming back is a deliberate act -- the app icon, "Open app on TV" or a
+     * restart -- none of which arrives as HOME.
+     */
+    private fun isHomePressWhileExited(): Boolean =
+        operatorExited() && intent?.hasCategory(Intent.CATEGORY_HOME) == true
 
     /** Re-pin the kiosk once no maintenance surface is open. Safe to call when already
      *  pinned (a no-op). This is what closes the hole where the gesture alone, or a
@@ -266,9 +315,17 @@ class MainActivity : ComponentActivity() {
         if (launchState is LaunchState.SignIn && !deviceState.isPaired) {
             launchState = LaunchState.SignIn(busy = false)
         }
-        // Back in front after an operator exit: kiosk returns with the player.
-        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit().remove(PREF_OPERATOR_EXIT_AT).apply()
-        DeviceOwnerManager.applyKioskPolicy(this)
+        if (isHomePressWhileExited()) {
+            openSystemLauncher()
+            return
+        }
+        // Back in front after an operator exit: kiosk returns with the player. Not while the PIN
+        // prompt or the maintenance screen is open -- re-applying there would shrink the lock-task
+        // allowlist under Settings the operator just opened from it.
+        if (!showPinPrompt && !showServerSetup) {
+            getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit().remove(PREF_OPERATOR_EXIT_AT).apply()
+            DeviceOwnerManager.applyKioskPolicy(this)
+        }
         defaultHome = isDefaultHomeLauncher()
         hideSystemBars()
         // Backstop: re-pin whenever we are back on the player with no maintenance surface
@@ -314,7 +371,7 @@ class MainActivity : ComponentActivity() {
         // If the user presses the HOME button and this app is the default launcher, 
         // the OS routes the intent here instead of onKeyDown. 
         // We detect 3 presses within 3 seconds to trigger the PIN prompt.
-        if (intent?.hasCategory(Intent.CATEGORY_HOME) == true) {
+        if (intent?.hasCategory(Intent.CATEGORY_HOME) == true && !operatorExited()) {
             val now = System.currentTimeMillis()
             homePressTimes.addLast(now)
             while (homePressTimes.isNotEmpty() && now - homePressTimes.first() > 3000L) {

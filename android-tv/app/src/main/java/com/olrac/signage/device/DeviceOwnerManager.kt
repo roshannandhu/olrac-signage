@@ -54,6 +54,40 @@ object DeviceOwnerManager {
     }
 
     /**
+     * Let the maintenance screen's buttons open system screens while kiosk stays on.
+     *
+     * Lock task only lets allowlisted packages start. Settings, the display-over-apps page and the
+     * launcher-role dialog live in other packages, so they are resolved from the intents those
+     * buttons actually fire and added -- plus the usual package names, in case this app cannot
+     * see them. applyKioskPolicy puts the allowlist back to this player alone.
+     */
+    fun allowMaintenanceApps(context: Context) {
+        if (!isDeviceOwner(context)) return
+        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        val adminName = ComponentName(context, SignageDeviceAdminReceiver::class.java)
+        val pm = context.packageManager
+        val resolved = listOf(
+            Intent(android.provider.Settings.ACTION_SETTINGS),
+            Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION),
+            Intent("android.app.role.action.REQUEST_ROLE"),
+        ).mapNotNull { intent ->
+            runCatching { pm.resolveActivity(intent, 0)?.activityInfo?.packageName }.getOrNull()
+        }.filter { it != "android" }
+        val allowed = (listOf(context.packageName) + resolved + KNOWN_SETTINGS_PACKAGES).distinct()
+        try {
+            dpm.setLockTaskPackages(adminName, allowed.toTypedArray())
+            Log.i(TAG, "Maintenance lock-task allowlist: $allowed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not widen the lock-task allowlist for maintenance", e)
+        }
+    }
+
+    private val KNOWN_SETTINGS_PACKAGES = listOf(
+        "com.android.settings", "com.android.tv.settings",
+        "com.android.permissioncontroller", "com.google.android.permissioncontroller",
+    )
+
+    /**
      * Call on first run when device owner to lock down the device into kiosk mode.
      */
     fun applyKioskPolicy(context: Context) {

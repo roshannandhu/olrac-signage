@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { closestCenter, DndContext, type DragEndEvent, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
@@ -26,8 +26,6 @@ import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import type { ContentItem, Playlist, PlaylistItem, TransitionName } from '@/lib/types'
 
-const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
-const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 const transitionOptions: { value: TransitionName; label: string; description: string }[] = [
   { value: 'none', label: 'Cut', description: 'Immediate handoff' },
   { value: 'fade', label: 'Fade', description: 'Soft crossfade' },
@@ -58,38 +56,45 @@ function previewStyle(type: TransitionName, incoming: boolean, phase: boolean, d
   const style: CSSProperties = {
     opacity: 1,
     transform: 'translate3d(0,0,0) scale(1)',
-    transitionProperty: 'opacity, transform',
-    transitionDuration: type === 'none' ? '0ms' : `${durationMs}ms`,
-    transitionTimingFunction: 'cubic-bezier(.22,1,.36,1)',
+    transitionProperty: 'transform, opacity',
+    transitionDuration: `${durationMs}ms`,
+    transitionTimingFunction: 'cubic-bezier(0.2, 0.8, 0.2, 1)',
   }
-  if (type === 'none' || type === 'fade') style.opacity = incoming ? (phase ? 1 : 0) : (phase ? 0 : 1)
-  if (type === 'zoom') {
-    style.opacity = incoming ? (phase ? 1 : 0) : (phase ? 0 : 1)
-    style.transform = incoming ? `scale(${phase ? 1 : 0.86})` : `scale(${phase ? 1.12 : 1})`
+  if (!phase) {
+    if (type === 'fade') style.opacity = incoming ? 0 : 1
+    if (type === 'slide_left') style.transform = incoming ? 'translate3d(100%,0,0)' : 'translate3d(0,0,0)'
+    if (type === 'slide_right') style.transform = incoming ? 'translate3d(-100%,0,0)' : 'translate3d(0,0,0)'
+    if (type === 'slide_up') style.transform = incoming ? 'translate3d(0,100%,0)' : 'translate3d(0,0,0)'
+    if (type === 'slide_down') style.transform = incoming ? 'translate3d(0,-100%,0)' : 'translate3d(0,0,0)'
+    if (type === 'zoom') {
+      style.opacity = incoming ? 0 : 1
+      style.transform = incoming ? 'translate3d(0,0,0) scale(0.7)' : 'translate3d(0,0,0) scale(1)'
+    }
+  } else {
+    if (type === 'fade') style.opacity = incoming ? 1 : 0
+    if (type === 'slide_left') style.transform = incoming ? 'translate3d(0,0,0)' : 'translate3d(-100%,0,0)'
+    if (type === 'slide_right') style.transform = incoming ? 'translate3d(0,0,0)' : 'translate3d(100%,0,0)'
+    if (type === 'slide_up') style.transform = incoming ? 'translate3d(0,0,0)' : 'translate3d(0,-100%,0)'
+    if (type === 'slide_down') style.transform = incoming ? 'translate3d(0,0,0)' : 'translate3d(0,100%,0)'
+    if (type === 'zoom') {
+      style.opacity = incoming ? 1 : 0
+      style.transform = incoming ? 'translate3d(0,0,0) scale(1)' : 'translate3d(0,0,0) scale(1.3)'
+    }
   }
-  const directions: Partial<Record<TransitionName, [string, string]>> = {
-    slide_left: ['translateX(100%)', 'translateX(-100%)'],
-    slide_right: ['translateX(-100%)', 'translateX(100%)'],
-    slide_up: ['translateY(100%)', 'translateY(-100%)'],
-    slide_down: ['translateY(-100%)', 'translateY(100%)'],
-  }
-  const direction = directions[type]
-  if (direction) style.transform = incoming ? (phase ? 'translate3d(0,0,0)' : direction[0]) : (phase ? direction[1] : 'translate3d(0,0,0)')
   return style
 }
 
 function TransitionPreview({ transition, durationMs, compact = false }: { transition: TransitionName; durationMs: number; compact?: boolean }) {
   const [phase, setPhase] = useState(false)
-  // One interval per preview. Depending on `phase` here instead would tear down and
-  // re-create a timer on every tick, for every item on the page, forever.
   useEffect(() => {
-    const interval = window.setInterval(() => setPhase((current) => !current), Math.max(900, durationMs + 450))
-    return () => window.clearInterval(interval)
-  }, [durationMs])
+    if (transition === 'none') return
+    const interval = setInterval(() => setPhase((current) => !current), Math.max(durationMs + 700, 1500))
+    return () => clearInterval(interval)
+  }, [transition, durationMs])
   return (
-    <div className={cn('relative shrink-0 overflow-hidden rounded-xl bg-slate-950 ring-1 ring-black/10', compact ? 'h-14 w-24' : 'h-24 w-full')} aria-label={`${transitionLabel(transition)} transition preview`}>
-      <div className="absolute inset-0 grid place-items-center bg-slate-800 text-xs font-bold tracking-[0.2em] text-white" style={previewStyle(transition, false, phase, durationMs)}>AD 1</div>
-      <div className="absolute inset-0 grid place-items-center bg-brand text-xs font-bold tracking-[0.2em] text-rail" style={previewStyle(transition, true, phase, durationMs)}>AD 2</div>
+    <div className={cn('relative overflow-hidden rounded-xl border border-hairline bg-slate-950 font-mono text-white', compact ? 'h-16 w-24' : 'h-24 w-full sm:w-44')}>
+      <div style={previewStyle(transition, false, phase, durationMs)} className="absolute inset-0 flex items-center justify-center bg-slate-800 text-[11px] font-semibold tracking-wider text-slate-200">AD 1</div>
+      <div style={previewStyle(transition, true, phase, durationMs)} className="absolute inset-0 flex items-center justify-center bg-primary text-[11px] font-semibold tracking-wider text-white">AD 2</div>
     </div>
   )
 }
@@ -102,16 +107,37 @@ function DefaultTransitionPanel({ playlist, disabled, pending, onSave }: {
 }) {
   const [transition, setTransition] = useState<TransitionName>(playlist.default_transition)
   const [durationMs, setDurationMs] = useState(playlist.default_transition_ms)
+  const dirty = transition !== playlist.default_transition || durationMs !== playlist.default_transition_ms
   return (
-    <Card className="mb-5 border-0 bg-card py-0 shadow-[0_1px_2px_rgba(15,23,42,.04)] ring-1 ring-hairline">
-      <CardContent className="grid grid-cols-1 gap-5 p-5 lg:grid-cols-[minmax(0,1fr)_220px] lg:items-center">
-        <div>
-          <div className="flex items-start gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary dark:text-brand"><Sparkles className="size-4" /></span><div><h3 className="font-semibold text-foreground">Default handoff</h3><p className="mt-1 text-sm text-muted-foreground">Used by every item that does not have its own transition.</p></div></div>
-          <fieldset disabled={disabled || pending} className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)]">
-            <div><Label className="mb-2 text-xs text-muted-foreground">Transition</Label><Select value={transition} onValueChange={(value: TransitionName | null) => value && setTransition(value)}><SelectTrigger className="w-full"><SelectValue>{(value: TransitionName | null) => value ? transitionLabel(value) : 'Choose transition'}</SelectValue></SelectTrigger><SelectContent>{transitionOptions.map((option) => <SelectItem key={option.value} value={option.value}><span><span className="block">{option.label}</span><span className="block text-xs text-muted-foreground">{option.description}</span></span></SelectItem>)}</SelectContent></Select></div>
-            <div><div className="mb-2 flex items-center justify-between"><Label htmlFor="default-transition-duration" className="text-xs text-muted-foreground">Duration</Label><span className="font-mono text-xs text-muted-foreground">{durationMs} ms</span></div><input id="default-transition-duration" type="range" min={100} max={3000} step={50} value={durationMs} onChange={(event) => setDurationMs(Number(event.target.value))} className="h-10 w-full accent-primary" /></div>
-          </fieldset>
-          {!disabled && <div className="mt-4 flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={pending} onClick={() => onSave(transition, durationMs, false)}>Save default</Button><Button size="sm" disabled={pending} onClick={() => onSave(transition, durationMs, true)}><Sparkles data-icon="inline-start" /> Apply to all items</Button></div>}
+    <Card className="mb-6 border-hairline bg-card/60 shadow-[0_1px_2px_rgba(15,23,42,.04)]">
+      <CardContent className="flex flex-col gap-6 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex-1 space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Sparkles className="size-4 text-primary" /> Default handoff
+            </p>
+            <p className="text-muted-foreground/80 mt-1 text-xs">Used by every item that does not have its own transition.</p>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <Label className="text-muted-foreground mb-2 text-xs">Transition</Label>
+              <Select value={transition} onValueChange={(value: TransitionName | null) => value && setTransition(value)} disabled={disabled}>
+                <SelectTrigger className="w-full"><SelectValue>{(value: TransitionName | null) => (value ? transitionLabel(value) : 'Choose transition')}</SelectValue></SelectTrigger>
+                <SelectContent>{transitionOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <Label htmlFor="default-transition-duration" className="text-muted-foreground text-xs">Duration</Label>
+                <span className="text-muted-foreground font-mono text-xs">{durationMs} ms</span>
+              </div>
+              <input id="default-transition-duration" type="range" min={100} max={3000} step={50} value={durationMs} disabled={disabled} onChange={(event) => setDurationMs(Number(event.target.value))} className="accent-primary h-10 w-full" />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <Button size="sm" variant="outline" disabled={disabled || pending || !dirty} onClick={() => onSave(transition, durationMs, false)}>Save default</Button>
+            <Button size="sm" variant="default" disabled={disabled || pending} onClick={() => onSave(transition, durationMs, true)}><Sparkles data-icon="inline-start" /> Apply to all items</Button>
+          </div>
         </div>
         <TransitionPreview transition={transition} durationMs={durationMs} />
       </CardContent>
@@ -123,7 +149,7 @@ function DefaultTransitionPanel({ playlist, disabled, pending, onSave }: {
 // the transition and schedule editors both always open, a twenty-item loop rendered
 // forty selects, forty sliders and a hundred and forty day toggles on one screen —
 // and each item needed two separate saves to commit one change.
-function ItemRow({ item, defaultTransition, defaultDurationMs, canEdit, saving, onRemove, onSave }: {
+function ItemRow({ item, defaultTransition, defaultDurationMs, canEdit, saving, onRemove, onSave, highlighted = false }: {
   item: PlaylistItem
   defaultTransition: TransitionName
   defaultDurationMs: number
@@ -139,38 +165,37 @@ function ItemRow({ item, defaultTransition, defaultDurationMs, canEdit, saving, 
     transition_ms: number | null
     rotation: number | null
   }) => void
+  highlighted?: boolean
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id, disabled: !canEdit })
   const [open, setOpen] = useState(false)
 
-  const initial = useMemo(() => ({
+  const [form, setForm] = useState({
     duration: item.duration,
-    rotation: item.rotation === null || item.rotation === undefined ? '' : String(item.rotation),
-    selection: (item.transition || 'inherit') as Selection,
-    transitionMs: item.transition_ms ?? defaultDurationMs,
     startAt: dateTimeLocal(item.start_at),
     endAt: dateTimeLocal(item.end_at),
     days: item.schedule?.days_of_week || [],
-    windowStart: item.schedule?.start_time?.slice(0, 5) || '',
-    windowEnd: item.schedule?.end_time?.slice(0, 5) || '',
-  }), [item, defaultDurationMs])
+    windowStart: item.schedule?.start_time || '',
+    windowEnd: item.schedule?.end_time || '',
+    selection: (item.transition ?? 'inherit') as Selection,
+    transitionMs: item.transition_ms ?? defaultDurationMs,
+    rotation: item.rotation === null || item.rotation === undefined ? '' : String(item.rotation),
+  })
 
-  const [form, setForm] = useState(initial)
-  // Re-sync when the server hands back a new version of this item, so a save does not
-  // leave stale values sitting in an open panel. Adjusting during render rather than in
-  // an effect avoids a second render pass; `initial` only changes identity when the
-  // query returns a genuinely different item.
-  const [syncedFrom, setSyncedFrom] = useState(initial)
-  if (syncedFrom !== initial) {
-    setSyncedFrom(initial)
-    setForm(initial)
-  }
-  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((current) => ({ ...current, [key]: value }))
+  const dirty =
+    form.duration !== item.duration ||
+    form.startAt !== dateTimeLocal(item.start_at) ||
+    form.endAt !== dateTimeLocal(item.end_at) ||
+    form.selection !== (item.transition ?? 'inherit') ||
+    (form.selection !== 'inherit' && form.transitionMs !== (item.transition_ms ?? defaultDurationMs)) ||
+    form.rotation !== (item.rotation === null || item.rotation === undefined ? '' : String(item.rotation))
+
+  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) =>
+    setForm((current) => ({ ...current, [key]: value }))
 
   const effectiveTransition = form.selection === 'inherit' ? defaultTransition : form.selection
   const effectiveMs = form.selection === 'inherit' ? defaultDurationMs : form.transitionMs
-  const scheduled = Boolean(form.startAt || form.endAt || form.days.length || form.windowStart || form.windowEnd)
-  const dirty = JSON.stringify(form) !== JSON.stringify(initial)
+  const scheduled = Boolean(item.start_at || item.end_at || item.schedule)
 
   const save = () => {
     if (form.startAt && form.endAt && form.endAt <= form.startAt) {
@@ -190,7 +215,17 @@ function ItemRow({ item, defaultTransition, defaultDurationMs, canEdit, saving, 
   }
 
   return (
-    <Card ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn('border-0 bg-card py-0 ring-1 ring-hairline', isDragging ? 'z-20 opacity-80 shadow-2xl' : 'shadow-[0_1px_2px_rgba(15,23,42,.04)]', item.id < 0 && 'animate-in fade-in slide-in-from-right-4 duration-300')}>
+    <Card
+      id={`timeline-item-${item.id}`}
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        'border-0 bg-card py-0 ring-1 ring-hairline transition-all duration-300',
+        isDragging ? 'z-20 opacity-80 shadow-2xl' : 'shadow-[0_1px_2px_rgba(15,23,42,.04)]',
+        item.id < 0 && 'animate-in fade-in slide-in-from-right-4 duration-300',
+        highlighted && 'ring-2 ring-primary bg-primary/5 shadow-lg shadow-primary/25 scale-[1.015]'
+      )}
+    >
       <CardContent className="p-4 sm:p-5">
         <div className="flex items-center gap-3">
           <button type="button" {...attributes} {...listeners} disabled={!canEdit} className="grid size-9 shrink-0 cursor-grab place-items-center rounded-lg text-muted-foreground/40 hover:bg-muted hover:text-muted-foreground active:cursor-grabbing disabled:cursor-default focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none" aria-label={`Move ${item.content.name}`}><GripVertical className="size-5" /></button>
@@ -317,6 +352,15 @@ function ItemRow({ item, defaultTransition, defaultDurationMs, canEdit, saving, 
   )
 }
 
+interface FlyingItem {
+  id: string
+  content: ContentItem
+  startX: number
+  startY: number
+  targetX: number
+  targetY: number
+}
+
 export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
   playlistId: number
   showHeader?: boolean
@@ -332,6 +376,10 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
   const [localOrder, setLocalOrder] = useState<number[] | null>(null)
   const [search, setSearch] = useState('')
   const [savingItem, setSavingItem] = useState<number | null>(null)
+  const [flyingItems, setFlyingItems] = useState<FlyingItem[]>([])
+  const [highlightedItemId, setHighlightedItemId] = useState<number | null>(null)
+  const timelineRef = useRef<HTMLElement | null>(null)
+  const flyCounterRef = useRef(0)
 
   const serverItems = useMemo(() => [...(playlistQuery.data?.items || [])].sort((a, b) => a.order - b.order), [playlistQuery.data?.items])
   const items = useMemo(() => {
@@ -417,17 +465,77 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
     onSuccess: () => toast.success('Added to this screen'),
     onSettled: () => invalidateBookingViews(queryClient),
   })
+
+  // Zero-lag instant optimistic update for editing item duration, rotation, schedule, and transition
   const updateMutation = useMutation({
-    mutationFn: ({ itemId, data }: { itemId: number; data: Parameters<typeof api.updatePlaylistItem>[2] }) => api.updatePlaylistItem(playlistId, itemId, data),
-    onMutate: ({ itemId }) => setSavingItem(itemId),
-    onSuccess: () => { invalidate(); toast.success('Item settings saved') },
-    onError: (error: Error) => toast.error(error.message),
+    mutationFn: ({ itemId, data }: { itemId: number; data: Parameters<typeof api.updatePlaylistItem>[2] }) =>
+      api.updatePlaylistItem(playlistId, itemId, data),
+    onMutate: async ({ itemId, data }) => {
+      setSavingItem(itemId)
+      const previous = await snapshot()
+      if (previous) {
+        queryClient.setQueryData<Playlist>(playlistKey, {
+          ...previous,
+          items: previous.items.map((it) => {
+            if (it.id !== itemId) return it
+            return {
+              ...it,
+              duration: data.duration !== undefined ? data.duration : it.duration,
+              rotation: data.rotation !== undefined ? data.rotation : it.rotation,
+              start_at: data.start_at !== undefined ? data.start_at : it.start_at,
+              end_at: data.end_at !== undefined ? data.end_at : it.end_at,
+              schedule: data.schedule !== undefined ? data.schedule : it.schedule,
+              transition: data.transition !== undefined ? data.transition : it.transition,
+              transition_ms: data.transition_ms !== undefined ? data.transition_ms : it.transition_ms,
+            }
+          }),
+        })
+      }
+      return { previous }
+    },
+    onError: (error: Error, _vars, context) => {
+      restore(context?.previous)
+      toast.error(error.message)
+    },
+    onSuccess: () => {
+      invalidate()
+      invalidateBookingViews(queryClient)
+      toast.success('Item settings saved')
+    },
     onSettled: () => setSavingItem(null),
   })
+
+  // Zero-lag instant optimistic update for default playlist transitions
   const transitionMutation = useMutation({
-    mutationFn: ({ transition, durationMs, applyToAll }: { transition: TransitionName; durationMs: number; applyToAll: boolean }) => api.updatePlaylistTransitions(playlistId, { transition, transition_ms: durationMs, apply_to_all: applyToAll }),
-    onSuccess: (_, variables) => { invalidate(); toast.success(variables.applyToAll ? 'Transition applied to every item' : 'Playlist default saved') },
-    onError: (error: Error) => toast.error(error.message),
+    mutationFn: ({ transition, durationMs, applyToAll }: { transition: TransitionName; durationMs: number; applyToAll: boolean }) =>
+      api.updatePlaylistTransitions(playlistId, { transition, transition_ms: durationMs, apply_to_all: applyToAll }),
+    onMutate: async ({ transition, durationMs, applyToAll }) => {
+      const previous = await snapshot()
+      if (previous) {
+        queryClient.setQueryData<Playlist>(playlistKey, {
+          ...previous,
+          default_transition: transition,
+          default_transition_ms: durationMs,
+          items: applyToAll
+            ? previous.items.map((it) => ({
+                ...it,
+                transition,
+                transition_ms: durationMs,
+              }))
+            : previous.items,
+        })
+      }
+      return { previous }
+    },
+    onError: (error: Error, _vars, context) => {
+      restore(context?.previous)
+      toast.error(error.message)
+    },
+    onSuccess: (_, variables) => {
+      invalidate()
+      invalidateBookingViews(queryClient)
+      toast.success(variables.applyToAll ? 'Transition applied to every item' : 'Playlist default saved')
+    },
   })
 
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
@@ -439,6 +547,7 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
     setLocalOrder(order)
     reorderMutation.mutate(order)
   }
+
   // The player has no notion of "the same advert", so a second copy in one loop is simply
   // the ad airing twice a cycle -- billed once, delivered twice. The server refuses it; the
   // library marks the advert as already here instead of offering something that can only fail.
@@ -464,8 +573,55 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
   const playlist = playlistQuery.data
   if (!playlist) return null
   const totalDuration = items.reduce((total, item) => total + item.duration, 0)
-  const here = screenId ? 'On this screen' : 'In this loop'
   const shortDate = (value?: string | null) => (value ? new Date(value).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '')
+
+  const handleAddItem = (content: ContentItem, instant: boolean, event?: React.MouseEvent) => {
+    const placed = placedContentIds.has(content.id)
+    if (placed) {
+      const existing = items.find((it) => it.content.id === content.id)
+      if (existing) {
+        setHighlightedItemId(existing.id)
+        const el = document.getElementById(`timeline-item-${existing.id}`)
+        el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        setTimeout(() => setHighlightedItemId((prev) => (prev === existing.id ? null : prev)), 2000)
+        toast.info(`"${content.name}" is already in this loop`)
+      }
+      return
+    }
+
+    // Capture starting position from clicked card
+    let startX = window.innerWidth * 0.75
+    let startY = 300
+    if (event) {
+      const btn = event.currentTarget as HTMLElement
+      const row = btn.closest('[data-library-row]') as HTMLElement
+      const rect = (row || btn).getBoundingClientRect()
+      startX = rect.left
+      startY = rect.top
+    }
+
+    // Target landing point in the Playback Timeline
+    let targetX = window.innerWidth * 0.25
+    let targetY = 350
+    if (timelineRef.current) {
+      const tRect = timelineRef.current.getBoundingClientRect()
+      targetX = tRect.left + 24
+      targetY = Math.min(window.innerHeight - 120, Math.max(120, tRect.bottom - 40))
+    }
+
+    flyCounterRef.current += 1
+    const flyId = `${content.id}-${flyCounterRef.current}`
+    setFlyingItems((prev) => [...prev, { id: flyId, content, startX, startY, targetX, targetY }])
+    setTimeout(() => {
+      setFlyingItems((prev) => prev.filter((it) => it.id !== flyId))
+    }, 480)
+
+    if (instant) {
+      addBookedMutation.mutate(content)
+    } else {
+      setBookingFor(content)
+    }
+  }
 
   const libraryRow = (content: ContentItem, booked: boolean) => {
     const placed = placedContentIds.has(content.id)
@@ -473,8 +629,23 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
     const adding = addBookedMutation.isPending && addBookedMutation.variables?.id === content.id
     const instant = booked && Boolean(screenId)
     return (
-      <div key={content.id} className={cn('flex items-center gap-3 rounded-xl border border-hairline p-2.5 transition-colors duration-200 hover:bg-muted', placed && 'bg-muted/40')}>
-        <div className="relative size-12 shrink-0"><MediaThumbnail item={content} className="size-12 rounded-lg" />{clipDuration(content.duration_ms) && <span className="absolute right-0 bottom-0 rounded bg-black/75 px-1 text-[9px] font-semibold text-white">{clipDuration(content.duration_ms)}</span>}</div>
+      <div
+        key={content.id}
+        data-library-row
+        id={`library-item-${content.id}`}
+        className={cn(
+          'flex items-center gap-3 rounded-xl border border-hairline p-2.5 transition-colors duration-200 hover:bg-muted',
+          placed && 'bg-muted/40'
+        )}
+      >
+        <div className="relative size-12 shrink-0">
+          <MediaThumbnail item={content} className="size-12 rounded-lg" />
+          {clipDuration(content.duration_ms) && (
+            <span className="absolute right-0 bottom-0 rounded bg-black/75 px-1 text-[9px] font-semibold text-white">
+              {clipDuration(content.duration_ms)}
+            </span>
+          )}
+        </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-foreground">{content.name}</p>
           <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
@@ -484,36 +655,80 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
             {content.client_name && ` • ${content.client_name}`}
           </p>
         </div>
-        {placed ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400"><Check className="size-3" />{here}</span>
-        ) : (
-          <Button
-            size="icon-sm"
-            variant={instant ? 'default' : 'outline'}
-            disabled={!canEdit || adding}
-            onClick={() => (instant ? addBookedMutation.mutate(content) : setBookingFor(content))}
-            aria-label={instant ? `Add ${content.name} to this screen` : `Book ${content.name}`}
-          >
-            <Plus />
-          </Button>
-        )}
+        <Button
+          size="icon-sm"
+          variant={instant ? 'default' : 'outline'}
+          disabled={!canEdit || adding}
+          onClick={(e) => handleAddItem(content, instant, e)}
+          aria-label={instant ? `Add ${content.name} to this screen` : `Book ${content.name}`}
+          className={cn(
+            'transition-transform active:scale-90',
+            placed && 'border-primary/40 text-primary hover:bg-primary/10'
+          )}
+        >
+          <Plus className="size-4" />
+        </Button>
       </div>
     )
   }
 
   return (
-    <div className="space-y-8">
+    <div className="relative space-y-8">
+      {/* Moving transition flying animation overlay */}
+      {flyingItems.map((flying) => (
+        <div
+          key={flying.id}
+          className="pointer-events-none fixed z-[99999] flex items-center gap-3 rounded-xl border border-primary/40 bg-card/95 p-3 shadow-2xl backdrop-blur-md ring-2 ring-primary/60"
+          style={
+            {
+              left: 0,
+              top: 0,
+              width: 280,
+              animation: 'flyArc 480ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
+              '--fly-start-x': `${flying.startX}px`,
+              '--fly-start-y': `${flying.startY}px`,
+              '--fly-end-x': `${flying.targetX}px`,
+              '--fly-end-y': `${flying.targetY}px`,
+            } as React.CSSProperties & Record<string, string | number>
+          }
+        >
+          <div className="size-10 shrink-0 overflow-hidden rounded-lg bg-black/10">
+            <MediaThumbnail item={flying.content} className="size-10 rounded-lg object-cover" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-xs font-semibold text-foreground">{flying.content.name}</p>
+            <span className="text-[10px] text-primary font-medium flex items-center gap-1">
+              <Sparkles className="size-2.5 animate-spin" /> Adding to timeline…
+            </span>
+          </div>
+        </div>
+      ))}
+
       {showHeader && <PageHeader eyebrow="Playlist builder" title={playlist.name} description="Set the loop order, control each handoff, and schedule exactly when every item may play." actions={<div className="flex items-center gap-2"><Badge variant="outline">{items.length} items</Badge><Badge variant="outline">{loopDuration(totalDuration)} loop</Badge>{!canEdit && <Badge variant="warning">View only</Badge>}</div>} />}
 
       <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <section aria-labelledby="timeline-title">
+        <section id="playback-timeline-container" ref={timelineRef} aria-labelledby="timeline-title">
           <h2 id="timeline-title" className="mb-4 text-sm font-semibold text-foreground">Playback timeline</h2>
           <DefaultTransitionPanel key={`${playlist.default_transition}-${playlist.default_transition_ms}`} playlist={playlist} disabled={!canEdit} pending={transitionMutation.isPending} onSave={(transition, durationMs, applyToAll) => transitionMutation.mutate({ transition, durationMs, applyToAll })} />
           {!items.length ? <EmptyState icon={ListVideo} title="This playlist has no content" description="Choose an asset from the library to start building the loop." /> : (
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={items.map((item) => item.id)} strategy={verticalListSortingStrategy}>
                 {/* A row still being added has no server id yet, so nothing can be done to it until it lands. */}
-                <div className="space-y-3">{items.map((item) => <ItemRow key={item.id} item={item} defaultTransition={playlist.default_transition} defaultDurationMs={playlist.default_transition_ms} canEdit={canEdit && item.id > 0} saving={savingItem === item.id} onRemove={() => removeMutation.mutate(item.id)} onSave={(data) => updateMutation.mutate({ itemId: item.id, data })} />)}</div>
+                <div className="space-y-3">
+                  {items.map((item) => (
+                    <ItemRow
+                      key={item.id}
+                      item={item}
+                      defaultTransition={playlist.default_transition}
+                      defaultDurationMs={playlist.default_transition_ms}
+                      canEdit={canEdit && item.id > 0}
+                      saving={savingItem === item.id}
+                      highlighted={highlightedItemId === item.id}
+                      onRemove={() => removeMutation.mutate(item.id)}
+                      onSave={(data) => updateMutation.mutate({ itemId: item.id, data })}
+                    />
+                  ))}
+                </div>
               </SortableContext>
             </DndContext>
           )}

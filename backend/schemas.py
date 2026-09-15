@@ -315,6 +315,9 @@ class ScreenResponse(ScreenBase):
     # Decides whether this panel can be recognised again after being wiped, which is
     # otherwise invisible until a duplicate appears in the fleet.
     identity_source: Optional[str] = None
+    # None = the player has not said yet (an older build). False = updates on this screen
+    # wait for someone to tap a dialog.
+    device_owner: Optional[bool] = None
     # The PIN that actually opens this screen's maintenance door: its own if it has one,
     # otherwise the platform-wide fallback. Distinct from maintenance_pin, which is the
     # screen's own value and what the settings dialog writes.
@@ -688,6 +691,10 @@ class DeviceTokenResponse(BaseModel):
 class HeartbeatRequest(BaseModel):
     device_id: str
     device_version: Optional[str] = None
+    # True when the player is Android's device owner and can therefore install an update
+    # unattended. Reported every beat, because a panel can be provisioned long after it was
+    # first paired.
+    device_owner: Optional[bool] = None
     storage_used: Optional[str] = None
     playback_state: Optional[PlaybackState] = None
     current_item_id: Optional[int] = None
@@ -1162,6 +1169,9 @@ class PlacementCreate(BaseModel):
     # Naming a plan fills in price and ends_at from it when those are not given. The values
     # are COPIED, never read through -- repricing a plan must not rebill a sold booking.
     plan_id: Optional[int] = None
+    # How many screens this booking may cover when no plan is named. 0 = no cap, which is
+    # what a custom sale has always meant. A package states its own limit and overrides it.
+    max_locations: int = Field(default=0, ge=0, le=10000)
     price_paise: int = Field(default=0, ge=0)
     is_paid: bool = False
     starts_at: datetime
@@ -1261,6 +1271,10 @@ class PlanChange(BaseModel):
     # these are actually sold -- tenant and client agree a figure and the tenant fixes it.
     # Omitted means the plan's list price, or, moving to custom, whatever it already costs.
     price_paise: Optional[int] = Field(default=None, ge=0)
+    # The custom screen cap, re-cut here because a renegotiation is exactly when it moves --
+    # "same money, one more screen". Only meaningful off a package; omitted leaves it alone,
+    # and 0 lifts it. A change that would leave the booking over the new cap is refused.
+    max_locations: Optional[int] = Field(default=None, ge=0, le=10000)
 
 
 # Validated here rather than as a database enum so adding one is a deploy, not a migration.
@@ -1360,10 +1374,15 @@ class PlacementResponse(BaseModel):
     # How much of the plan this booking is actually delivering, groups expanded. Over is a
     # 409 and never reaches here; UNDER is reported, because a client paying for five
     # screens and running on three is owed two and nothing was telling anyone.
-    # `plan_max_locations` is 0 when the plan does not cap locations, or there is no plan.
+    # `plan_max_locations` is the cap in force -- the package's, or the booking's own when
+    # it is sold off a package -- and 0 when nothing caps it. Kept under that name because
+    # four dashboard views already read it; `plan` above says which of the two it came from.
     screens_used: int = 0
     plan_max_locations: int = 0
     screens_unused: int = 0
+    # The booking's OWN cap as stored, so "Change plan" can show the number back for editing
+    # rather than inferring it from a field that may be quoting the package instead.
+    max_locations: int = 0
     # How the booking was settled. `is_paid` above says whether; these say what, when and
     # by which method, oldest first, and the list is empty until someone records one.
     # A list because clients pay deposits: `amount_paid_paise` is their sum.

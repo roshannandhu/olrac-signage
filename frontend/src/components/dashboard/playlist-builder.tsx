@@ -380,7 +380,42 @@ export function PlaylistBuilder({ playlistId, showHeader = true }: { playlistId:
     setLocalOrder(order)
     reorderMutation.mutate(order)
   }
-  const availableContent = useMemo(() => (contentQuery.data || []).filter((item) => item.name.toLowerCase().includes(search.toLowerCase()) || item.tags?.toLowerCase().includes(search.toLowerCase())), [contentQuery.data, search])
+  // Assets the loop is already running are not offered again: the player has no notion of
+  // "the same advert", so a second copy is simply the ad airing twice a cycle -- billed
+  // once, delivered twice. The backend refuses it too; this is what stops the operator
+  // being offered something that can only fail.
+  const placedContentIds = useMemo(() => new Set(items.map((item) => item.content.id)), [items])
+  // Ids mid-flight out of the library, so the row can animate away before it disappears.
+  // Keyed on content id rather than an index -- the list re-sorts underneath this.
+  const [leaving, setLeaving] = useState<Set<number>>(new Set())
+  useEffect(() => {
+    if (!leaving.size) return
+    const ids = [...leaving]
+    // Anything that has actually landed in the timeline has finished leaving; dropping it
+    // here is what lets the row unmount once the transition has played.
+    //
+    // The longer wait is for what never arrives. A booking can be retargeted inside the
+    // dialog onto screens this loop does not show, and then the advert is simply not coming
+    // here -- so the row is put back rather than left sitting at opacity 0, which is a
+    // library that has silently lost an asset until the page is reloaded.
+    const landed = ids.filter((id) => placedContentIds.has(id))
+    const timer = window.setTimeout(
+      () => setLeaving((current) => new Set([...current].filter((id) => !ids.includes(id)))),
+      landed.length === ids.length ? 260 : 3000,
+    )
+    return () => window.clearTimeout(timer)
+  }, [leaving, placedContentIds])
+
+  const availableContent = useMemo(
+    () =>
+      (contentQuery.data || []).filter(
+        (item) =>
+          (!placedContentIds.has(item.id) || leaving.has(item.id)) &&
+          (item.name.toLowerCase().includes(search.toLowerCase()) ||
+            item.tags?.toLowerCase().includes(search.toLowerCase())),
+      ),
+    [contentQuery.data, search, placedContentIds, leaving],
+  )
 
   if (playlistQuery.isError || contentQuery.isError) return <ErrorState message="The playlist builder could not be loaded." onRetry={() => { playlistQuery.refetch(); contentQuery.refetch() }} />
   if (playlistQuery.isLoading) return <div className="space-y-6"><Skeleton className="h-24" /><div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]"><Skeleton className="h-[520px]" /><Skeleton className="h-[520px]" /></div></div>
@@ -409,7 +444,7 @@ export function PlaylistBuilder({ playlistId, showHeader = true }: { playlistId:
           <div className="flex items-center justify-between"><div><h2 id="library-title" className="font-semibold text-foreground">Content library</h2><p className="mt-1 text-xs text-muted-foreground/70">{availableContent.length} assets available</p></div><Badge variant="secondary">Book to screens</Badge></div>
           <div className="relative mt-4"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/70" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search assets…" className="pl-9" aria-label="Search library" /></div>
           <div className="mt-4 max-h-[660px] space-y-2 overflow-y-auto pr-1">
-            {contentQuery.isLoading ? Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-20" />) : availableContent.map((content) => <div key={content.id} className="flex items-center gap-3 rounded-xl border border-hairline p-2.5 hover:bg-muted"><div className="relative size-12 shrink-0"><MediaThumbnail item={content} className="size-12 rounded-lg" />{clipDuration(content.duration_ms) && <span className="absolute right-0 bottom-0 rounded bg-black/75 px-1 text-[9px] font-semibold text-white">{clipDuration(content.duration_ms)}</span>}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-foreground">{content.name}</p><p className="mt-0.5 text-xs text-muted-foreground/70"><span className="capitalize">{content.type}</span>{assetOrientation(content.renditions) && ` • ${assetOrientation(content.renditions)}`}{clipDuration(content.duration_ms) && ` • ${clipDuration(content.duration_ms)}`}</p></div><Button size="icon-sm" variant="outline" disabled={!canEdit} onClick={() => setBookingFor(content)} aria-label={`Book ${content.name} to screens`}><Plus /></Button></div>)}
+            {contentQuery.isLoading ? Array.from({ length: 5 }).map((_, index) => <Skeleton key={index} className="h-20" />) : availableContent.map((content) => <div key={content.id} className={cn('flex items-center gap-3 rounded-xl border border-hairline p-2.5 transition-all duration-200 motion-reduce:transition-none hover:bg-muted', leaving.has(content.id) && '-translate-x-4 scale-95 opacity-0')}><div className="relative size-12 shrink-0"><MediaThumbnail item={content} className="size-12 rounded-lg" />{clipDuration(content.duration_ms) && <span className="absolute right-0 bottom-0 rounded bg-black/75 px-1 text-[9px] font-semibold text-white">{clipDuration(content.duration_ms)}</span>}</div><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-foreground">{content.name}</p><p className="mt-0.5 text-xs text-muted-foreground/70"><span className="capitalize">{content.type}</span>{assetOrientation(content.renditions) && ` • ${assetOrientation(content.renditions)}`}{clipDuration(content.duration_ms) && ` • ${clipDuration(content.duration_ms)}`}</p></div><Button size="icon-sm" variant="outline" disabled={!canEdit} onClick={() => setBookingFor(content)} aria-label={`Book ${content.name} to screens`}><Plus /></Button></div>)}
             {!availableContent.length && <div className="py-10 text-center"><Search className="mx-auto size-5 text-muted-foreground/40" /><p className="mt-2 text-sm text-muted-foreground/70">No matching assets</p></div>}
           </div>
         </aside>
@@ -423,6 +458,10 @@ export function PlaylistBuilder({ playlistId, showHeader = true }: { playlistId:
           screens={screensShowingThisPlaylist}
           open={Boolean(bookingFor)}
           onOpenChange={(next) => { if (!next) setBookingFor(null) }}
+          // Start the row animating out of the library the moment the booking lands. It is
+          // held in `leaving` until the refetched timeline actually contains it, so a
+          // booking that fails server-side leaves the asset where it was.
+          onBooked={() => setLeaving((current) => new Set(current).add(bookingFor.id))}
         />
       )}
     </div>

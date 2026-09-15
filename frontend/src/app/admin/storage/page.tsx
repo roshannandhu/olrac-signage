@@ -51,10 +51,31 @@ export default function AdminStoragePage() {
 
       <Feedback ok="" error={error ? (error as Error).message : ''} />
 
-      {data && !data.configured && (
+      {/* On `error`, not on `!configured`. A LIST that fails -- a token without list
+          permission, a bucket that moved -- comes back configured:true WITH an error, and
+          this banner used to ignore that case entirely: every counter read a confident
+          0 B, which is indistinguishable from a bucket that is genuinely empty. */}
+      {data?.error && (
         <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
           <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-400" />
-          <p className="text-muted-foreground">{data.error}</p>
+          <p className="text-muted-foreground">
+            {data.error}
+            {data.configured && ' Until this is fixed the totals below are not a measurement.'}
+          </p>
+        </div>
+      )}
+
+      {/* And the other half of that ambiguity: say when the count succeeded and found
+          nothing, rather than leaving four zeroes to be read as a failure. */}
+      {data?.configured && !data.error && data.object_count === 0 && (
+        <div className="flex items-start gap-3 rounded-xl border border-sky-500/30 bg-sky-500/10 p-4 text-sm">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-sky-400" />
+          <p className="text-muted-foreground">
+            The bucket was counted successfully and holds nothing. Where a workspace shows
+            bytes under &ldquo;per database&rdquo;, those files are still in the Postgres
+            mirror and have not been copied to object storage —{' '}
+            <code className="text-foreground">scripts/sync_db_blobs_to_r2.py</code> moves them.
+          </p>
         </div>
       )}
 

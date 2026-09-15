@@ -19,7 +19,14 @@ from .. import models, schemas
 from ..database import REDIS_SETTINGS
 from ..tenancy import TenantScope, get_tenant_scope, require_tenant_roles
 from .. import media_storage
-from ..media_urls import is_s3_enabled, resolve_media_url, storage_prefix
+from ..media_urls import (
+    is_s3_enabled,
+    resolve_media_url,
+    storage_prefix,
+    client_ads_prefix,
+    general_media_prefix,
+    mint_media_filename,
+)
 
 router = APIRouter()
 
@@ -49,7 +56,7 @@ ALLOWED_UPLOAD_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp",
     ".mp4", ".mov", ".webm", ".mkv", ".m4v",
 }
-from ..media_urls import get_s3_config, is_s3_enabled, storage_prefix
+from ..media_urls import get_s3_config
 
 
 def get_s3_client():
@@ -189,6 +196,7 @@ def upload_content(
     file: UploadFile = File(...),
     name: str = Form(...),
     tags: Optional[str] = Form(None),
+    client_id: Optional[int] = Form(None),
     scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
 ):
     file.file.seek(0, os.SEEK_END)
@@ -230,12 +238,21 @@ def upload_content(
                 + ", ".join(sorted(ALLOWED_UPLOAD_EXTENSIONS))
             ),
         )
+
+    client = None
+    if client_id is not None:
+        client = scope.get(models.Client, client_id)
+
+    if client:
+        folder = client_ads_prefix(organization, client)
+    else:
+        folder = general_media_prefix(organization)
+
     stem = str(uuid.uuid4())
-    unique_filename = f"{stem}{extension}"
-    # Folder named after the owner's address rather than the bare organisation id, so the
-    # bucket can be read by a human. storage_prefix keeps the id as a suffix, which is what
-    # makes it unique and stable; see its docstring.
-    storage_key = f"{storage_prefix(organization)}/{unique_filename}"
+    display_title = name.strip() if name else (file.filename or "media")
+    unique_filename = mint_media_filename(display_title, extension, stem)
+    thumb_stem = os.path.splitext(unique_filename)[0]
+    storage_key = f"{folder}/{unique_filename}"
     content_type_header = file.content_type or "application/octet-stream"
     content_type = "video" if content_type_header.startswith("video") or extension in {".mp4", ".mov", ".webm"} else "image"
     thumbnail: str | None = None
@@ -262,9 +279,9 @@ def upload_content(
             if content_type == "image":
                 thumbnail = file_url
             else:
-                thumbnail_path = generate_video_thumbnail(temp_local_file, stem, storage_prefix(organization))
+                thumbnail_path = generate_video_thumbnail(temp_local_file, thumb_stem, folder)
                 if thumbnail_path and os.path.exists(thumbnail_path):
-                    thumb_key = f"{storage_prefix(organization)}/{os.path.basename(thumbnail_path)}"
+                    thumb_key = f"{folder}/{os.path.basename(thumbnail_path)}"
                     with open(thumbnail_path, "rb") as thumb_file:
                         s3.upload_fileobj(
                             thumb_file,
@@ -297,9 +314,9 @@ def upload_content(
         if content_type == "image":
             thumbnail = file_url
         else:
-            thumbnail_path = generate_video_thumbnail(temp_local_file, stem, storage_prefix(organization))
+            thumbnail_path = generate_video_thumbnail(temp_local_file, thumb_stem, folder)
             if thumbnail_path:
-                thumbnail = public_upload_url(f"{storage_prefix(organization)}/{os.path.basename(thumbnail_path)}")
+                thumbnail = public_upload_url(f"{folder}/{os.path.basename(thumbnail_path)}")
             else:
                 thumbnail = file_url
 
@@ -547,7 +564,11 @@ def update_content_client_ad(
         # which would refuse a booking moving off a package using the cap of the package it
         # just left. Not worth leaving load order in charge of a quota.
         binding_plan = plan if "plan_id" in payload.model_fields_set else placement.plan
-        ensure_plan_locations(scope, binding_plan, kept_group_screens, target_screen_ids)
+        # `placement` too, so a booking sold a custom screen count cannot be walked past its
+        # cap from the client-ad editor -- the same reason binding_plan is worked out above.
+        ensure_plan_locations(
+            scope, binding_plan, kept_group_screens, target_screen_ids, placement
+        )
 
         # Remove targets not in target_screen_ids
         for target in list(placement.targets):
@@ -628,13 +649,22 @@ def delete_content(
     # 500 MB an advert that stranded gigabytes per deletion.
     stored = [content.file_url, content.thumbnail]
     stored.extend(rendition.file_url for rendition in content.renditions)
-    for stored_url in stored:
-        # Through media_storage, which handles both backends. delete_stored_file only
-        # understands "/uploads/" paths and returns False for an "s3://" key without
-        # touching anything -- so on object storage this loop deleted the database rows
-        # and left all six objects (original, four renditions, thumbnail) in the bucket
-        # for good. The quota they consumed was never released either.
-        media_storage.delete(stored_url)
+    # Through media_storage, which handles both backends. delete_stored_file only
+    # understands "/uploads/" paths and returns False for an "s3://" key without
+    # touching anything -- so on object storage this loop deleted the database rows
+    # and left all six objects (original, four renditions, thumbnail) in the bucket
+    # for good. The quota they consumed was never released either.
+    missed = [url for url in stored if url and not media_storage.delete(url)]
+
+    if missed:
+        # The row goes regardless: a bucket having a bad day must not make an advert
+        # undeletable. But an object whose only pointer is about to be committed away is
+        # the exact input scripts/cleanup_r2_orphans.py exists to sweep, and until now
+        # nothing anywhere wrote down that it had happened.
+        logger.warning(
+            "Content %s deleted with %d object(s) left in storage: %s",
+            content.id, len(missed), ", ".join(missed),
+        )
 
     scope.db.delete(content)
     scope.db.commit()

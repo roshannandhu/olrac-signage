@@ -4,7 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  CalendarPlus, CalendarX, CheckCircle, Clock, Film, Gauge, MonitorPlay, RefreshCw, Sliders, Users, XCircle,
+  CalendarPlus, CalendarX, CheckCircle, Clock, Film, Gauge, MonitorPlay, RefreshCw, RotateCcw,
+  Sliders, Trash2, Users, XCircle,
 } from 'lucide-react'
 import { adminApi } from '@/lib/api'
 import type { TenantSummary } from '@/lib/types'
@@ -116,6 +117,20 @@ export default function AdminTenantsPage() {
     onError: failed,
   })
 
+  // Removal is reversible for 30 days, so the confirmation asks for the workspace name
+  // rather than a click: everything in it is destroyed at the end of that window, and this
+  // is the last point at which reading the name carefully still helps.
+  const setRemoved = useMutation({
+    mutationFn: ({ id, action }: { id: number; action: 'remove' | 'restore' }) =>
+      action === 'remove' ? adminApi.removeTenant(id) : adminApi.restoreTenant(id),
+    onSuccess: (tenant) => done(
+      tenant.deleted_at
+        ? `${tenant.name} has been removed. Everything in it is deleted for good on ${formatWindowEnd(tenant.purge_at)}.`
+        : `${tenant.name} has been restored.`,
+    ),
+    onError: failed,
+  })
+
   const saveQuota = useMutation({
     mutationFn: ({ id, body }: { id: number; body: { plan_id?: number; max_screens: number; max_ad_slots: number } }) =>
       adminApi.updateQuota(id, body),
@@ -130,7 +145,7 @@ export default function AdminTenantsPage() {
   })
 
   const totals = {
-    active: tenants.filter((t) => t.status === 'active').length,
+    active: tenants.filter((t) => t.status === 'active' && !t.deleted_at).length,
     pending: tenants.filter((t) => t.status === 'pending_approval').length,
     screens: tenants.reduce((s, t) => s + t.screens_count, 0),
     online: tenants.reduce((s, t) => s + t.online_screens_count, 0),
@@ -210,7 +225,15 @@ export default function AdminTenantsPage() {
                     </td>
                     <td className="p-4 font-mono text-xs text-emerald-400">{tenant.owner_email ?? '—'}</td>
                     <td className="p-4 text-xs text-muted-foreground">{tenant.plan_name ?? '—'}</td>
-                    <td className="p-4"><StatusPill status={tenant.status} /></td>
+                    <td className="p-4">
+                      {tenant.deleted_at ? (
+                        <span className="inline-block rounded-md border border-rose-500/30 bg-rose-500/10 px-2 py-0.5 text-[11px] text-rose-400">
+                          Removed
+                        </span>
+                      ) : (
+                        <StatusPill status={tenant.status} />
+                      )}
+                    </td>
                     <td className="p-4"><PlanWindow tenant={tenant} /></td>
                     <td className="p-4"><Features tenant={tenant} /></td>
                     <td className="w-32 p-4"><QuotaBar used={tenant.screens_count} max={tenant.max_screens} /></td>
@@ -223,6 +246,25 @@ export default function AdminTenantsPage() {
                     </td>
                     <td className="p-4 pr-5">
                       <div className="flex items-center justify-end gap-2">
+                        {/* A removed workspace is counting down to being destroyed. Every
+                            other control would be editing something that is about to stop
+                            existing, so only the one that calls it off is offered. */}
+                        {tenant.deleted_at ? (
+                          <>
+                            <span className="text-[11px] text-rose-400">
+                              Deleted for good on {formatWindowEnd(tenant.purge_at)}
+                            </span>
+                            <button
+                              onClick={() => setRemoved.mutate({ id: tenant.id, action: 'restore' })}
+                              disabled={setRemoved.isPending}
+                              className="flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-400 transition-all hover:bg-emerald-500/20 disabled:opacity-50"
+                            >
+                              <RotateCcw className="size-3" />
+                              Restore
+                            </button>
+                          </>
+                        ) : (
+                          <>
                         <button
                           onClick={() => { setQuotaFor(tenant); setMessage(''); setError('') }}
                           className="flex items-center gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/10 px-3 py-1.5 text-xs text-violet-400 transition-all hover:bg-violet-500/20"
@@ -283,6 +325,31 @@ export default function AdminTenantsPage() {
                             <XCircle className="size-3" />
                             Block
                           </button>
+                        )}
+                        <button
+                          onClick={() => {
+                            const typed = window.prompt(
+                              `Remove "${tenant.name}"?
+
+Their access stops now, and in 30 days every screen, advert, playlist and file in this workspace is deleted permanently. It can be restored at any point before then.
+
+Type the workspace name to confirm:`,
+                            )
+                            if (typed !== null && typed.trim() === tenant.name) {
+                              setRemoved.mutate({ id: tenant.id, action: 'remove' })
+                            } else if (typed !== null) {
+                              setMessage('')
+                              setError('That is not the workspace name — nothing was removed.')
+                            }
+                          }}
+                          disabled={setRemoved.isPending}
+                          title="Remove this workspace and delete everything in it after 30 days"
+                          className="flex items-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/20 px-3 py-1.5 text-xs text-rose-300 transition-all hover:bg-rose-500/30 disabled:opacity-50"
+                        >
+                          <Trash2 className="size-3" />
+                          Remove
+                        </button>
+                          </>
                         )}
                       </div>
                     </td>

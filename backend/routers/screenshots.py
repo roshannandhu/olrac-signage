@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from .. import models, schemas, database
 from ..tenancy import TenantScope, get_tenant_scope, require_tenant_roles
 from .content import UPLOAD_DIR, public_upload_url
-from ..media_urls import is_s3_enabled, get_s3_config, resolve_media_url, storage_prefix
+from ..media_urls import is_s3_enabled, get_s3_config, resolve_media_url, storage_prefix, screen_screenshot_prefix
 from .screens import verify_device_auth
 
 logger = logging.getLogger(__name__)
@@ -57,8 +57,8 @@ def upload_device_screenshot(
     unique_filename = f"{stem}{extension}"
     # Same tenant folder as the content library, under a screenshots/ root so retention
     # can sweep captures without touching uploaded media.
-    prefix = storage_prefix(screen.organization)
-    storage_key = f"screenshots/{prefix}/{unique_filename}"
+    prefix = screen_screenshot_prefix(screen.organization, screen.id)
+    storage_key = f"{prefix}/{unique_filename}"
     
     file.file.seek(0)
     

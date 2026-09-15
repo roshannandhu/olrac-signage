@@ -31,24 +31,26 @@ import { CreateBookingModal } from '@/components/dashboard/create-booking-modal'
  * the cap at three real campaigns and cannot see why.
  *
  * So: look first, then ask. Never sold → straight through, no extra click. Already running →
- * offer to add these screens to the booking that exists, with "a separate new booking" kept
- * one click away for the case where it genuinely is a different advertiser.
+ * offer to add these screens to the booking that exists. There is deliberately no "start a
+ * separate one" escape hatch: the server refuses a second live booking of one creative for
+ * the reasons above, so the only honest thing this dialog can do is say so.
  */
 export function BookOrExtendDialog({
   content,
   screens,
   open,
   onOpenChange,
+  onBooked,
 }: {
   content: ContentItem
   /** The screens showing this loop — what "add it here" means on this page. */
   screens: Screen[]
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Fired once the advert is actually on these screens, so the caller can react. */
+  onBooked?: () => void
 }) {
   const queryClient = useQueryClient()
-  // Set by a click, never derived: the operator saying "no, this is a different sale".
-  const [startNew, setStartNew] = useState(false)
   const [daysOverride, setDaysOverride] = useState('')
 
   const placementsQuery = useQuery({
@@ -77,9 +79,25 @@ export function BookOrExtendDialog({
 
   const finishedCount = (placementsQuery.data?.length ?? 0) - live.length
 
+  // A screen added now cannot outlast the sale that pays for it: the backend refuses a run
+  // that ends after the booking does, because stretching it there would silently extend the
+  // whole campaign without billing a day of it. Bound the box so the operator sees the
+  // limit instead of meeting it as an error.
+  //
+  // The smallest remaining run across the live bookings, since one box serves them all —
+  // with the one-live-booking rule that is simply the booking's own remaining days.
+  const maxDays = useMemo(() => {
+    const remaining = live.map((placement) => {
+      const finishes = placement.effective_ends_at ?? placement.ends_at
+      if (!finishes) return Infinity
+      return Math.floor((new Date(finishes).getTime() - asOf) / 864e5)
+    })
+    const smallest = remaining.length ? Math.min(...remaining) : Infinity
+    return Number.isFinite(smallest) ? Math.max(1, smallest) : undefined
+  }, [live, asOf])
+
   const close = (next: boolean) => {
     if (!next) {
-      setStartNew(false)
       setDaysOverride('')
     }
     onOpenChange(next)
@@ -107,6 +125,7 @@ export function BookOrExtendDialog({
       toast.success(
         `${count} screen${count === 1 ? '' : 's'} added to ${placement.advertiser}'s booking.`,
       )
+      onBooked?.()
       close(false)
     },
     // The backend refuses over the plan's location cap with a message naming the plan and
@@ -131,8 +150,9 @@ export function BookOrExtendDialog({
     )
   }
 
-  // Never sold, or the operator chose a separate sale: the original behaviour, unchanged.
-  if (startNew || live.length === 0) {
+  // Never sold: the original behaviour, straight through to the booking form with no extra
+  // click. Once something IS live, a second booking is not offered at all -- see below.
+  if (live.length === 0) {
     return (
       <CreateBookingModal
         open
@@ -142,6 +162,9 @@ export function BookOrExtendDialog({
         defaultScreenIds={screens.map((screen) => screen.id)}
         initialClientId={content.client_id ?? null}
         initialAdvertiser={content.client_name ?? ''}
+        // The first sale of an advert lands here, not through addTargets above, so without
+        // this the library row only animated out on the SECOND booking onwards.
+        onBooked={onBooked}
       />
     )
   }
@@ -174,6 +197,13 @@ export function BookOrExtendDialog({
                 !(screen.group_id && bookedGroupIds.has(screen.group_id)),
             )
             const finishes = placement.effective_ends_at ?? placement.ends_at
+            // What the sale actually covers. The server refuses the screen that breaches it
+            // -- one call per screen, so an over-cap click used to land as "two added, the
+            // third failed" in an order nobody could predict. Said up front instead, with
+            // the button held, so the operator raises the cap or drops a screen knowingly.
+            const capped = placement.plan_max_locations > 0
+            const room = capped ? placement.screens_unused : Infinity
+            const overCap = missing.length > room
 
             return (
               <div key={placement.id} className="rounded-xl border border-hairline p-3.5">
@@ -190,7 +220,9 @@ export function BookOrExtendDialog({
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <MonitorPlay className="size-3" />
-                    {placement.screens_used} screen{placement.screens_used === 1 ? '' : 's'}
+                    {capped
+                      ? `${placement.screens_used} of ${placement.plan_max_locations} screens`
+                      : `${placement.screens_used} screen${placement.screens_used === 1 ? '' : 's'}`}
                   </span>
                 </p>
 
@@ -200,15 +232,30 @@ export function BookOrExtendDialog({
                     Already running on {screens.length === 1 ? 'this screen' : 'these screens'}
                   </p>
                 ) : (
-                  <Button
-                    size="sm"
-                    className="mt-3"
-                    disabled={addTargets.isPending}
-                    onClick={() => addTargets.mutate({ placement, targets: missing })}
-                  >
-                    <Plus />
-                    Add {missing.length === 1 ? 'this screen' : `${missing.length} screens`} to it
-                  </Button>
+                  <>
+                    <Button
+                      size="sm"
+                      className="mt-3"
+                      disabled={addTargets.isPending || overCap}
+                      onClick={() => addTargets.mutate({ placement, targets: missing })}
+                    >
+                      <Plus />
+                      Add {missing.length === 1 ? 'this screen' : `${missing.length} screens`} to it
+                    </Button>
+                    {overCap && (
+                      <p className="mt-2 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-300">
+                        {placement.advertiser} bought {placement.plan_max_locations} screen
+                        {placement.plan_max_locations === 1 ? '' : 's'} and is using{' '}
+                        {placement.screens_used}
+                        {room > 0
+                          ? `, so only ${room} more can be added — this would add ${missing.length}.`
+                          : `, so there is no room for another.`}{' '}
+                        {placement.plan
+                          ? 'Move the booking to a larger plan under Change plan.'
+                          : 'Raise the screen count under Change plan.'}
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             )
@@ -222,6 +269,7 @@ export function BookOrExtendDialog({
               id="extend-days"
               type="number"
               min={1}
+              max={maxDays}
               placeholder="Follows the campaign's end date"
               value={daysOverride}
               onChange={(event) => setDaysOverride(event.target.value)}
@@ -229,16 +277,22 @@ export function BookOrExtendDialog({
             <p className="text-xs text-muted-foreground/70">
               Leave empty and the new screens finish with the campaign. Set a number to sell
               them their own run — &ldquo;30 days in the mall, 10 in the shop&rdquo;.
+              {maxDays !== undefined && ` This booking has ${maxDays} day${maxDays === 1 ? '' : 's'} left; extend it to sell longer.`}
             </p>
           </div>
         </div>
 
+        {/* "Create a separate new booking" used to live here, and the server now refuses
+            exactly that: one advert has one live sale, because a second booking of a running
+            creative bills the client twice, lists the campaign twice on their report and
+            spends a second ad slot out of the workspace's quota. A button whose only
+            possible outcome is a red error is worse than no button, so it says why instead
+            -- and what to do, since both routes to "more" are one menu away on the ad. */}
         <div className="mt-2 border-t border-hairline pt-3">
-          <Button variant="outline" className="w-full" onClick={() => setStartNew(true)}>
-            Create a separate new booking
-          </Button>
-          <p className="mt-1.5 text-center text-xs text-muted-foreground/70">
-            For a different advertiser buying the same creative.
+          <p className="text-center text-xs text-muted-foreground/70">
+            This creative can only carry one live booking at a time. To sell it to someone
+            else, wait for {live.length === 1 ? `${live[0].advertiser}'s` : 'the current'}{' '}
+            campaign to finish — or add screens and time to it above.
             {finishedCount > 0 && ` ${finishedCount} earlier booking${finishedCount === 1 ? ' has' : 's have'} already finished.`}
           </p>
         </div>

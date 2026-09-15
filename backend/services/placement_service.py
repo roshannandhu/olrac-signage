@@ -180,6 +180,64 @@ def place_advert(
         .scalar()
     ) + 1
 
+    # An advert already in this loop must not be added to it a second time. The player has
+    # no notion of "the same advert", so a second item simply plays it twice every loop:
+    # the client is billed once and delivered twice, and the proof-of-play counts both.
+    # Guarded here because every path that puts an advert anywhere comes through here --
+    # add_target's own check only stops ONE booking naming the same screen twice.
+    duplicate = (
+        scope.db.query(models.PlaylistItem)
+        .filter(
+            models.PlaylistItem.playlist_id == playlist.id,
+            models.PlaylistItem.content_id == placement.content_id,
+        )
+        .first()
+    )
+    if duplicate is not None:
+        owner = (
+            scope.db.query(models.AdPlacementTarget)
+            .filter(models.AdPlacementTarget.playlist_item_id == duplicate.id)
+            .first()
+        )
+        if owner is not None and owner.placement_id == placement.id:
+            # This loop already carries the advert because of THIS sale. Two screens can be
+            # pointed at one playlist by hand, and the booking's second target then resolves
+            # to a loop its first target already filled. Not a double booking, and it must
+            # not fail the sale: record the target so the booking knows it covers that
+            # screen, sharing the item that is already playing.
+            target = models.AdPlacementTarget(
+                placement_id=placement.id,
+                screen_id=ref.screen_id,
+                group_id=ref.group_id,
+                playlist_item_id=duplicate.id,
+                assigned_at=assigned_at or models.utcnow(),
+            )
+            scope.db.add(target)
+            scope.db.flush()
+            return target
+
+        stale = owner is not None and (
+            owner.ends_at or effective_ends_at(owner.placement)
+        ) <= models.utcnow()
+        if not stale:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "That advert is already in this screen's loop, so it would play twice "
+                    "every cycle. Remove the existing one first, or add this screen to the "
+                    "booking that already runs it."
+                ),
+            )
+
+        # The loop still holds an item from a booking that has finished -- renewing a
+        # campaign is exactly when this happens, and the nightly sweep has not reached it
+        # yet. Do here what the sweep does (worker.py: delete the item, leave the target as
+        # the record of what was sold) so the renewal places cleanly into a loop that ends
+        # up with one copy rather than two.
+        owner.playlist_item_id = None
+        scope.db.delete(duplicate)
+        scope.db.flush()
+
     target_starts_at = max(placement.starts_at, assigned_at or models.utcnow())
     target_ends_at = None
     if getattr(ref, "days", None):

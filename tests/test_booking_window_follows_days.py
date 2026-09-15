@@ -108,8 +108,13 @@ try:
     print("  ok  the playlist item on each screen carries that screen's own window")
 
     # --- an explicit end date is still obeyed exactly ----------------------------------
+    # Its own creative: one advert carries one live booking (placements.create_placement),
+    # and the sale above is still running.
+    ad2 = models.Content(organization_id=org.id, type="video", file_url="/uploads/1/b.mp4",
+                         name="Handshake Offer", status="ready", duration_ms=30_000)
+    db.add(ad2); db.commit()
     fixed = http.post("/api/placements/", headers=auth, json={
-        "content_id": ad.id, "advertiser": "Handshake", "price_paise": 100000,
+        "content_id": ad2.id, "advertiser": "Handshake", "price_paise": 100000,
         "starts_at": now.isoformat(),
         "ends_at": (now + timedelta(days=45)).isoformat(),
         "targets": [{"screen_id": shop.id, "days": 10}],
@@ -123,7 +128,7 @@ try:
 
     # --- a booking with no length anywhere is still refused ----------------------------
     naked = http.post("/api/placements/", headers=auth, json={
-        "content_id": ad.id, "advertiser": "Nolength", "price_paise": 0,
+        "content_id": ad2.id, "advertiser": "Nolength", "price_paise": 0,
         "starts_at": now.isoformat(),
         "targets": [{"screen_id": shop.id}],
     })

@@ -129,6 +129,8 @@ ISOLATED_SCRIPTS = {
     "test_tenant_purge.py",
     # Every screen gets a dedicated playlist upon pairing/enrolling and safety provisioning.
     "test_screen_auto_playlist.py",
+    # Custom bookings cap locations and enforce max screens.
+    "test_custom_booking_screen_cap.py",
 }
 
 # Pure-logic tests: no database, no import-time engine, safe to run in-process.

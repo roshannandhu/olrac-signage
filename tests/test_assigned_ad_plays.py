@@ -55,11 +55,17 @@ def setup():
     screen = models.Screen(organization_id=org.id, device_id="tv-assign", status="online")
     content = models.Content(organization_id=org.id, name="Advert",
                              file_url="/uploads/ad.mp4", type="video", status="ready")
-    db.add_all([screen, content])
+    # A SECOND advert for the second booking below. One advert carries one live booking
+    # (placements.create_placement), and a second copy of the same file could not go into
+    # this loop anyway -- place_advert refuses it, because the player has no notion of "the
+    # same advert" and would simply air it twice a cycle.
+    content2 = models.Content(organization_id=org.id, name="Advert Two",
+                              file_url="/uploads/ad2.mp4", type="video", status="ready")
+    db.add_all([screen, content, content2])
     db.flush()
     from backend.services import issue_device_secret
     secret = issue_device_secret(screen)
-    ids = (screen.id, content.id)
+    ids = (screen.id, content.id, content2.id)
     db.commit()
     db.close()
     return ids, secret
@@ -77,7 +83,7 @@ def playlist_from_sync(client, secret):
 
 
 def run() -> None:
-    (screen_id, content_id), secret = setup()
+    (screen_id, content_id, second_content_id), secret = setup()
     client = TestClient(app)
     owner = {"Authorization": f"Bearer {create_access_token({'sub': 'owner'})}"}
 
@@ -137,7 +143,7 @@ def run() -> None:
     # The screen asks "anything since X?" on every sync. If the booking did not move the
     # playlist's marker the answer is 204 forever and a second booking never lands.
     second = client.post("/api/placements/", headers=owner, json={
-        "content_id": content_id,
+        "content_id": second_content_id,
         "advertiser": "Acme Two",
         "price_paise": 10000,
         "starts_at": starts_at.isoformat(),

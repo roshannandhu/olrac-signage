@@ -6,6 +6,8 @@ downstream — the player sync, proof-of-play, rendition selection, rotation —
 playlist items and needs no knowledge that bookings exist.
 """
 import logging
+import os
+import shutil
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -14,7 +16,7 @@ from sqlalchemy import func
 
 from .. import models, schemas
 from ..tenancy import TenantScope, require_tenant_roles
-from ..media_urls import resolve_media_url
+from ..media_urls import resolve_media_url, client_ads_prefix, get_s3_config, is_s3_enabled, s3_client
 from .playlists import bump_playlist
 
 logger = logging.getLogger(__name__)
@@ -233,7 +235,9 @@ def _serialize(
     # Groups expanded, the same way the cap counts them, so "3 of 5" means three TVs and
     # not three rows.
     usage = plan_screen_usage(
-        placement.plan, set(_booking_screen_ids(scope, placement, names.group_members))
+        placement.plan,
+        set(_booking_screen_ids(scope, placement, names.group_members)),
+        placement,
     )
     # Reported rather than left to each caller to work out. See settlement().
     money = settlement(placement)
@@ -288,6 +292,7 @@ def _serialize(
         screens_used=usage["used"],
         plan_max_locations=usage["allowed"],
         screens_unused=usage["unused"],
+        max_locations=placement.max_locations or 0,
         # Every receipt, oldest first. The client asking "what have I already sent you?"
         # wants the list, and an operator reconciling a bank statement wants the
         # references -- neither is answerable from a single collapsed figure.
@@ -369,6 +374,111 @@ def ensure_ad_slot_quota(scope: TenantScope) -> None:
         )
 
 
+def relocate_content_to_client(scope: TenantScope, content_id: int, client: models.Client | None) -> None:
+    """When an ad is assigned to a client, move its master file, thumbnail, and renditions
+    into the client's ads folder if they are not already there.
+    """
+    if not client:
+        return
+    content = scope.get(models.Content, content_id)
+    if not content or not content.file_url:
+        return
+
+    target_prefix = client_ads_prefix(scope.organization, client)
+
+    # 1. Relocate S3 / R2 objects
+    if content.file_url.startswith("s3://") and is_s3_enabled():
+        current_key = content.file_url.removeprefix("s3://").lstrip("/")
+        if not current_key.startswith(f"{target_prefix}/"):
+            filename = current_key.rsplit("/", 1)[-1]
+            new_key = f"{target_prefix}/{filename}"
+            s3 = s3_client()
+            cfg = get_s3_config()
+            bucket = cfg["bucket"]
+            try:
+                s3.copy_object(Bucket=bucket, CopySource={"Bucket": bucket, "Key": current_key}, Key=new_key)
+                s3.delete_object(Bucket=bucket, Key=current_key)
+                content.file_url = f"s3://{new_key}"
+                logger.info("Relocated content %s master to %s", content_id, new_key)
+            except Exception as exc:
+                logger.warning("Failed to relocate S3 content %s from %s to %s: %s", content_id, current_key, new_key, exc)
+
+            # Thumbnail
+            if content.thumbnail and content.thumbnail.startswith("s3://"):
+                old_thumb = content.thumbnail.removeprefix("s3://").lstrip("/")
+                if not old_thumb.startswith(f"{target_prefix}/"):
+                    new_thumb = f"{target_prefix}/{old_thumb.rsplit('/', 1)[-1]}"
+                    try:
+                        s3.copy_object(Bucket=bucket, CopySource={"Bucket": bucket, "Key": old_thumb}, Key=new_thumb)
+                        s3.delete_object(Bucket=bucket, Key=old_thumb)
+                        content.thumbnail = f"s3://{new_thumb}"
+                    except Exception as exc:
+                        logger.warning("Failed to relocate thumbnail %s: %s", old_thumb, exc)
+
+            # Renditions
+            renditions = scope.db.query(models.MediaRendition).filter(models.MediaRendition.content_id == content.id).all()
+            for rend in renditions:
+                if rend.file_url and rend.file_url.startswith("s3://"):
+                    old_rend = rend.file_url.removeprefix("s3://").lstrip("/")
+                    if not old_rend.startswith(f"{target_prefix}/"):
+                        new_rend = f"{target_prefix}/{old_rend.rsplit('/', 1)[-1]}"
+                        try:
+                            s3.copy_object(Bucket=bucket, CopySource={"Bucket": bucket, "Key": old_rend}, Key=new_rend)
+                            s3.delete_object(Bucket=bucket, Key=old_rend)
+                            rend.file_url = f"s3://{new_rend}"
+                        except Exception as exc:
+                            logger.warning("Failed to relocate rendition %s: %s", old_rend, exc)
+
+    # 2. Relocate local filesystem objects
+    elif content.file_url.startswith("/uploads/"):
+        upload_dir = os.getenv("UPLOAD_DIR", "uploads")
+        rel_path = content.file_url.removeprefix("/uploads/").lstrip("/")
+        if not rel_path.startswith(f"{target_prefix}/"):
+            filename = os.path.basename(rel_path)
+            new_rel_path = f"{target_prefix}/{filename}"
+            old_full = os.path.join(upload_dir, rel_path)
+            new_full = os.path.join(upload_dir, new_rel_path)
+            os.makedirs(os.path.dirname(new_full), exist_ok=True)
+            if os.path.exists(old_full):
+                try:
+                    shutil.move(old_full, new_full)
+                    content.file_url = f"/uploads/{new_rel_path}"
+                except Exception as exc:
+                    logger.warning("Failed to move local file %s to %s: %s", old_full, new_full, exc)
+
+            # Local thumbnail
+            if content.thumbnail and content.thumbnail.startswith("/uploads/"):
+                old_t_rel = content.thumbnail.removeprefix("/uploads/").lstrip("/")
+                if not old_t_rel.startswith(f"{target_prefix}/"):
+                    new_t_rel = f"{target_prefix}/{os.path.basename(old_t_rel)}"
+                    old_t_full = os.path.join(upload_dir, old_t_rel)
+                    new_t_full = os.path.join(upload_dir, new_t_rel)
+                    os.makedirs(os.path.dirname(new_t_full), exist_ok=True)
+                    if os.path.exists(old_t_full):
+                        try:
+                            shutil.move(old_t_full, new_t_full)
+                            content.thumbnail = f"/uploads/{new_t_rel}"
+                        except Exception:
+                            pass
+
+            # Local renditions
+            renditions = scope.db.query(models.MediaRendition).filter(models.MediaRendition.content_id == content.id).all()
+            for rend in renditions:
+                if rend.file_url and rend.file_url.startswith("/uploads/"):
+                    old_r_rel = rend.file_url.removeprefix("/uploads/").lstrip("/")
+                    if not old_r_rel.startswith(f"{target_prefix}/"):
+                        new_r_rel = f"{target_prefix}/{os.path.basename(old_r_rel)}"
+                        old_r_full = os.path.join(upload_dir, old_r_rel)
+                        new_r_full = os.path.join(upload_dir, new_r_rel)
+                        os.makedirs(os.path.dirname(new_r_full), exist_ok=True)
+                        if os.path.exists(old_r_full):
+                            try:
+                                shutil.move(old_r_full, new_r_full)
+                                rend.file_url = f"/uploads/{new_r_rel}"
+                            except Exception:
+                                pass
+
+
 @router.post("/", response_model=schemas.PlacementResponse, status_code=201)
 def create_placement(
     payload: schemas.PlacementCreate,
@@ -377,10 +487,39 @@ def create_placement(
     if not scope.get(models.Content, payload.content_id):
         raise HTTPException(status_code=404, detail="Content not found")
 
+    # One advert, one live sale. A second booking of a creative that is still running bills
+    # the client twice on the invoice, lists the campaign twice on their report, and spends
+    # a second ad slot out of the workspace's quota -- so a tenant allowed ten slots hits
+    # the cap at three real campaigns. Selling more screens or more time on a running
+    # advert is what add_target and extensions are for, and both keep it one campaign.
+    #
+    # Only LIVE bookings block: once a campaign has finished, the creative is free to be
+    # sold again, which is the ordinary renewal.
+    running = (
+        scope.query(models.AdPlacement)
+        .filter(
+            models.AdPlacement.content_id == payload.content_id,
+            models.AdPlacement.effective_ends_at > models.utcnow(),
+        )
+        .first()
+    )
+    if running is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"This advert is already booked to {running.advertiser} until "
+                f"{running.effective_ends_at.date().isoformat()}. Add screens to that "
+                "booking, or extend it, rather than starting a second one."
+            ),
+        )
+
     ensure_ad_slot_quota(scope)
 
     client = resolve_client(scope, payload.client_id)
     plan = resolve_tenant_plan(scope, payload.plan_id)
+
+    if client:
+        relocate_content_to_client(scope, payload.content_id, client)
 
     # The client record is the name of record; `advertiser` follows it. A booking may still
     # be made on a bare name -- schemas.PlacementCreate requires one or the other.
@@ -403,6 +542,9 @@ def create_placement(
         advertiser=advertiser,
         client_id=client.id if client else None,
         plan_id=plan.id if plan else None,
+        # Only meaningful off a package; stored either way so moving OFF a plan later keeps
+        # the figure the operator typed rather than silently uncapping the booking.
+        max_locations=payload.max_locations,
         price_paise=price_paise,
         is_paid=payload.is_paid,
         starts_at=payload.starts_at,
@@ -414,7 +556,9 @@ def create_placement(
 
     # Checked before the first item is placed, so a booking that breaches its plan is
     # refused whole rather than half-created.
-    ensure_plan_locations(scope, plan, set(), _screens_for_refs(scope, payload.targets))
+    ensure_plan_locations(
+        scope, plan, set(), _screens_for_refs(scope, payload.targets), placement
+    )
 
     for ref in payload.targets:
         _place(scope, placement, ref, assigned_at=payload.starts_at)
@@ -450,13 +594,16 @@ def update_placement(
         # longer attributed to.
         if client:
             placement.advertiser = client.name
+            relocate_content_to_client(scope, placement.content_id, client)
     if "plan_id" in fields:
         plan = resolve_tenant_plan(scope, payload.plan_id)
         # Against the screens the booking ALREADY reaches. Moving a six-screen booking onto
         # a five-screen plan is the same breach as adding a sixth screen to that plan, and
         # this path let it through -- the plan was enforced when screens changed but not
         # when the plan did.
-        ensure_plan_locations(scope, plan, set(_booking_screen_ids(scope, placement)), set())
+        ensure_plan_locations(
+            scope, plan, set(_booking_screen_ids(scope, placement)), set(), placement
+        )
         placement.plan_id = plan.id if plan else None
 
     if placement.ends_at <= placement.starts_at:
@@ -496,12 +643,41 @@ def add_target(
     if already:
         raise HTTPException(status_code=409, detail="This booking already runs in that place")
 
+    # A screen added AFTER the sale cannot run longer than the sale itself.
+    #
+    # Deliberately here and not in place_advert, because the two paths are not the same
+    # deal. At creation, per-location days ARE the sale -- "50 days at the airport, 30 in
+    # the mall" is quoted in screen-days and priced, and AdPlacement.effective_ends_at is
+    # defined as the max over its targets precisely so the campaign covers its longest
+    # location. Adding a location later has no such quote: `days` was bounded only by its
+    # own schema (le=3650), so typing 365 on the screen page silently dragged the whole
+    # campaign's end date out with it -- more delivery, no extension row, nothing billed.
+    #
+    # Refused rather than quietly shortened: the operator typed a number and has to see
+    # that it is not the one being sold. Extending the booking is the route to a longer
+    # run, and that one charges for it.
+    if ref.days:
+        starts_at = max(placement.starts_at, models.utcnow())
+        booking_ends_at = effective_ends_at(placement)
+        if starts_at + timedelta(days=ref.days) > booking_ends_at:
+            allowed = (booking_ends_at - starts_at).days
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"This booking runs until {booking_ends_at.date().isoformat()}, which "
+                    f"is {max(0, allowed)} more day{'' if allowed == 1 else 's'}. Extend the "
+                    "booking to sell a longer run, or leave the run length empty to finish "
+                    "with the campaign."
+                ),
+            )
+
     # The plan's screen count binds here too, not only at creation -- adding places one at
     # a time was otherwise the way straight past it.
     ensure_plan_locations(
         scope, placement.plan,
         set(_booking_screen_ids(scope, placement)),
         _screens_for_refs(scope, [ref]),
+        placement,
     )
 
     _place(scope, placement, ref)
@@ -776,10 +952,21 @@ def change_plan(
 
     plan = resolve_tenant_plan(scope, payload.plan_id)
 
-    # A change must never leave the booking delivering more screens than the plan it is now
-    # billed on -- the same breach as adding a screen, arrived at sideways. A null plan
-    # (custom) caps nothing, which plan_screen_usage already answers.
-    ensure_plan_locations(scope, plan, set(_booking_screen_ids(scope, placement)), set())
+    # The custom cap is re-cut here, because a renegotiation is exactly when it moves --
+    # "same money, one more screen". Written BEFORE the check below so the check measures
+    # the booking as it will be, not as it was: lowering the cap to fewer screens than the
+    # booking already runs on has to be refused, and raising it has to be allowed to pass
+    # immediately rather than being judged against the number being replaced.
+    if payload.max_locations is not None:
+        placement.max_locations = payload.max_locations
+
+    # A change must never leave the booking delivering more screens than it is now billed
+    # for -- the same breach as adding a screen, arrived at sideways. A plan states its own
+    # limit and overrides the custom figure; with neither, nothing caps it, which
+    # location_cap already answers.
+    ensure_plan_locations(
+        scope, plan, set(_booking_screen_ids(scope, placement)), set(), placement
+    )
 
     placement.plan_id = plan.id if plan else None
 
@@ -1077,8 +1264,26 @@ def _screens_for_refs(scope: TenantScope, refs) -> set[int]:
     return screen_ids
 
 
-def plan_screen_usage(plan, screen_ids: set[int]) -> dict:
-    """How much of a plan's screen allowance a set of screens uses. Measures; never raises.
+def location_cap(plan, placement=None) -> int:
+    """How many screens this booking may cover. 0 means nothing caps it.
+
+    Two sources, and only ever one of them in force. A package states the limit it sells and
+    wins outright -- repricing or resizing the plan is the tenant's own business. Off a
+    package, the booking carries its own figure, because "three screens for 40,000" is a
+    real deal that had nowhere to be recorded: a custom sale was uncapped by definition, so
+    the fourth screen went on from the booking page, the screen page or the playlist builder
+    and the client received more than they bought with nothing able to see it.
+
+    0 on both sides is the historical default and still means unlimited, so every booking
+    sold before this behaves exactly as it did.
+    """
+    if plan is not None:
+        return plan.max_locations if plan.max_locations > 0 else 0
+    return max(0, getattr(placement, "max_locations", 0) or 0)
+
+
+def plan_screen_usage(plan, screen_ids: set[int], placement=None) -> dict:
+    """How much of a booking's screen allowance a set of screens uses. Measures; never raises.
 
     Separate from the check below because the two halves are not symmetrical. Going OVER a
     plan is a refusal -- the tenant is about to deliver something they did not sell. Going
@@ -1087,10 +1292,10 @@ def plan_screen_usage(plan, screen_ids: set[int]) -> dict:
     worth blocking a sale over. Raising on it would make "sell now, pick the screens on
     Monday" impossible.
 
-    `allowed` of 0 means the plan does not cap locations (or there is no plan), so nothing
-    is over or unused.
+    `allowed` of 0 means nothing caps the booking -- no plan and no custom figure -- so
+    nothing is over or unused.
     """
-    allowed = plan.max_locations if plan and plan.max_locations > 0 else 0
+    allowed = location_cap(plan, placement)
     used = len(screen_ids)
     return {
         "used": used,
@@ -1100,8 +1305,10 @@ def plan_screen_usage(plan, screen_ids: set[int]) -> dict:
     }
 
 
-def ensure_plan_locations(scope: TenantScope, plan, existing: set[int], adding: set[int]) -> None:
-    """A plan sells a number of TVs, so it has to actually cap them.
+def ensure_plan_locations(
+    scope: TenantScope, plan, existing: set[int], adding: set[int], placement=None
+) -> None:
+    """A booking sells a number of TVs, so it has to actually cap them.
 
     Counted on EXPANDED screens, not on target rows: a single group target can carry ten
     screens, so counting targets would wave a ten-screen group straight past a five-TV
@@ -1117,16 +1324,25 @@ def ensure_plan_locations(scope: TenantScope, plan, existing: set[int], adding: 
     the plan it is billed on.
     """
     total = existing | adding
-    usage = plan_screen_usage(plan, total)
-    if usage["over"]:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"The {plan.name} plan covers {plan.max_locations} screen"
-                f"{'' if plan.max_locations == 1 else 's'}, and this would make {len(total)}. "
-                "Move the booking to a larger plan, or remove a screen."
-            ),
+    usage = plan_screen_usage(plan, total, placement)
+    if not usage["over"]:
+        return
+    allowed = usage["allowed"]
+    plural = "" if allowed == 1 else "s"
+    # Which of the two limits was hit, in the words that tell the operator what to do about
+    # it. A package is changed; a custom cap is simply a number on this booking and is
+    # raised where it was set.
+    if plan is not None:
+        detail = (
+            f"The {plan.name} plan covers {allowed} screen{plural}, and this would make "
+            f"{len(total)}. Move the booking to a larger plan, or remove a screen."
         )
+    else:
+        detail = (
+            f"This booking was sold {allowed} screen{plural}, and this would make "
+            f"{len(total)}. Raise the screen count under Change plan, or remove a screen."
+        )
+    raise HTTPException(status_code=409, detail=detail)
 
 
 def build_booking_report(scope: TenantScope, placement: models.AdPlacement) -> dict:

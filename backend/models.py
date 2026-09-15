@@ -94,6 +94,10 @@ class Organization(Base):
     approved_at = Column(UtcDateTime, nullable=True)
     approved_by_user_id = Column(Integer, nullable=True)
     rejection_reason = Column(String, nullable=True)
+    # Removed by an admin, and purged for good 30 days later by purge_removed_tenants.
+    # Distinct from status="suspended", which blocks access and changes nothing else: this
+    # is a countdown to destruction, and the window exists so it can be undone.
+    deleted_at = Column(UtcDateTime, nullable=True, index=True)
     storage_quota_bytes = Column(BigInteger, nullable=False, default=10 * 1024 * 1024 * 1024)
     # Per-tenant OVERRIDES set by Super Admin. 0 = "no override, use the package".
     # Read these through effective_max_screens / effective_max_ad_slots rather than
@@ -194,7 +198,7 @@ class Organization(Base):
     screens = relationship("Screen", back_populates="organization")
     groups = relationship("ScreenGroup", back_populates="organization")
     content = relationship("Content", back_populates="organization")
-    playlists = relationship("Playlist", back_populates="organization")
+    playlists = relationship("Playlist", back_populates="organization", cascade="all, delete-orphan")
     plan = relationship("Plan", back_populates="organizations")
     subscription = relationship("Subscription", back_populates="organization", uselist=False)
 
@@ -314,7 +318,17 @@ class User(Base):
 
     @property
     def organization_status(self) -> str:
-        return self.organization.status if self.organization else "active"
+        """The workspace status every access gate reads.
+
+        Removal is reported here rather than checked separately at each gate, because
+        `deleted_at` is not a value `status` can hold and every caller that already refuses
+        a suspended workspace must refuse a removed one on exactly the same path.
+        """
+        if not self.organization:
+            return "active"
+        if self.organization.deleted_at is not None:
+            return "removed"
+        return self.organization.status
 
 
 class ScreenshotLog(Base):
@@ -372,6 +386,11 @@ class Screen(Base):
     # Decides whether it can be recognised again after a wipe, so it is reported rather than
     # left as something an operator discovers by finding a duplicate.
     identity_source = Column(String, nullable=True)
+    # Whether this panel can install an update without a human confirming it. Android permits
+    # a silent install only for the device owner, so this is the single fact that decides
+    # whether a published release reaches the screen or sits behind a dialog nobody is
+    # standing in front of. NULL until the player reports it.
+    device_owner = Column(Boolean, nullable=True)
     installation_id = Column(String, nullable=True)
     pair_code = Column(String, unique=True, index=True, nullable=True)
     pair_code_expires_at = Column(UtcDateTime, nullable=True)
@@ -837,6 +856,15 @@ class AdPlacement(Base):
     # SET NULL for the same reason: deleting a plan must not delete the bookings sold on
     # it. The commercial terms were copied onto the booking anyway.
     plan_id = Column(Integer, ForeignKey("tenant_plans.id", ondelete="SET NULL"), nullable=True, index=True)
+    # How many screens this booking may cover when it is NOT on a package. 0 means no cap,
+    # which is what every booking sold before this existed carries.
+    #
+    # A package states its own limit and wins, so this is only read for a custom sale --
+    # which until now was uncapped by definition. "Three screens, negotiated price" was a
+    # deal the tenant could strike and nothing could hold them to: the fourth screen went on
+    # from the booking page, the screen page or the playlist, and the client received more
+    # than they paid for with nobody able to see it. See placements.location_cap.
+    max_locations = Column(Integer, nullable=False, default=0, server_default="0")
     # Stored in the smallest currency unit so money never touches a float.
     price_paise = Column(BigInteger, nullable=False, default=0)
     is_paid = Column(Boolean, nullable=False, default=False)

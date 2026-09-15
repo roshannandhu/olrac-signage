@@ -25,6 +25,12 @@ export function invalidateBookingViews(queryClient: QueryClient): void {
     ['all-placements'],
     ['plan-options'],
     ['playlists'],
+    // The playback timeline itself, which the builder reads under ['playlist', id] --
+    // SINGULAR, and prefix matching does not reach it from ['playlists']. So booking an
+    // advert from the library left the loop it was booked into showing the old items: the
+    // asset vanished from the library (it is filtered by what the timeline holds) and never
+    // appeared on the other side until the page was reloaded by hand.
+    ['playlist'],
     ['screens'],
     ['groups'],
     ['clients'],

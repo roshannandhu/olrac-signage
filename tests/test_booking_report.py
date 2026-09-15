@@ -54,7 +54,15 @@ try:
 
     ad = models.Content(organization_id=org.id, type="video", file_url="/uploads/1/a.mp4",
                         name="Summer Sale", status="ready", duration_ms=30_000)
-    db.add(ad); db.commit()
+    # Client B's own creative. The two clients used to share this one file, which is what a
+    # scoped report has to survive -- but an advert now carries only ONE live booking
+    # (placements.create_placement refuses the second), so a shared file cannot be sold to
+    # two advertisers at once any more. The property that mattered is kept below instead:
+    # B's creative also plays on A's screens inside A's window, and A's report must not
+    # count a single one of those plays.
+    ad_b = models.Content(organization_id=org.id, type="video", file_url="/uploads/1/b.mp4",
+                          name="Gate Promo", status="ready", duration_ms=30_000)
+    db.add_all([ad, ad_b]); db.commit()
 
     now = models.utcnow()
 
@@ -86,7 +94,7 @@ try:
 
     # Client B: the airport screen, an overlapping window.
     b = client.post("/api/placements/", headers=auth, json={
-        "content_id": ad.id, "advertiser": "Client B", "price_paise": 50000, "is_paid": False,
+        "content_id": ad_b.id, "advertiser": "Client B", "price_paise": 50000, "is_paid": False,
         "starts_at": (now - timedelta(days=5)).isoformat(),
         "ends_at": (now + timedelta(days=5)).isoformat(),
         "targets": [{"screen_id": airport.id}],
@@ -94,22 +102,27 @@ try:
     assert b.status_code == 201, b.text
     b_id = b.json()["id"]
 
-    def rollup(screen, hours_ago, plays, completed):
+    def rollup(screen, hours_ago, plays, completed, media=None):
         db.add(models.PlayLogHourlyRollup(
-            organization_id=org.id, screen_id=screen.id, media_id=ad.id,
+            organization_id=org.id, screen_id=screen.id, media_id=(media or ad).id,
             date_hour=now - timedelta(hours=hours_ago),
             total_plays=plays, completed_plays=completed, partial_plays=0, error_plays=0))
 
     rollup(m1, 24, 100, 95)          # inside A's window
     rollup(m2, 48, 60, 60)           # inside A's window
-    rollup(airport, 24, 500, 480)    # inside B's window, NOT A's screens
+    rollup(airport, 24, 500, 480, ad_b)   # inside B's window, NOT A's screens
     rollup(m1, 24 * 60, 999, 999)    # 60 days ago — outside A's window
+    # Another client's creative, on A's OWN screen, inside A's OWN window. Everything else
+    # about this row matches A's report; only the advert differs, and that alone must keep
+    # it out. Handing A a figure that included it would bill them for somebody else's
+    # campaign.
+    rollup(m1, 24, 777, 777, ad_b)
     db.commit()
 
     ra = client.get(f"/api/placements/{a_id}/report", headers=auth)
     assert ra.status_code == 200, ra.text
     ra = ra.json()
-    assert ra["totals"]["total_plays"] == 160, ra["totals"]
+    assert ra["totals"]["total_plays"] == 160, ra["totals"]  # not 937: ad_b's 777 is not A's
     names = sorted(s["screen_name"] for s in ra["per_screen"])
     assert names == ["Entrance", "Food Court"], names
     print("  ok  group target expanded to its members; airport plays and out-of-window plays excluded")
@@ -384,10 +397,14 @@ try:
         s = models.Screen(organization_id=org.id, name=f"Concourse Panel {index:02d}",
                           location=f"Terminal {index % 6}", status="online", last_seen=now)
         big_screens.append(s)
-    db.add_all(big_screens); db.commit()
+    # Its own creative, for the same reason as Client B above: the advert used here is
+    # already carrying a live booking, and one advert carries only one.
+    ad_wide = models.Content(organization_id=org.id, type="video", file_url="/uploads/1/w.mp4",
+                             name="Wide Reach Spot", status="ready", duration_ms=30_000)
+    db.add_all([*big_screens, ad_wide]); db.commit()
 
     big = client.post("/api/placements/", headers=auth, json={
-        "content_id": ad.id, "advertiser": "Wide Reach Co", "price_paise": 900000,
+        "content_id": ad_wide.id, "advertiser": "Wide Reach Co", "price_paise": 900000,
         "is_paid": True,
         "starts_at": (now - timedelta(days=5)).isoformat(),
         "ends_at": (now + timedelta(days=25)).isoformat(),

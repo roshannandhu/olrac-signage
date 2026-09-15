@@ -101,7 +101,9 @@ def test_one_workspaces_files_are_not_counted_against_another():
 
 
 def test_bucket_prefixes_map_back_to_workspaces():
-    """"org-<id>" is what media_urls.storage_prefix mints; anything else names nobody."""
+    """"org-<id>" and "tenants/<slug>-<id>" map back to their workspace id; anything else names nobody."""
+    assert organization_id_from_prefix("tenants/Roshan-Nandhu-67") == 67
+    assert organization_id_from_prefix("tenants/Acme-Corp-42") == 42
     assert organization_id_from_prefix("org-67") == 67
     assert organization_id_from_prefix("org-1") == 1
     # Real prefixes seen in the production bucket, both predating the convention. They are
@@ -112,6 +114,7 @@ def test_bucket_prefixes_map_back_to_workspaces():
     assert organization_id_from_prefix("shared") is None
     assert organization_id_from_prefix("org-") is None
     assert organization_id_from_prefix("org-abc") is None
+    assert organization_id_from_prefix("tenants/no-id") is None
 
 
 def test_measuring_the_bucket_never_raises_without_credentials():

@@ -218,6 +218,8 @@ export const api = {
     fetchWithAuth(`/screens/${screenId}/assign/${playlistId}`, { method: 'POST' }),
   clearScreenAssignment: (screenId: number) =>
     fetchWithAuth(`/screens/${screenId}/assign`, { method: 'DELETE' }),
+  ensureScreenPlaylist: (screenId: number) =>
+    fetchWithAuth<Screen>(`/screens/${screenId}/ensure-playlist`, { method: 'POST' }),
 
   getGroups: () => fetchWithAuth<ScreenGroup[]>('/groups/'),
   createGroup: (name: string) => fetchWithAuth<ScreenGroup>('/groups/', {
@@ -435,6 +437,9 @@ export const api = {
     plan_id: number | null
     // The new TOTAL price, not a difference. Omitted takes the plan's list price.
     price_paise?: number | null
+    // The custom screen cap, re-cut. Only in force off a package; 0 lifts it, omitted
+    // leaves it alone. Refused if the booking already runs on more screens than that.
+    max_locations?: number
   }) => fetchWithAuth<Placement>(`/placements/${placementId}/change-plan`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
   }),
@@ -452,6 +457,9 @@ export const api = {
     // Naming a plan fills in price and, when ends_at is omitted, the end date from its
     // duration. Copied server side, so later repricing leaves this booking alone.
     plan_id?: number | null
+    // How many screens a booking sold WITHOUT a package may cover. 0 (the default) is no
+    // cap; a package states its own limit and overrides this.
+    max_locations?: number
     price_paise: number
     is_paid: boolean
     starts_at: string
@@ -699,6 +707,13 @@ export const adminApi = {
     fetchWithAuth<TenantSummary>(`/admin/tenants/${id}/grant`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     }),
+
+  // Take a workspace off the platform. Nothing is destroyed today: the server marks it and
+  // a nightly job purges it 30 days later, which is the window `restoreTenant` undoes it in.
+  removeTenant: (id: number) =>
+    fetchWithAuth<TenantSummary>(`/admin/tenants/${id}`, { method: 'DELETE' }),
+  restoreTenant: (id: number) =>
+    fetchWithAuth<TenantSummary>(`/admin/tenants/${id}/restore`, { method: 'POST' }),
 
   // What the bucket actually holds, and which workspace put it there. `refresh` forces a
   // re-count; the server caches it because LIST is billed per request.

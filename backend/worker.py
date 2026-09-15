@@ -119,9 +119,21 @@ def process_media_sync(content_id: int):
         # A retry re-transcodes every resolution, so anything from a previous attempt is
         # stale. Without this each retry stacked another full set of renditions on the
         # row — three attempts left twelve where there should be four.
-        db.query(MediaRendition).filter(MediaRendition.content_id == content.id).delete(
-            synchronize_session=False
-        )
+        #
+        # Objects before rows. Dropping the rows alone is only safe while the key stays
+        # put, and it does not: once an advert has been assigned to a client,
+        # relocate_content_to_client moves the master into that client's folder and the
+        # new renditions land beside it, so the pre-move set is overwritten by nothing and
+        # left in the bucket with no row pointing at it.
+        stale = db.query(MediaRendition).filter(
+            MediaRendition.content_id == content.id
+        ).all()
+        for rendition in stale:
+            if rendition.file_url:
+                media_storage.delete(rendition.file_url)
+        for rendition in stale:
+            db.delete(rendition)
+        db.flush()
 
         info = probe_file(file_path)
         # Persist the true length so a playlist item can default to it rather than a
@@ -180,7 +192,14 @@ def process_media_sync(content_id: int):
         stored_sizes: dict[str, int] = {}
 
         from .media_urls import storage_prefix
-        prefix = storage_prefix(content.organization) if content.organization else str(organization_id)
+        if content.file_url and "/" in content.file_url:
+            raw_path = content.file_url.removeprefix("s3://").removeprefix("/uploads/").lstrip("/")
+            if "/" in raw_path:
+                prefix = raw_path.rsplit("/", 1)[0]
+            else:
+                prefix = storage_prefix(content.organization) if content.organization else str(organization_id)
+        else:
+            prefix = storage_prefix(content.organization) if content.organization else str(organization_id)
 
         for name, (out_filename, out_filepath) in out_files.items():
             
@@ -850,6 +869,30 @@ async def prune_finished_bookings(ctx):
         db.close()
 
 
+async def purge_removed_tenants(ctx):
+    """Destroy workspaces an admin removed more than 30 days ago.
+
+    Here rather than in the `main.py` supervisor thread because those threads start in
+    EVERY API process: a destructive job wants exactly one runner, and the arq worker is
+    the only thing in this deployment that is guaranteed to be singular.
+
+    Set TENANT_PURGE_DRY_RUN=true to have it log what it would destroy and destroy
+    nothing -- worth doing for the first cycle on real data.
+    """
+    from .services.tenant_purge import purge_removed_tenants as _purge
+
+    db = SessionLocal()
+    try:
+        reports = _purge(db)
+        if reports:
+            print(f"Purged {len(reports)} removed workspace(s).")
+    except Exception as exc:  # noqa: BLE001
+        db.rollback()
+        print(f"Error purging removed tenants: {exc}")
+    finally:
+        db.close()
+
+
 class WorkerSettings:
     functions = [process_media]
     cron_jobs = [
@@ -870,6 +913,9 @@ class WorkerSettings:
         # Once a day is plenty: rollups accrue at ~36k rows/day, not 864k, and the
         # retention window is over a year. Off the hour to stay clear of the raw prune.
         cron(prune_play_log_rollups, hour=4, minute=0),
+        # Last in the quiet window, and only once a day: the 30-day window means being a
+        # few hours late costs nothing, while being wrong is unrecoverable.
+        cron(purge_removed_tenants, hour=4, minute=30),
     ]
     redis_settings = REDIS_SETTINGS
 

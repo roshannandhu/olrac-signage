@@ -501,8 +501,11 @@ export interface Placement {
   targets: PlacementTarget[]
   /** Screens this booking actually reaches, groups expanded — the way the cap counts them. */
   screens_used: number
-  /** The plan's screen allowance. 0 when the plan does not cap locations, or there is no plan. */
+  /** The screen allowance in force — the package's, or this booking's own when it was sold
+   *  off a package. 0 when nothing caps it. */
   plan_max_locations: number
+  /** This booking's OWN cap as stored, for editing. Only in force when `plan` is null. */
+  max_locations: number
   /** Paid for and not being used. Never blocks a save; it is money the client is owed. */
   screens_unused: number
   /** Every receipt taken against this booking, oldest first. Empty until one is recorded. */
@@ -585,6 +588,10 @@ export interface TenantSummary {
   storage_used_bytes: number
   storage_quota_bytes: number
   rejection_reason?: string | null
+  /** Set when an admin removed the workspace. Everything still exists until `purge_at`. */
+  deleted_at?: string | null
+  /** When the removal becomes permanent. Null unless `deleted_at` is set. */
+  purge_at?: string | null
   // The paid window. `subscription_state` is what the product acts on -- 'active', 'grace'
   // or 'expired' -- while `subscription_status` is the stored column, which reads "active"
   // whatever the calendar says.

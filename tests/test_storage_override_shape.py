@@ -21,9 +21,11 @@ REAL_SHAPED_SECRET = "a" * 64
 
 
 def test_login_pair_typed_into_the_storage_form_is_ignored():
+    login_user = "admin@olrac.com"
+    login_pass = "pass@word1"
     media_urls.apply_storage_overrides({
-        "AWS_ACCESS_KEY_ID": "admin@olrac.com",
-        "AWS_SECRET_ACCESS_KEY": "pass@word1",
+        "AWS_ACCESS_KEY_ID": login_user,
+        "AWS_SECRET_ACCESS_KEY": login_pass,
         "S3_ENDPOINT_URL": "https://example.r2.cloudflarestorage.com",
     })
     assert media_urls.get_s3_config()["aws_access_key_id"] != "admin@olrac.com"

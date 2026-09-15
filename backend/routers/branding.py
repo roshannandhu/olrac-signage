@@ -17,7 +17,7 @@ import uuid
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from .. import media_storage, models, schemas
-from ..media_urls import resolve_media_url, storage_prefix
+from ..media_urls import resolve_media_url, storage_prefix, branding_storage_prefix, mint_media_filename
 from ..tenancy import TenantScope, get_tenant_scope, require_tenant_roles
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,9 @@ def upload_logo(
         raise HTTPException(status_code=400, detail="That file is empty")
 
     previous = org.logo_url
-    key = f"{storage_prefix(org)}/branding/{uuid.uuid4()}{extension}"
+    stem = str(uuid.uuid4())
+    logo_filename = mint_media_filename(file.filename or "logo", extension, stem)
+    key = f"{branding_storage_prefix(org)}/{logo_filename}"
 
     # Staged through a temp file because media_storage.store takes a path -- it is the same
     # function the transcoder uses to put renditions away, and reusing it is what keeps

@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from .. import database, models, schemas
 from ..billing import plan_features, subscription_state
 from ..media_urls import resolve_media_url
+from ..services.tenant_purge import TENANT_PURGE_AFTER_DAYS, purge_due_at
 from ..tenancy import TenantScope, require_super_admin
 
 logger = logging.getLogger(__name__)
@@ -135,6 +136,11 @@ class TenantSummaryOut(BaseModel):
     subscription_status: Optional[str] = None
     billing_period: Optional[str] = None
     current_period_end: Optional[str] = None
+    # Removal, and the deadline it created. Both are reported because the console has to
+    # draw the difference between a workspace that is blocked (recoverable by a click, and
+    # nothing is going to happen to it) and one that is counting down to being destroyed.
+    deleted_at: Optional[str] = None
+    purge_at: Optional[str] = None
 
 
 class TenantScreenOut(BaseModel):
@@ -326,6 +332,8 @@ def _summarise(db: Session, org: models.Organization) -> TenantSummaryOut:
         current_period_end=(
             _iso(org.subscription.current_period_end) if org.subscription else None
         ),
+        deleted_at=_iso(org.deleted_at),
+        purge_at=_iso(purge_due_at(org)),
     )
 
 
@@ -622,7 +630,7 @@ def platform_storage(
     Measured by walking the bucket, cached for a few minutes because LIST is charged per
     request; `?refresh=true` forces it.
     """
-    from ..media_urls import get_s3_config
+    from ..media_urls import get_s3_config, tenant_storage_root
     from ..services.storage_service import (
         bucket_usage,
         organization_id_from_prefix,
@@ -632,41 +640,57 @@ def platform_storage(
     usage = bucket_usage(force=refresh)
     organizations = {org.id: org for org in db.query(models.Organization).all()}
 
-    rows: List[StorageTenantOut] = []
-    seen: set[int] = set()
-    for prefix, totals in sorted(
-        usage["by_prefix"].items(), key=lambda item: -item[1]["bytes"]
-    ):
+    # Accumulated per workspace, not per prefix. A workspace mid-migration holds objects
+    # under both the legacy `org-<id>` and the current `tenants/<Slug>-<id>`, and a renamed
+    # one holds them under every slug it has ever had -- all of which resolve to the same
+    # id. Listed one row per prefix, those appeared as several workspaces, each repeating
+    # the FULL database bytes and quota while showing only its share of the bucket, so a
+    # tenant comfortably inside its quota could be read off this page as several times over.
+    merged: dict[int, dict] = {}
+    unattributed: List[StorageTenantOut] = []
+
+    for prefix, totals in usage["by_prefix"].items():
         org_id = organization_id_from_prefix(prefix)
         org = organizations.get(org_id) if org_id else None
-        if org:
-            seen.add(org.id)
-        rows.append(StorageTenantOut(
-            organization_id=org.id if org else None,
+        if not org:
             # A prefix naming no workspace is still real bytes on the bill, so it is listed
             # rather than dropped -- that is how an orphan becomes visible at all.
-            name=org.name if org else f"Unattributed ({prefix})",
-            prefix=prefix,
-            bucket_bytes=totals["bytes"],
-            bucket_objects=totals["objects"],
-            database_bytes=organization_storage_used(db, org.id) if org else 0,
-            quota_bytes=org.storage_quota_bytes if org else 0,
-        ))
+            unattributed.append(StorageTenantOut(
+                name=f"Unattributed ({prefix})",
+                prefix=prefix,
+                bucket_bytes=totals["bytes"],
+                bucket_objects=totals["objects"],
+            ))
+            continue
+        entry = merged.setdefault(org.id, {"prefixes": [], "bytes": 0, "objects": 0})
+        entry["prefixes"].append(prefix)
+        entry["bytes"] += totals["bytes"]
+        entry["objects"] += totals["objects"]
 
     # Workspaces holding nothing in the bucket still belong in the list, or a tenant whose
     # uploads all failed looks identical to one that has none.
+    rows: List[StorageTenantOut] = []
     for org in organizations.values():
-        if org.id in seen:
-            continue
+        entry = merged.get(org.id)
         database_bytes = organization_storage_used(db, org.id)
-        if database_bytes or org.storage_quota_bytes:
-            rows.append(StorageTenantOut(
-                organization_id=org.id,
-                name=org.name,
-                prefix=f"org-{org.id}",
-                database_bytes=database_bytes,
-                quota_bytes=org.storage_quota_bytes,
-            ))
+        if entry is None and not database_bytes and not org.storage_quota_bytes:
+            continue
+        rows.append(StorageTenantOut(
+            organization_id=org.id,
+            name=org.name,
+            # For a workspace with nothing stored, where its files WOULD land. This was
+            # synthesized as `org-<id>`, a scheme nothing has minted since
+            # tenant_storage_root landed, so every empty workspace advertised a prefix its
+            # uploads would never use.
+            prefix=", ".join(sorted(entry["prefixes"])) if entry else tenant_storage_root(org),
+            bucket_bytes=entry["bytes"] if entry else 0,
+            bucket_objects=entry["objects"] if entry else 0,
+            database_bytes=database_bytes,
+            quota_bytes=org.storage_quota_bytes,
+        ))
+
+    rows.extend(unattributed)
+    rows.sort(key=lambda row: -row.bucket_bytes)
 
     budget = os.getenv("PLATFORM_STORAGE_BUDGET_BYTES", "").strip()
     config = get_s3_config()
@@ -909,6 +933,62 @@ def reinstate_tenant(
     db.commit()
     db.refresh(org)
     logger.info("Org %s (ID %s) reinstated by %s", org.name, org.id, scope.user.username)
+    return _summarise(db, org)
+
+
+@router.delete("/tenants/{org_id}", response_model=TenantSummaryOut)
+def remove_tenant(
+    org_id: int,
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    """Take a workspace off the platform, and start its countdown to being destroyed.
+
+    Marks rather than deletes. The rows go 30 days later, in `purge_removed_tenants` --
+    partly because a straight DELETE fails on the first of twelve unguarded foreign keys,
+    and mostly because removing the wrong workspace should be survivable. Until the window
+    closes, `restore_tenant` puts everything back exactly as it was.
+
+    Access stops immediately: `User.organization_status` reports "removed", which every
+    gate already refuses.
+    """
+    org = _get_org(db, org_id)
+    if org.id == scope.user.organization_id:
+        raise HTTPException(status_code=400, detail="Cannot remove your own organization.")
+    if org.deleted_at is not None:
+        raise HTTPException(status_code=409, detail="This workspace has already been removed.")
+
+    org.deleted_at = models.utcnow()
+    db.commit()
+    db.refresh(org)
+    logger.warning(
+        "Org %s (ID %s) removed by %s; purges after %s days on %s",
+        org.name, org.id, scope.user.username, TENANT_PURGE_AFTER_DAYS,
+        _iso(purge_due_at(org)),
+    )
+    return _summarise(db, org)
+
+
+@router.post("/tenants/{org_id}/restore", response_model=TenantSummaryOut)
+def restore_tenant(
+    org_id: int,
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    """Undo a removal while the 30 days are still running.
+
+    Nothing was destroyed, so there is nothing to rebuild: clearing the mark restores the
+    workspace whole. Once the purge has run there is no row left for this to find, which is
+    why it answers 404 rather than pretending.
+    """
+    org = _get_org(db, org_id)
+    if org.deleted_at is None:
+        raise HTTPException(status_code=409, detail="This workspace has not been removed.")
+
+    org.deleted_at = None
+    db.commit()
+    db.refresh(org)
+    logger.info("Org %s (ID %s) restored by %s", org.name, org.id, scope.user.username)
     return _summarise(db, org)
 
 

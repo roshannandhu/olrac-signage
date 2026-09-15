@@ -14,6 +14,7 @@ panel, however cheap, was handed the original 4K file.
 
 from __future__ import annotations
 
+import logging
 import os
 import pathlib
 import shutil
@@ -21,6 +22,8 @@ from typing import Optional
 from urllib.parse import unquote
 
 from .media_urls import is_s3_enabled, get_s3_config
+
+logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = os.path.join(
     pathlib.Path(__file__).parent.parent.absolute(), "uploads"
@@ -152,23 +155,72 @@ def store(local_path: pathlib.Path, key: str, content_type: Optional[str] = None
     return f"/uploads/{key}"
 
 
+def _forget_database_mirror(key: str) -> None:
+    """Drop the `media_blob` row for `key`, if that mirror is present.
+
+    Production served media straight out of Postgres for as long as R2 was unconfigured,
+    and nothing has ever deleted a row from that table -- so every asset removed in that
+    period kept its bytes in the database permanently, where no bucket sweep can see them.
+
+    The table has no model and no migration; it was created out of band and may simply not
+    exist. Every failure here is therefore survivable and must not stop the real delete.
+    """
+    if not key:
+        return
+    try:
+        from sqlalchemy import text
+
+        from . import database
+
+        with database.engine.begin() as connection:
+            connection.execute(
+                text("DELETE FROM media_blob WHERE key = :key"), {"key": key}
+            )
+    except Exception as exc:
+        logger.debug("No media_blob row removed for %s: %s", key, exc)
+
+
 def delete(stored_url: str) -> bool:
     """Remove a stored object. Best effort -- a missing object is not an error.
 
     Local deletion goes through `media_urls.delete_stored_file`, which carries the
     path-escape guard; this adds the object-storage half so a deleted asset does not leave
     its bytes (and the storage quota they consume) behind in the bucket forever.
+
+    Best effort is not the same as silent. This used to catch every exception and return a
+    bare False that `delete_content` discarded without looking, so with credentials absent
+    -- exactly the state a deployment is in while it still serves from the database mirror
+    -- every delete was a no-op and the rows vanished anyway. Whatever goes wrong now says
+    so in the log, and says which of the two it was: storage that is not configured at all,
+    or a bucket that refused.
     """
     if not stored_url:
         return False
+
+    try:
+        key = storage_key_for(stored_url)
+    except ValueError:
+        logger.warning("Not a storage location, nothing to delete: %s", stored_url)
+        return False
+
+    # Cleared whichever backend holds the object: the mirror shadows the same key.
+    _forget_database_mirror(key)
+
     if not is_remote(stored_url):
         from .media_urls import delete_stored_file
 
         return delete_stored_file(stored_url, UPLOAD_DIR)
 
+    if not is_s3_enabled():
+        # boto3 would still build a client and fail at signing time, which reads exactly
+        # like the bucket refusing. It is a different problem and needs a different fix.
+        logger.warning("Object storage is not configured; %s left in the bucket", key)
+        return False
+
     cfg = get_s3_config()
     try:
-        _client().delete_object(Bucket=cfg["bucket"], Key=storage_key_for(stored_url))
+        _client().delete_object(Bucket=cfg["bucket"], Key=key)
         return True
-    except Exception:
+    except Exception as exc:
+        logger.warning("Bucket %s refused to delete %s: %s", cfg["bucket"], key, exc)
         return False

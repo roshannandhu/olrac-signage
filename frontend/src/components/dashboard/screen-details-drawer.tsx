@@ -46,6 +46,20 @@ function identityLabel(source?: string | null): string | null {
   return source
 }
 
+/**
+ * Whether a release reaches this screen unattended.
+ *
+ * Android permits a silent install only for the device owner. Anything else raises a system
+ * dialog on a television nobody is standing in front of, so the update simply waits -- which
+ * looked from the dashboard exactly like a screen that had not been offered one.
+ */
+function updateLabel(deviceOwner?: boolean | null): string {
+  if (deviceOwner == null) return 'Not reported yet'
+  return deviceOwner
+    ? 'Yes — installs silently'
+    : 'No — waits for someone to tap Install on the TV'
+}
+
 export function ScreenDetailsDrawer({
   screen,
   open,
@@ -129,6 +143,9 @@ export function ScreenDetailsDrawer({
                     has always worked this out; it was never sent, so an operator found out
                     the answer by finding a duplicate screen in their fleet. */}
                 <Row label="Survives a wipe" value={identityLabel(screen.identity_source)} />
+                {/* Whether a published release actually reaches this screen on its own, or
+                    waits for somebody to walk up and tap a dialog. */}
+                <Row label="Updates by itself" value={updateLabel(screen.device_owner)} />
                 <Row label="Resolution" value={screen.screen_width ? `${screen.screen_width}×${screen.screen_height}` : null} />
                 <Row label="Storage total" value={screen.total_storage_mb ? `${screen.total_storage_mb} MB` : null} />
                 <Row label="Storage free" value={screen.free_storage_mb ? `${screen.free_storage_mb} MB` : null} />

@@ -263,6 +263,8 @@ def test_area_3_reinstall_deduplication():
         assert screens_after[0].id == original_screen_id
         assert screens_after[0].device_id == f"dev2-{u}"
     finally:
+        db.query(models.Screen).filter(models.Screen.organization_id == org.id).update({"playlist_id": None}, synchronize_session=False)
+        db.query(models.Playlist).filter(models.Playlist.organization_id == org.id).delete(synchronize_session=False)
         db.query(models.Screen).filter(models.Screen.organization_id == org.id).delete()
         db.query(models.Screen).filter(models.Screen.installation_id == install_id).delete()
         db.delete(owner_user)

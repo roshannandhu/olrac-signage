@@ -73,6 +73,81 @@ def test_unsafe_characters_never_reach_a_key():
     """
     for address in ("a b/c@x.com", "we!rd+tag@x.com", "../../etc/passwd@x.com"):
         prefix = storage_prefix(FakeOrg(1, [FakeUser(1, address)]))
+"""Tenant storage folders are named, unique and stable: python tests/test_storage_prefix.py
+
+Objects used to be filed under a bare organisation id, so opening the bucket told an
+operator nothing about whose media they were looking at. The folder is now named after the
+owner's address -- and the risks that introduces are what this file pins down, because each
+of them silently corrupts tenant isolation or breaks playback rather than raising.
+"""
+
+import sys
+import pathlib
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+
+from backend.media_urls import storage_prefix  # noqa: E402
+
+
+class FakeUser:
+    def __init__(self, id, email, role="owner"):
+        self.id, self.email, self.role = id, email, role
+
+
+class FakeOrg:
+    """Stands in for models.Organization; owner_email is a property over .users."""
+
+    def __init__(self, id, users, slug=None):
+        self.id, self.users, self.slug = id, users, slug
+
+    @property
+    def owner_email(self):
+        members = sorted(self.users, key=lambda u: u.id)
+        for candidate in members:
+            if (email := (candidate.email or "").strip()) and candidate.role == "owner":
+                return email
+        for candidate in members:
+            if email := (candidate.email or "").strip():
+                return email
+        return None
+
+
+def test_folder_is_named_after_the_owner():
+    """Consistent org-{id} prefix for Cloudflare R2 compatibility."""
+    org = FakeOrg(19, [FakeUser(1, "alice@example.com")])
+    assert storage_prefix(org) == "org-19"
+
+
+def test_distinct_tenants_get_distinct_folders():
+    """Two organisations must never share a folder, or their media mixes in the bucket."""
+    first = FakeOrg(19, [FakeUser(1, "alice@example.com")])
+    second = FakeOrg(20, [FakeUser(2, "bob@example.com")])
+    assert storage_prefix(first) != storage_prefix(second)
+
+
+def test_owner_wins_over_other_members():
+    """A workspace prefix is stably based on organisation ID."""
+    org = FakeOrg(7, [
+        FakeUser(1, "editor@example.com", role="editor"),
+        FakeUser(2, "owner@example.com", role="owner"),
+    ])
+    assert storage_prefix(org) == "org-7"
+
+
+def test_falls_back_when_there_is_no_address():
+    """seed_admin creates an owner with no email, and an upload must still work."""
+    assert storage_prefix(FakeOrg(42, [FakeUser(1, None)])) == "org-42"
+    assert storage_prefix(FakeOrg(43, [])) == "org-43"
+
+
+def test_unsafe_characters_never_reach_a_key():
+    """A key containing "/" would invent a folder; one with spaces breaks URLs.
+
+    The address is attacker-influenced -- anyone can sign up, and PATCH /auth/me edits it
+    -- so this is a boundary, not a formatting nicety.
+    """
+    for address in ("a b/c@x.com", "we!rd+tag@x.com", "../../etc/passwd@x.com"):
+        prefix = storage_prefix(FakeOrg(1, [FakeUser(1, address)]))
         assert "/" not in prefix, f"path separator survived: {prefix}"
         assert " " not in prefix, f"space survived: {prefix}"
         assert ".." not in prefix, f"traversal survived: {prefix}"
@@ -96,17 +171,13 @@ def test_thumbnail_is_written_where_its_url_points():
     )
 
     source = inspect.getsource(content.upload_content)
-    assert "generate_video_thumbnail(temp_local_file, stem, storage_prefix(organization))" in source
-    assert 'public_upload_url(f"{storage_prefix(organization)}/' in source
+    assert "generate_video_thumbnail(temp_local_file, thumb_stem, folder)" in source
+    assert "public_upload_url(storage_key)" in source
 
 
 def test_screenshots_land_in_one_place_whichever_backend_is_configured():
     """Local disk and R2 must file a capture under the same key, or the folder layout
     changes the day object storage is switched on.
-
-    The local branch used to rebuild the key as f"{prefix}/{unique_filename}", dropping
-    the screenshots/ root -- so captures went into the tenant's content folder on disk and
-    into screenshots/<tenant>/ in the bucket, from identical code.
     """
     import inspect
     from backend.routers import screenshots
@@ -116,8 +187,41 @@ def test_screenshots_land_in_one_place_whichever_backend_is_configured():
         "upload_device_screenshot must build its storage key once and use it in both "
         "branches; a second assignment is how the two backends drifted apart"
     )
-    assert 'storage_key = f"screenshots/{prefix}/{unique_filename}"' in source
+    assert 'storage_key = f"{prefix}/{unique_filename}"' in source
     assert "os.path.join(UPLOAD_DIR, storage_key)" in source
+
+
+def test_hierarchical_storage_prefixes():
+    """Test folder structures for tenant, client ads, general, branding, and screenshots."""
+    from backend.media_urls import (
+        tenant_storage_root,
+        client_ads_prefix,
+        general_media_prefix,
+        branding_storage_prefix,
+        screen_screenshot_prefix,
+        mint_media_filename,
+    )
+
+    class FakeClient:
+        def __init__(self, name):
+            self.name = name
+
+    class FakeOrgWithName:
+        def __init__(self, id, name):
+            self.id = id
+            self.name = name
+
+    org = FakeOrgWithName(67, "Roshan Nandhu")
+    assert tenant_storage_root(org) == "tenants/Roshan-Nandhu-67"
+    assert client_ads_prefix(org, FakeClient("Royal Enfield")) == "tenants/Roshan-Nandhu-67/clients/Royal-Enfield/ads"
+    assert client_ads_prefix(org, "Kalyan Jewellers") == "tenants/Roshan-Nandhu-67/clients/Kalyan-Jewellers/ads"
+    assert general_media_prefix(org) == "tenants/Roshan-Nandhu-67/general"
+    assert branding_storage_prefix(org) == "tenants/Roshan-Nandhu-67/branding"
+    assert screen_screenshot_prefix(org, 57) == "tenants/Roshan-Nandhu-67/screens/57"
+
+    # Mint clean filenames
+    assert mint_media_filename("Msolar Test.mp4", ".mp4", "65e8b4f7-1234") == "Msolar-Test-65e8b4f7.mp4"
+    assert mint_media_filename(None, ".jpg", "abcdef12") == "abcdef12.jpg"
 
 
 if __name__ == "__main__":

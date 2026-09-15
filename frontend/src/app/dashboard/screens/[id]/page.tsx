@@ -1,17 +1,18 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Clock, Info, Monitor, MonitorPlay, PlaySquare, Settings, Smartphone, Trash2, Tv2 } from 'lucide-react'
+import { ArrowLeft, Clock, Info, Loader2, Monitor, MonitorPlay, PlaySquare, Settings, Smartphone, Trash2, Tv2 } from 'lucide-react'
 import { EmptyState } from '@/components/dashboard/empty-state'
 import { ErrorState } from '@/components/dashboard/error-state'
 import { OverlayBadge } from '@/components/dashboard/asset-card'
 import { PlaylistBuilder } from '@/components/dashboard/playlist-builder'
 import { ScreenDetailsDrawer } from '@/components/dashboard/screen-details-drawer'
 import { ScreenHoursDialog } from '@/components/dashboard/screen-hours-dialog'
+import { KioskExitCard } from '@/components/dashboard/kiosk-exit-card'
 import { ScreenMap } from '@/components/dashboard/screen-map'
 import { ScreenSettingsDialog } from '@/components/dashboard/screen-settings-dialog'
 import { Button } from '@/components/ui/button'
@@ -25,6 +26,50 @@ import type { Screen } from '@/lib/types'
 
 const orientationLabel = (degrees: number) =>
   degrees === 90 || degrees === 270 ? 'Portrait orientation' : 'Landscape orientation'
+
+/**
+ * Always renders the PlaylistBuilder for a screen. If the screen has no playlist yet
+ * (pre-migration data), it calls ensure-playlist to provision one on the fly, then
+ * refreshes the screens query so the page re-renders with a valid playlist id.
+ */
+function ScreenPlaylistSection({ screen, screenId, inherited }: { screen: Screen; screenId: number; inherited: boolean }) {
+  const queryClient = useQueryClient()
+
+  const ensureMutation = useMutation({
+    mutationFn: () => api.ensureScreenPlaylist(screenId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['screens'] }),
+    onError: (error: Error) => toast.error(`Could not provision playlist: ${error.message}`),
+  })
+
+  useEffect(() => {
+    if (!screen.effective_playlist_id && !ensureMutation.isPending && !ensureMutation.isSuccess) {
+      ensureMutation.mutate()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen.effective_playlist_id])
+
+  if (!screen.effective_playlist_id) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+        <Loader2 className="size-8 animate-spin mb-3" />
+        <p className="text-sm font-medium">Setting up playlist…</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {inherited && (
+        <div className="border-hairline bg-secondary/50 text-muted-foreground rounded-xl border p-3.5 text-sm">
+          This loop comes from the screen&apos;s group, so changes here apply to{' '}
+          <strong className="text-foreground font-medium">every screen in that group</strong>.{' '}
+          <Link href="/dashboard/groups" className="text-primary dark:text-brand underline underline-offset-2">Manage groups</Link>
+        </div>
+      )}
+      <PlaylistBuilder playlistId={screen.effective_playlist_id} showHeader={false} />
+    </div>
+  )
+}
 
 export default function ScreenDetailPage() {
   const params = useParams()
@@ -162,6 +207,12 @@ export default function ScreenDetailPage() {
         </div>
       </header>
 
+      {/* Before the map and the timeline: somebody opening this page because they are standing
+          in front of a screen they cannot get into needs it first, not last. */}
+      <div className="mb-6">
+        <KioskExitCard screen={screen} />
+      </div>
+
       {screen.location && (
         <div className="mb-6">
           <ScreenMap
@@ -184,30 +235,9 @@ export default function ScreenDetailPage() {
           two things at once. It lives on the ad detail page, which is where it can be
           edited rather than only stared at. */}
 
-      {/* A freshly paired TV has no playlist, and it does not need one made by hand.
-          Selling an advert to this screen creates its loop -- see playlist_for_target,
-          which provisions "{screen} loop" on the first booking and seeds it from the
-          group's loop when the screen inherits one. Prompting for a playlist here asked
-          an operator to do the system's job, at the one moment they have least reason to
-          know what a playlist is: they have just plugged a television in. */}
-      {!screen.effective_playlist_id ? (
-        <EmptyState
-          icon={MonitorPlay}
-          title="Nothing scheduled yet"
-          description="This screen starts looping as soon as an advert is booked onto it. Its playlist is created with the first booking."
-        />
-      ) : (
-        <div className="space-y-4">
-          {inherited && (
-            <div className="border-hairline bg-secondary/50 text-muted-foreground rounded-xl border p-3.5 text-sm">
-              This loop comes from the screen&apos;s group, so changes here apply to{' '}
-              <strong className="text-foreground font-medium">every screen in that group</strong>.{' '}
-              <Link href="/dashboard/groups" className="text-primary dark:text-brand underline underline-offset-2">Manage groups</Link>
-            </div>
-          )}
-          <PlaylistBuilder playlistId={screen.effective_playlist_id} showHeader={false} />
-        </div>
-      )}
+      {/* Every screen gets its own playlist at pairing time. If one is still missing
+          (pre-migration data), the ensure-playlist call provisions it on the fly. */}
+      <ScreenPlaylistSection screen={screen} screenId={screenId} inherited={inherited} />
 
       {canEdit && (
         <>

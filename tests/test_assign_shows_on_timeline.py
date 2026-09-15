@@ -56,9 +56,16 @@ try:
 
     ad = models.Content(organization_id=org.id, type="video", file_url="/uploads/1/a.mp4",
                         name="Summer Sale", status="ready", duration_ms=30_000)
+    # One creative per shape below. An advert carries ONE live booking (see
+    # placements.create_placement), and these three are separate sales, not one campaign
+    # with three locations -- which is what a single creative across all three would be.
+    ad_own = models.Content(organization_id=org.id, type="video", file_url="/uploads/1/a2.mp4",
+                            name="Summer Sale II", status="ready", duration_ms=30_000)
+    ad_group = models.Content(organization_id=org.id, type="video", file_url="/uploads/1/a3.mp4",
+                              name="Summer Sale III", status="ready", duration_ms=30_000)
     house = models.Content(organization_id=org.id, type="image", file_url="/uploads/1/house.png",
                            name="Venue promo", status="ready")
-    db.add_all([ad, house]); db.commit()
+    db.add_all([ad, ad_own, ad_group, house]); db.commit()
 
     # 1: bare screen. 2: screen with its own loop. 3: screen inheriting a group loop.
     bare = models.Screen(organization_id=org.id, name="Bare", status="online")
@@ -120,7 +127,7 @@ try:
 
     # --- 2. a screen that already has its own loop ---------------------------------------
     booked2 = http.post("/api/placements/", headers=auth, json={
-        "content_id": ad.id, "advertiser": "Brightmart", "price_paise": 500000,
+        "content_id": ad_own.id, "advertiser": "Brightmart", "price_paise": 500000,
         "starts_at": now.isoformat(), "ends_at": (now + timedelta(days=30)).isoformat(),
         "targets": [{"screen_id": owned.id}],
     })
@@ -130,7 +137,7 @@ try:
     assert playlist_id == own_loop.id, "the booking moved the screen off its own loop"
     content_ids = [i["content_id"] for i in items]
     assert house.id in content_ids, "the booking wiped what the screen was already playing"
-    assert ad.id in content_ids, f"the advert never reached the existing loop: {content_ids}"
+    assert ad_own.id in content_ids, f"the advert never reached the existing loop: {content_ids}"
     print("  ok  a screen with its own loop keeps it, with the advert appended")
 
     # --- 3. a screen inheriting a group loop ---------------------------------------------
@@ -142,7 +149,7 @@ try:
     assert [i["content_id"] for i in inherited_items] == [house.id], inherited_items
 
     booked3 = http.post("/api/placements/", headers=auth, json={
-        "content_id": ad.id, "advertiser": "Brightmart", "price_paise": 500000,
+        "content_id": ad_group.id, "advertiser": "Brightmart", "price_paise": 500000,
         "starts_at": now.isoformat(), "ends_at": (now + timedelta(days=30)).isoformat(),
         "targets": [{"screen_id": inheritor.id}],
     })
@@ -159,7 +166,7 @@ try:
         "the fork dropped the venue's own content -- the screen went from playing the "
         "group's loop to playing one advert and nothing else"
     )
-    assert ad.id in content_ids, f"the advert never reached the forked loop: {content_ids}"
+    assert ad_group.id in content_ids, f"the advert never reached the forked loop: {content_ids}"
 
     # The group's own loop must be untouched, or the other screens got the advert too.
     group_items = http.get(f"/api/playlists/{group_loop.id}", headers=auth).json()["items"]

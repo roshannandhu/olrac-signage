@@ -56,10 +56,19 @@ try:
     db.add_all([a, b, m1, m2]); db.commit()
 
     # A hand-made item that must survive every booking operation.
+    #
+    # Its own asset, not the one being booked: a loop may carry exactly one copy of an
+    # advert, because the player has no notion of "the same advert" and a second item is
+    # simply the ad airing twice a loop -- billed once, delivered twice. What this item is
+    # here to prove is that the booking machinery never touches a row an operator made, and
+    # that holds whatever the row contains.
+    house = models.Content(organization_id=org.id, type="video", file_url="/uploads/1/house.mp4",
+                           name="House reel", status="ready", duration_ms=7_000)
+    db.add(house); db.commit()
     manual_list = models.Playlist(organization_id=org.id, name="Lobby loop")
     db.add(manual_list); db.commit()
     a.playlist_id = manual_list.id; db.commit()
-    manual_item = models.PlaylistItem(playlist_id=manual_list.id, content_id=ad.id, duration=7, order=0)
+    manual_item = models.PlaylistItem(playlist_id=manual_list.id, content_id=house.id, duration=7, order=0)
     db.add(manual_item); db.commit()
     manual_id = manual_item.id
 
@@ -89,7 +98,7 @@ try:
         db.expire_all()
         return db.query(models.PlaylistItem).filter(models.PlaylistItem.content_id == ad.id).all()
 
-    booked = [i for i in items() if i.id != manual_id]
+    booked = items()
     assert len(booked) == 3, f"expected one item per place, got {len(booked)}"
     # A video takes its own length, and every item carries the paid window.
     assert all(i.duration == 30 for i in booked), [i.duration for i in booked]
@@ -110,7 +119,7 @@ try:
     target_b = next(t for t in placement["targets"] if t["screen_id"] == b.id)
     removed = client.delete(f"/api/placements/{placement['id']}/targets/{target_b['id']}", headers=auth)
     assert removed.status_code == 200, removed.text
-    booked = [i for i in items() if i.id != manual_id]
+    booked = items()
     assert len(booked) == 2, f"expected 2 remaining, got {len(booked)}"
     assert db.query(models.PlaylistItem).filter(models.PlaylistItem.id == manual_id).first(), "manual item was destroyed"
     print("  ok  removing one place removed exactly one item; the hand-made item survived")
@@ -132,7 +141,7 @@ try:
     later_dt = now + timedelta(days=60)
     moved = client.put(f"/api/placements/{placement['id']}", json={"ends_at": later_dt.isoformat()}, headers=auth)
     assert moved.status_code == 200, moved.text
-    booked = [i for i in items() if i.id != manual_id]
+    booked = items()
     # Compare instants, not strings: Postgres hands these back in the server's offset.
     assert all(abs((i.end_at - later_dt).total_seconds()) < 1 for i in booked), [str(i.end_at) for i in booked]
     print("  ok  changing the run window updated every placed item")
@@ -142,7 +151,10 @@ try:
     gone = client.delete(f"/api/placements/{placement['id']}", headers=auth)
     assert gone.status_code == 200, gone.text
     remaining = items()
-    assert len(remaining) == 1 and remaining[0].id == manual_id, [i.id for i in remaining]
+    assert not remaining, [i.id for i in remaining]
+    assert db.query(models.PlaylistItem).filter(
+        models.PlaylistItem.id == manual_id
+    ).first(), "deleting the booking destroyed a hand-made playlist item"
     print("  ok  deleting the booking removed only what it had placed")
 
     # Same gate on the way out: an advert whose booking ended has to stop playing, and the

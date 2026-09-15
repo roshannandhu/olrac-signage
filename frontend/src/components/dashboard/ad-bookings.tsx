@@ -117,6 +117,10 @@ export function AdBookings({ contentId }: { contentId: number }) {
   // whatever was just picked: a package hands over its list price, custom keeps what the
   // booking already costs.
   const [planPrice, setPlanPrice] = useState('')
+  // The screen count a CUSTOM booking covers, editable here because a renegotiation is
+  // exactly when it moves -- "same money, one more screen". A package states its own limit,
+  // so the box is only offered off one. Blank means no cap, as it always has.
+  const [planScreens, setPlanScreens] = useState('')
   const pickPlan = (planId: number | null, pricePaise: number) => {
     setChosenPlan(planId)
     setPlanPrice(String(pricePaise / 100))
@@ -134,6 +138,9 @@ export function AdBookings({ contentId }: { contentId: number }) {
     setMode(initial)
     setChosenPlan(undefined)
     setPlanPrice('')
+    // Seeded from what the booking already carries, so opening the dialog and changing only
+    // the price cannot silently lift a cap that was sold.
+    setPlanScreens(placement.max_locations > 0 ? String(placement.max_locations) : '')
     // Default to a fortnight past wherever the run currently finishes, so the common case
     // is one click and a price. extended_from defaults server side to the same point,
     // which is what stops an unpaid gap opening mid-campaign.
@@ -150,6 +157,10 @@ export function AdBookings({ contentId }: { contentId: number }) {
     mutationFn: () => api.changePlan(revising!.id, {
       plan_id: chosenPlan ?? null,
       price_paise: Math.round(Number(planPrice || 0) * 100),
+      // Sent whichever way the change goes: moving ONTO a package stores the figure without
+      // it being in force, so coming back off one later restores the cap that was sold
+      // rather than quietly uncapping the booking.
+      max_locations: Number(planScreens) > 0 ? Number(planScreens) : 0,
     }),
     onSuccess: () => {
       refresh()
@@ -317,6 +328,21 @@ export function AdBookings({ contentId }: { contentId: number }) {
     )
   }
 
+  // One advert, one live sale: a second booking of a running creative bills the client
+  // twice, lists the campaign twice on their report and spends a second ad slot out of the
+  // workspace's quota. The server refuses it (placements.create_placement), so the button
+  // that starts one is held rather than left to fail -- selling more screens or more time is
+  // "Add places" and "Extend the run", and both keep it one campaign.
+  //
+  // "Now" is the moment the bookings were fetched, not Date.now() during render: reading the
+  // clock while rendering is impure (React flags it, and the same render can then produce
+  // two different answers). dataUpdatedAt changes only when the data does -- the same
+  // reading BookOrExtendDialog takes for the same decision.
+  const asOf = placementsQuery.dataUpdatedAt
+  const liveBooking = placements.find(
+    (placement) => Date.parse(placement.effective_ends_at || placement.ends_at) > asOf,
+  )
+
   if (placementsQuery.isLoading) {
     return <div className="space-y-3">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}</div>
   }
@@ -327,8 +353,30 @@ export function AdBookings({ contentId }: { contentId: number }) {
         <p className="text-muted-foreground text-sm">
           Sell this advert to a client for a period and a set of places. Removing a place takes it off that screen straight away.
         </p>
-        {canEdit && <Button onClick={() => setCreateOpen(true)}><Plus data-icon="inline-start" /> New booking</Button>}
+        {canEdit && (
+          <Button
+            onClick={() => setCreateOpen(true)}
+            disabled={Boolean(liveBooking)}
+            title={liveBooking
+              ? `Already booked to ${liveBooking.advertiser} until ${asDate(liveBooking.effective_ends_at || liveBooking.ends_at)}. Add places or extend the run instead.`
+              : undefined}
+          >
+            <Plus data-icon="inline-start" /> New booking
+          </Button>
+        )}
       </div>
+
+      {canEdit && liveBooking && (
+        <p className="text-muted-foreground text-xs">
+          This advert is booked to{' '}
+          <span className="text-foreground font-medium">{liveBooking.advertiser}</span> until{' '}
+          {asDate(liveBooking.effective_ends_at || liveBooking.ends_at)}, so it cannot be sold
+          again until that campaign finishes. Use{' '}
+          <span className="text-foreground">Add places</span> to sell more screens or{' '}
+          <span className="text-foreground">Extend the run</span> to sell more time — both
+          keep it one campaign on the invoice and on the client&apos;s report.
+        </p>
+      )}
 
       {!placements.length ? (
         <EmptyState
@@ -506,8 +554,8 @@ export function AdBookings({ contentId }: { contentId: number }) {
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
                   <MonitorPlay className="text-muted-foreground size-3.5" aria-hidden="true" />
                   <span className="text-muted-foreground">
-                    {placement.screens_used} of {placement.plan_max_locations} screens on the{' '}
-                    {placement.plan?.name} plan
+                    {placement.screens_used} of {placement.plan_max_locations} screens{' '}
+                    {placement.plan ? `on the ${placement.plan.name} plan` : 'sold on this booking'}
                   </span>
                   {placement.screens_unused > 0 && (
                     <Badge variant="warning">
@@ -764,7 +812,7 @@ export function AdBookings({ contentId }: { contentId: number }) {
                   {!upgrading?.plan && <Badge variant="outline">Current</Badge>}
                 </div>
                 <p className="text-muted-foreground mt-1 text-sm">
-                  You set the price. No location cap, and the per-screen days stay exactly as
+                  You set the price and the screen count. The per-screen days stay exactly as
                   you sold them.
                 </p>
               </button>
@@ -816,6 +864,30 @@ export function AdBookings({ contentId }: { contentId: number }) {
               })}
             </div>
 
+            {/* How many screens the custom deal covers. Only off a package, because a package
+                states its own limit and wins. Blank lifts the cap, which is what every
+                booking sold before this carried -- so an operator who never touches the box
+                changes nothing. Lowering it below the screens the booking already runs on is
+                refused by the server, which is the same rule that refuses the extra screen. */}
+            {chosenPlan === null && (
+              <div className="space-y-2 pt-1">
+                <Label htmlFor="plan-screens">Screens included</Label>
+                <Input
+                  id="plan-screens"
+                  type="number"
+                  min={0}
+                  max={10000}
+                  value={planScreens}
+                  onChange={(event) => setPlanScreens(event.target.value)}
+                  placeholder="No limit"
+                />
+                <p className="text-muted-foreground text-xs">
+                  What the client is buying. Leave it empty for an open-ended deal.
+                  {upgrading && ` This booking runs on ${upgrading.screens_used} screen${upgrading.screens_used === 1 ? '' : 's'} today, so it cannot be cut below that without removing one first.`}
+                </p>
+              </div>
+            )}
+
             {/* The agreed figure, shown only once something is picked. Seeded from the
                 choice and editable, because the price is bargained -- and it REPLACES what
                 the booking costs rather than being added to it. */}
@@ -832,7 +904,9 @@ export function AdBookings({ contentId }: { contentId: number }) {
                 />
                 <p className="text-muted-foreground text-xs">
                   Replaces what this booking costs — nothing is added on top and no date
-                  moves. Negotiate freely; this is what the client owes.
+                  moves: the run keeps its dates and every location keeps the days it was
+                  sold, whatever length the package quotes. Negotiate freely; this is what
+                  the client owes.
                   {upgrading && ` Currently ${rupees(upgrading.price_paise)}.`}
                   {' '}To sell extra time instead, use <span className="text-foreground">Add time</span>.
                 </p>

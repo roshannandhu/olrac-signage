@@ -30,6 +30,66 @@ _UNSAFE_IN_KEY = str.maketrans(
 )
 
 
+import re
+
+
+def sanitize_storage_name(name: str | None, default: str = "item") -> str:
+    """Sanitize name for S3/R2 path component, preserving capitalization and replacing
+    spaces/special punctuation with hyphens without consecutive hyphens.
+    """
+    if not name or not name.strip():
+        return default
+    cleaned = name.strip().replace("'", "").replace("’", "")
+    cleaned = re.sub(r"[^A-Za-z0-9_-]+", "-", cleaned)
+    cleaned = re.sub(r"-+", "-", cleaned).strip("-")
+    return cleaned or default
+
+
+def tenant_storage_root(organization) -> str:
+    """Root folder for a tenant: 'tenants/<Tenant-Name>-<org_id>'."""
+    if not organization or getattr(organization, "id", None) is None:
+        return "tenants/shared"
+    org_id = organization.id
+    raw_name = getattr(organization, "name", None) or f"org-{org_id}"
+    cleaned_name = re.sub(r"('s|\s+)*workspace$", "", raw_name.strip(), flags=re.IGNORECASE).strip()
+    slug = sanitize_storage_name(cleaned_name or raw_name, default=f"org-{org_id}")
+    return f"tenants/{slug}-{org_id}"
+
+
+def client_ads_prefix(organization, client_or_name) -> str:
+    """Folder prefix for client ads: 'tenants/<Tenant-Name>-<org_id>/clients/<Client-Name>/ads'."""
+    root = tenant_storage_root(organization)
+    if not client_or_name:
+        return f"{root}/general"
+    client_name = getattr(client_or_name, "name", None) or str(client_or_name)
+    slug = sanitize_storage_name(client_name, default="client")
+    return f"{root}/clients/{slug}/ads"
+
+
+def general_media_prefix(organization) -> str:
+    """Folder prefix for general tenant media: 'tenants/<Tenant-Name>-<org_id>/general'."""
+    return f"{tenant_storage_root(organization)}/general"
+
+
+def branding_storage_prefix(organization) -> str:
+    """Folder prefix for branding logos: 'tenants/<Tenant-Name>-<org_id>/branding'."""
+    return f"{tenant_storage_root(organization)}/branding"
+
+
+def screen_screenshot_prefix(organization, screen_id: int | str) -> str:
+    """Folder prefix for screen screenshots: 'tenants/<Tenant-Name>-<org_id>/screens/<screen_id>'."""
+    return f"{tenant_storage_root(organization)}/screens/{screen_id}"
+
+
+def mint_media_filename(original_name: str | None, ext: str, unique_stem: str) -> str:
+    """Combine clean media name with short unique hash, e.g. 'Msolar_Ad-65e8b4f7.mp4'."""
+    short_hash = unique_stem.split("-")[0] if "-" in unique_stem else unique_stem[:8]
+    if original_name:
+        clean_title = sanitize_storage_name(os.path.splitext(original_name)[0], default="media")
+        return f"{clean_title}-{short_hash}{ext}"
+    return f"{unique_stem}{ext}"
+
+
 def storage_prefix(organization) -> str:
     """Safe, alphanumeric bucket key prefix for an organization."""
     if not organization or getattr(organization, "id", None) is None:

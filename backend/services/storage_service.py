@@ -167,7 +167,11 @@ def bucket_usage(force: bool = False) -> dict:
                 total_bytes += size
                 object_count += 1
                 key = entry.get("Key", "")
-                prefix = key.split("/", 1)[0] if "/" in key else "(no prefix)"
+                if key.startswith("tenants/"):
+                    parts = key.split("/")
+                    prefix = f"{parts[0]}/{parts[1]}" if len(parts) > 1 else "tenants"
+                else:
+                    prefix = key.split("/", 1)[0] if "/" in key else "(no prefix)"
                 bucket_for_prefix = by_prefix.setdefault(prefix, {"bytes": 0, "objects": 0})
                 bucket_for_prefix["bytes"] += size
                 bucket_for_prefix["objects"] += 1
@@ -196,16 +200,86 @@ def bucket_usage(force: bool = False) -> dict:
     return value
 
 
+def forget_cached_usage() -> None:
+    """Drop the measured-bucket cache.
+
+    Anything that changes the bucket behind the dashboard's back has to call this, or the
+    page keeps reporting the old totals for up to five minutes -- which, just after a purge,
+    means showing the bytes of a workspace that no longer exists.
+    """
+    _cache.clear()
+
+
+def delete_prefix(prefix: str) -> dict:
+    """Delete every object under `prefix`. Returns what went, and what would not.
+
+    The database rows are the authoritative list of a workspace's objects and are deleted
+    through `media_storage.delete` before this runs; this is the backstop for everything the
+    rows never knew about -- thumbnails and screenshots carry no size column, renditions
+    orphaned by a relocation have no row left, and a workspace renamed after uploading has
+    objects filed under every slug it has ever had.
+
+    Refuses an empty prefix rather than treating it as "match everything", because the one
+    caller is a purge and the cost of that mistake is the entire bucket.
+    """
+    # .strip() first: a prefix of "   " is not empty, survives strip("/"), and would have
+    # been passed to list_objects_v2 as a filter matching every object in the bucket.
+    if not prefix or not prefix.strip().strip("/"):
+        raise ValueError("delete_prefix needs a prefix; refusing to match the whole bucket")
+
+    from ..media_urls import get_s3_config, is_s3_enabled, s3_client
+
+    if not is_s3_enabled():
+        return {"deleted": 0, "failed": 0, "error": "Object storage has no credentials."}
+
+    config = get_s3_config()
+    client = s3_client()
+    deleted = 0
+    failed = 0
+
+    try:
+        paginator = client.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=config["bucket"], Prefix=prefix):
+            keys = [{"Key": entry["Key"]} for entry in page.get("Contents", [])]
+            if not keys:
+                continue
+            # delete_objects takes 1000 at a time and a page is already capped there, so a
+            # page maps to exactly one call.
+            response = client.delete_objects(
+                Bucket=config["bucket"], Delete={"Objects": keys, "Quiet": True}
+            )
+            errors = response.get("Errors") or []
+            failed += len(errors)
+            deleted += len(keys) - len(errors)
+            for error in errors:
+                logger.warning(
+                    "Could not delete %s: %s", error.get("Key"), error.get("Message")
+                )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Sweep of prefix %s failed: %s", prefix, exc)
+        return {"deleted": deleted, "failed": failed, "error": str(exc)}
+
+    return {"deleted": deleted, "failed": failed, "error": None}
+
+
 def organization_id_from_prefix(prefix: str) -> int | None:
     """The workspace a bucket prefix belongs to, or None if it names no workspace.
 
-    Mirrors `media_urls.storage_prefix`, which mints "org-<id>". Older objects sit under an
-    email address or "shared", and those are real bytes on the bill that belong to nobody --
-    worth showing as exactly that.
+    Supports:
+    - New structure: 'tenants/<Tenant-Slug>-<org_id>'
+    - Legacy structure: 'org-<id>'
     """
-    if not prefix.startswith("org-"):
+    if prefix.startswith("tenants/"):
+        tenant_part = prefix.removeprefix("tenants/")
+        if "-" in tenant_part:
+            try:
+                return int(tenant_part.rsplit("-", 1)[1])
+            except ValueError:
+                pass
         return None
-    try:
-        return int(prefix.removeprefix("org-"))
-    except ValueError:
-        return None
+    if prefix.startswith("org-"):
+        try:
+            return int(prefix.removeprefix("org-"))
+        except ValueError:
+            return None
+    return None

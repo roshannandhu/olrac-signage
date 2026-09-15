@@ -409,6 +409,20 @@ async def pair_screen(
 
         scope.db.commit()
         scope.db.refresh(existing_screen)
+
+        # A screen without its own playlist shows an empty detail page. Provision one
+        # now so the operator sees the content library and timeline immediately.
+        if not existing_screen.playlist_id:
+            _playlist = models.Playlist(
+                organization_id=existing_screen.organization_id,
+                name=f"{existing_screen.name or f'Screen {existing_screen.id}'} loop",
+            )
+            scope.db.add(_playlist)
+            scope.db.flush()
+            existing_screen.playlist_id = _playlist.id
+            scope.db.commit()
+            scope.db.refresh(existing_screen)
+
         # Parked for the TV to collect on its next /register poll; this response goes to
         # the operator's dashboard, not to the screen.
         await park_device_secret(existing_screen.device_id, device_secret)
@@ -435,6 +449,20 @@ async def pair_screen(
     device_secret = issue_device_secret(db_screen)
     scope.db.commit()
     scope.db.refresh(db_screen)
+
+    # Provision the screen's own playlist so the detail page shows the content
+    # library and playback timeline from the first visit, not "Nothing scheduled".
+    if not db_screen.playlist_id:
+        _playlist = models.Playlist(
+            organization_id=db_screen.organization_id,
+            name=f"{db_screen.name or f'Screen {db_screen.id}'} loop",
+        )
+        scope.db.add(_playlist)
+        scope.db.flush()
+        db_screen.playlist_id = _playlist.id
+        scope.db.commit()
+        scope.db.refresh(db_screen)
+
     await park_device_secret(db_screen.device_id, device_secret)
     response = schemas.ScreenResponse.model_validate(db_screen)
     response.device_secret = device_secret
@@ -538,6 +566,21 @@ def bind_screen_to_org(
 
     db.commit()
     db.refresh(screen)
+
+    # Every screen should have its own playlist from the moment it is claimed, so the
+    # operator never lands on "Nothing scheduled yet". This covers sign-in, Google JWT
+    # and Google OAuth flows.
+    if not screen.playlist_id:
+        _playlist = models.Playlist(
+            organization_id=screen.organization_id,
+            name=f"{screen.name or f'Screen {screen.id}'} loop",
+        )
+        db.add(_playlist)
+        db.flush()
+        screen.playlist_id = _playlist.id
+        db.commit()
+        db.refresh(screen)
+
     screen.issued_device_secret = device_secret
     logger.info("Device %s (model: %s) %s to org %s by %s", device_id, screen.model, how, user.organization_id, user.username)
     return screen
@@ -1098,6 +1141,17 @@ def enroll_device(req: schemas.EnrollRequest, db: Session = Depends(database.get
         screen.name = f"Screen {req.device_id[:6]}"
     screen.assignment_updated_at = models.utcnow()
 
+    # Provision the screen's own playlist so the detail page shows the content
+    # library and playback timeline immediately upon enrollment.
+    if not screen.playlist_id:
+        _playlist = models.Playlist(
+            organization_id=token.organization_id,
+            name=f"{screen.name or f'Screen {screen.id}'} loop",
+        )
+        db.add(_playlist)
+        db.flush()
+        screen.playlist_id = _playlist.id
+
     # Atomically increment use_count after all validation passes.
     token.use_count = (token.use_count or 0) + 1
 
@@ -1437,6 +1491,11 @@ async def heartbeat(
         db_screen.device_version = req.device_version
         if not req.app_version:
             db_screen.app_version = req.device_version
+    if req.device_owner is not None:
+        # Whether this panel can take a release without a human. Written here rather than at
+        # pairing because provisioning often happens later, and a fleet that only learned it
+        # once would keep reporting a screen as unattended long after it stopped being.
+        db_screen.device_owner = req.device_owner
     if req.app_version is not None:
         db_screen.app_version = req.app_version
     if getattr(req, "update_status", None) is not None:
@@ -1582,6 +1641,35 @@ async def clear_direct_assignment(
     
     return {"status": "ok"}
 
+
+@router.post("/{screen_id}/ensure-playlist", response_model=schemas.ScreenResponse)
+async def ensure_playlist(
+    screen_id: int,
+    scope: TenantScope = Depends(require_tenant_roles("owner", "editor")),
+):
+    """Provision a playlist for a screen that does not have one.
+
+    Idempotent: if the screen already has a playlist_id the call is a no-op.
+    The frontend calls this as a safety net when it navigates to a screen detail
+    page whose effective_playlist_id is still null -- which should no longer happen
+    after the pairing-time fix, but may exist for screens paired before that change.
+    """
+    screen = scope.get(models.Screen, screen_id)
+    if not screen:
+        raise HTTPException(status_code=404, detail="Screen not found")
+
+    if not screen.playlist_id:
+        playlist = models.Playlist(
+            organization_id=screen.organization_id,
+            name=f"{screen.name or f'Screen {screen.id}'} loop",
+        )
+        scope.db.add(playlist)
+        scope.db.flush()
+        screen.playlist_id = playlist.id
+        scope.db.commit()
+        scope.db.refresh(screen)
+
+    return schemas.ScreenResponse.model_validate(screen)
 
 @router.get("/player-version", response_model=schemas.AppVersionResponse)
 def player_version(db: Session = Depends(database.get_db)):

@@ -42,6 +42,8 @@ interface CreateBookingModalProps {
   initialClientId?: number | null
   /** Initial advertiser name if known */
   initialAdvertiser?: string
+  /** Fired once the booking exists, so the caller can react (the library row animates out). */
+  onBooked?: () => void
 }
 
 export function CreateBookingModal({
@@ -52,6 +54,7 @@ export function CreateBookingModal({
   defaultScreenIds,
   initialClientId,
   initialAdvertiser,
+  onBooked,
 }: CreateBookingModalProps) {
   const queryClient = useQueryClient()
 
@@ -72,6 +75,10 @@ export function CreateBookingModal({
   const [notes, setNotes] = useState<string>('')
   const [picked, setPicked] = useState<string[]>([])
   const [targetDays, setTargetDays] = useState<Record<string, number>>({})
+  // How many screens a CUSTOM sale covers. Blank is the historical meaning -- no cap -- so
+  // a negotiated deal that genuinely is open-ended still works, while "three screens for
+  // 40,000" finally has somewhere to be written down and something enforcing it.
+  const [customScreens, setCustomScreens] = useState('')
   const [placeFilter, setPlaceFilter] = useState<string>('')
 
   // Load clients
@@ -149,7 +156,13 @@ export function CreateBookingModal({
   }, [picked, screens])
 
   const coveredCount = coveredScreenIds.size
-  const maxAllowedScreens = selectedPlan && selectedPlan.max_locations > 0 ? selectedPlan.max_locations : null
+  // The cap in force. A package states its own and wins; off one, it is whatever the
+  // operator typed for this sale. The server applies exactly this rule (placements
+  // .location_cap), so what the badge says and what the save does cannot drift apart.
+  const maxAllowedScreens =
+    selectedPlan && selectedPlan.max_locations > 0
+      ? selectedPlan.max_locations
+      : (!selectedPlan && Number(customScreens) > 0 ? Number(customScreens) : null)
   const isOverCap = maxAllowedScreens !== null && coveredCount > maxAllowedScreens
 
   // Handle plan selection
@@ -192,9 +205,14 @@ export function CreateBookingModal({
   // every per-location window). Locations left on the default inherit the booking, so they
   // cannot drag the longest DOWN.
   const longestRunDays = useMemo(() => {
-    if (selectedPlan && selectedPlan.duration_days > 0) return selectedPlan.duration_days
     const custom = picked.map((key) => targetDays[key]).filter((d): d is number => Boolean(d && d > 0))
-    return custom.length ? Math.max(...custom) : 0
+    const longestCustom = custom.length ? Math.max(...custom) : 0
+    const planDays = selectedPlan && selectedPlan.duration_days > 0 ? selectedPlan.duration_days : 0
+    // The MAX of the two, where a package used to simply win. A location sold longer than
+    // the package still runs longer -- effective_ends_at takes the max of the booking
+    // window and every per-location window -- so a package that short-circuited here sold
+    // the campaign with an end date its own screens then ran past.
+    return Math.max(planDays, longestCustom)
   }, [selectedPlan, picked, targetDays])
 
   // Keep the end date on the longest run until the operator takes it over. Without this a
@@ -212,6 +230,12 @@ export function CreateBookingModal({
       ? addDays(startsAt, longestRunDays)
       : endsAtInput
 
+  // A location cannot be sold longer than the campaign it belongs to -- but only once the
+  // operator has FIXED the end date. Until they do, `endsAt` follows the longest location,
+  // so bounding these boxes against it would be the field capping itself at whatever was
+  // typed first. Afterwards the date is theirs, and a location typed past it would stretch
+  // the run anyway (effective_ends_at takes the max over the targets) without a day of it
+  // being billed -- the same breach add_target refuses server side.
   // Calculate run duration in days
   const runDurationDays = useMemo(() => {
     if (!startsAt || !endsAt) return 0
@@ -220,6 +244,8 @@ export function CreateBookingModal({
     const diffDays = Math.round((end - start) / (1000 * 60 * 60 * 24))
     return diffDays > 0 ? diffDays : 0
   }, [startsAt, endsAt])
+
+  const maxLocationDays = endsAtTouched && runDurationDays > 0 ? runDurationDays : 3650
 
   const toggleTarget = (key: string) => {
     setPicked((prev) =>
@@ -244,17 +270,23 @@ export function CreateBookingModal({
     )
   }, [screens, placeFilter])
 
-  // Calculate total screen-days across selected locations
+  // Screens x days, each location counted for the length it was actually sold.
+  //
+  // One path for both now that a per-location length is offered on a package as well. The
+  // custom branch also counted a GROUP as a single screen, so a group of eight sold for ten
+  // days was quoted ten screen-days instead of eighty.
   const totalScreenDays = useMemo(() => {
     if (picked.length === 0) return 0
-    if (planId !== null && selectedPlan) {
-      return coveredCount * (selectedPlan.duration_days || runDurationDays)
-    }
+    const base = (selectedPlan?.duration_days || 0) || runDurationDays
     return picked.reduce((acc, key) => {
-      const d = targetDays[key] ?? runDurationDays
-      return acc + (d > 0 ? d : 0)
+      const days = targetDays[key] ?? base
+      if (days <= 0) return acc
+      const screensHere = key.startsWith('g')
+        ? screens.filter((screen) => screen.group_id === Number(key.slice(1))).length
+        : 1
+      return acc + days * screensHere
     }, 0)
-  }, [picked, planId, selectedPlan, coveredCount, runDurationDays, targetDays])
+  }, [picked, selectedPlan, runDurationDays, targetDays, screens])
 
   // Mutation to create booking
   const createMutation = useMutation({
@@ -262,7 +294,7 @@ export function CreateBookingModal({
       const targets = picked.map((key) => {
         const isScreen = key.startsWith('s')
         const id = Number(key.slice(1))
-        const customDays = planId === null ? targetDays[key] : undefined
+        const customDays = targetDays[key]
         return {
           ...(isScreen ? { screen_id: id } : { group_id: id }),
           ...(customDays && customDays > 0 ? { days: customDays } : {}),
@@ -273,6 +305,9 @@ export function CreateBookingModal({
         client_id: clientId ? Number(clientId) : undefined,
         advertiser: clientId ? undefined : advertiser.trim(),
         plan_id: planId,
+        // Only meaningful off a package, and 0 means the booking is uncapped -- which is
+        // what leaving the box empty has always meant for a custom sale.
+        max_locations: planId === null && Number(customScreens) > 0 ? Number(customScreens) : 0,
         price_paise: Math.round(Number(price || 0) * 100),
         is_paid: false,
         starts_at: new Date(`${startsAt}T00:00:00`).toISOString(),
@@ -284,6 +319,7 @@ export function CreateBookingModal({
     onSuccess: () => {
       invalidateBookingViews(queryClient)
       toast.success('Booking created and scheduled successfully')
+      onBooked?.()
       onOpenChange(false)
       // Reset form
       setClientId('')
@@ -293,6 +329,7 @@ export function CreateBookingModal({
       setNotes('')
       setPicked([])
       setTargetDays({})
+      setCustomScreens('')
       // Or the next booking silently inherits the last operator's hand-typed date and
       // stops following the run being sold.
       setEndsAtTouched(false)
@@ -421,7 +458,8 @@ export function CreateBookingModal({
                   </Badge>
                 </div>
                 <p className="mt-1.5 text-[11px] text-muted-foreground leading-snug">
-                  Negotiated deal without a package. Custom price, custom duration, and no screen cap.
+                  Negotiated deal without a package. Custom price, custom duration, and the
+                  screen count you agree below.
                 </p>
               </button>
 
@@ -454,6 +492,39 @@ export function CreateBookingModal({
               })}
             </div>
           </div>
+
+          {/* How many screens a custom deal covers. A package answers this itself, so the box
+              only appears off one -- and blank keeps the old meaning, no cap, rather than
+              forcing a number onto a deal that genuinely is open-ended. The server enforces
+              the same rule everywhere afterwards: Add places, the screen page and the
+              playlist builder all refuse the screen that breaches it. */}
+          {planId === null && (
+            <div className="grid grid-cols-1 sm:grid-cols-[200px_minmax(0,1fr)] gap-3 items-center rounded-xl border border-border/60 bg-muted/20 p-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="booking-custom-screens" className="text-xs font-medium">
+                  Screens included
+                </Label>
+                <div className="relative">
+                  <MonitorPlay className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+                  <Input
+                    id="booking-custom-screens"
+                    type="number"
+                    min={0}
+                    max={10000}
+                    value={customScreens}
+                    onChange={(e) => setCustomScreens(e.target.value)}
+                    placeholder="No limit"
+                    className="pl-9 text-sm bg-background"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                What the client is buying. Leave it empty for an open-ended deal; set a number
+                and this booking can never be given a screen beyond it — here or anywhere
+                else. Editable later under <span className="text-foreground">Change plan</span>.
+              </p>
+            </div>
+          )}
 
           {/* Section: Price & Booking Schedule */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
@@ -542,7 +613,9 @@ export function CreateBookingModal({
 
             {isOverCap && (
               <div className="p-2.5 rounded-xl bg-destructive/10 border border-destructive/30 text-destructive text-xs">
-                Your selected plan ({selectedPlan?.name}) allows a maximum of {maxAllowedScreens} screen(s), but your current selection covers {coveredCount} screens. Please adjust your target screens/groups or switch to Custom.
+                {selectedPlan
+                  ? `Your selected plan (${selectedPlan.name}) allows a maximum of ${maxAllowedScreens} screen(s), but your current selection covers ${coveredCount} screens. Please adjust your target screens/groups or switch to Custom.`
+                  : `This booking is being sold ${maxAllowedScreens} screen(s), but your current selection covers ${coveredCount}. Raise "Screens included" above, or unpick a location.`}
               </div>
             )}
 
@@ -611,7 +684,14 @@ export function CreateBookingModal({
                             </div>
 
                             {/* Custom airtime days per venue group */}
-                            {isChecked && planId === null && (
+                            {/* Offered on a package too. The server honours a per-location length either
+                                way (place_advert reads ref.days with no reference to the plan, and a
+                                plan caps only HOW MANY locations), the "Add places" dialog has always
+                                sent one for a booking already on a package, and the locations list
+                                renders it back -- so hiding it only here meant a run sold "50 days at
+                                the airport, 30 everywhere else" could not be entered at the point of
+                                sale, only bolted on afterwards. */}
+                            {isChecked && (
                               <div
                                 className="flex items-center justify-between gap-1.5 pt-2 mt-2 border-t border-primary/20 text-xs"
                                 onClick={(e) => e.stopPropagation()}
@@ -621,13 +701,13 @@ export function CreateBookingModal({
                                   <input
                                     type="number"
                                     min={1}
-                                    max={3650}
+                                    max={maxLocationDays}
                                     value={currentDays}
                                     onChange={(e) => {
                                       const val = parseInt(e.target.value, 10)
                                       setTargetDays((prev) => ({
                                         ...prev,
-                                        [key]: isNaN(val) ? 1 : Math.max(1, Math.min(3650, val)),
+                                        [key]: isNaN(val) ? 1 : Math.max(1, Math.min(maxLocationDays, val)),
                                       }))
                                     }}
                                     className="w-14 h-6 px-1 text-center text-xs font-bold rounded-lg border border-input bg-background text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
@@ -692,7 +772,14 @@ export function CreateBookingModal({
                             </div>
 
                             {/* Custom airtime days per screen */}
-                            {isChecked && planId === null && (
+                            {/* Offered on a package too. The server honours a per-location length either
+                                way (place_advert reads ref.days with no reference to the plan, and a
+                                plan caps only HOW MANY locations), the "Add places" dialog has always
+                                sent one for a booking already on a package, and the locations list
+                                renders it back -- so hiding it only here meant a run sold "50 days at
+                                the airport, 30 everywhere else" could not be entered at the point of
+                                sale, only bolted on afterwards. */}
+                            {isChecked && (
                               <div
                                 className="flex items-center justify-between gap-1.5 pt-2 mt-2 border-t border-primary/20 text-xs"
                                 onClick={(e) => e.stopPropagation()}
@@ -702,13 +789,13 @@ export function CreateBookingModal({
                                   <input
                                     type="number"
                                     min={1}
-                                    max={3650}
+                                    max={maxLocationDays}
                                     value={currentDays}
                                     onChange={(e) => {
                                       const val = parseInt(e.target.value, 10)
                                       setTargetDays((prev) => ({
                                         ...prev,
-                                        [key]: isNaN(val) ? 1 : Math.max(1, Math.min(3650, val)),
+                                        [key]: isNaN(val) ? 1 : Math.max(1, Math.min(maxLocationDays, val)),
                                       }))
                                     }}
                                     className="w-14 h-6 px-1 text-center text-xs font-bold rounded-lg border border-input bg-background text-foreground focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"

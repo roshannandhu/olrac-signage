@@ -293,8 +293,81 @@ def run() -> None:
         client.__exit__(None, None, None)
 
 
+def run_on_a_package() -> None:
+    """A package caps how MANY locations, never how long each one runs.
+
+    The booking modal used to hide the per-location days box the moment a package was
+    chosen, and strip `days` from the payload with it -- so "50 days at the airport" could
+    only be sold off-package, or bolted on afterwards through Add places. Nothing in the
+    server ever required that: place_advert reads ref.days without consulting the plan, and
+    the plan is asked only for a location COUNT. This pins that, so the box cannot be taken
+    away again on the theory that the backend would ignore it.
+    """
+    client = TestClient(app)
+    client.__enter__()
+    try:
+        db = database.SessionLocal()
+        unique = uuid.uuid4().hex[:8]
+        org_id, username, content_id, screens = build_workspace(db, unique)
+        plan = models.TenantPlan(
+            organization_id=org_id, name="Standard", duration_days=30,
+            max_locations=5, price_paise=1_000_000,
+        )
+        db.add(plan)
+        db.flush()
+        plan_id = plan.id
+        db.commit()
+        db.close()
+
+        headers = {"Authorization": f"Bearer {create_access_token({'sub': username})}"}
+        starts_at = models.utcnow()
+
+        created = client.post("/api/placements/", headers=headers, json={
+            "content_id": content_id,
+            "advertiser": "Prakrithi Roots",
+            "plan_id": plan_id,
+            "starts_at": starts_at.isoformat(),
+            "ends_at": (starts_at + timedelta(days=50)).isoformat(),
+            "targets": [
+                {"screen_id": screens["shop"], "days": 10},
+                {"screen_id": screens["airport"], "days": 50},
+                {"screen_id": screens["mall"]},
+            ],
+        })
+        check(
+            created.status_code == 201,
+            f"booking on a package failed: {created.status_code} {created.text}",
+        )
+        if created.status_code != 201:
+            return
+
+        body = created.json()
+        check(
+            (body.get("plan") or {}).get("id") == plan_id,
+            "the booking did not keep the package it was sold on",
+        )
+
+        by_screen = {t["screen_id"]: t for t in body["targets"]}
+        check(
+            by_screen[screens["shop"]]["days"] == 10,
+            f"shop was sold 10 days, reports {by_screen[screens['shop']]['days']}",
+        )
+        check(
+            by_screen[screens["airport"]]["days"] == 50,
+            f"airport was sold 50 days, reports {by_screen[screens['airport']]['days']}",
+        )
+        # A location left on the default stores no window of its own and follows the booking.
+        check(
+            by_screen[screens["mall"]]["days"] is None,
+            "a location with no length of its own should follow the booking, not be given one",
+        )
+    finally:
+        client.__exit__(None, None, None)
+
+
 if __name__ == "__main__":
     run()
+    run_on_a_package()
     if failures:
         print("PER-LOCATION AD WINDOW FAILURES:")
         for failure in failures:

@@ -357,8 +357,17 @@ def run() -> None:
             organization_id=org_id, name="House promo", type="image",
             file_url="s3://x/house.png", status="ready",
         )
-        db.add(house_ad)
+        # Its own creative for this scenario: `content_id` is already carrying a live
+        # booking from the checks above, and an advert carries only one (see
+        # placements.create_placement). What is under test here is the playlist FORK, not
+        # which file is in it.
+        solo_ad = models.Content(
+            organization_id=org_id, name="Solo Booking Creative", type="image",
+            file_url="s3://x/solo.png", status="ready",
+        )
+        db.add_all([house_ad, solo_ad])
         db.flush()
+        solo_ad_id = solo_ad.id
         for order in range(3):
             db.add(models.PlaylistItem(
                 playlist_id=venue_loop.id, content_id=house_ad.id, duration=10, order=order))
@@ -386,7 +395,7 @@ def run() -> None:
 
         solo = models.utcnow()
         booking = client.post("/api/placements/", headers=headers, json={
-            "content_id": content_id, "advertiser": "Prakrithi Roots", "price_paise": 100_000,
+            "content_id": solo_ad_id, "advertiser": "Prakrithi Roots", "price_paise": 100_000,
             "starts_at": solo.isoformat(), "ends_at": (solo + timedelta(days=7)).isoformat(),
             "targets": [{"screen_id": booked_id}],
         })
@@ -405,9 +414,9 @@ def run() -> None:
         check(len(own_items) == 4,
               f"the booked screen plays {len(own_items)} items, expected the venue's 3 "
               "plus the advert")
-        check(any(i.content_id == content_id for i in own_items),
+        check(any(i.content_id == solo_ad_id for i in own_items),
               "the advert never reached the booked screen")
-        check(len(venue_items) == 3 and all(i.content_id != content_id for i in venue_items),
+        check(len(venue_items) == 3 and all(i.content_id != solo_ad_id for i in venue_items),
               "the advert leaked into the venue loop, so every screen in the group plays it")
         check(sibling.resolve_playlist_id() == venue_loop_id,
               "a sibling screen lost its inherited loop")

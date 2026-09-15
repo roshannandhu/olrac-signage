@@ -122,7 +122,11 @@ class PlaybackService : Service() {
 
             when {
                 type == "request_screenshot" || command == "request_screenshot" -> ScreenshotManager.requestScreenshot()
-                type == "launch_app" || type == "bring_to_front" || command == "launch_app" || command == "bring_to_front" -> launchPlayer()
+                (type == "launch_app" || type == "bring_to_front" || command == "launch_app" || command == "bring_to_front") -> {
+                    // Arrives on the screen AND org sockets for one press; act on it once.
+                    if (com.olrac.signage.boot.RemoteLaunchGate.allow()) launchPlayer()
+                    else Log.d(TAG, "Ignoring a repeat bring_to_front")
+                }
                 type in setOf("sync", "sync_now", "reload", "reload_playlist", "content_updated", "playlist_updated") ||
                     command in setOf("sync", "sync_now", "reload", "reload_playlist", "content_updated", "playlist_updated") -> {
                     android.util.Log.i("PlaybackService", "Received WS sync event (type=$type command=$command); triggering immediate sync")

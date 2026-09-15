@@ -89,7 +89,7 @@ object HeartbeatReporter {
                         com.olrac.signage.sync.UpdateManager.requestUpdateCheck(appContext)
                         com.olrac.signage.service.PlaybackService.requestImmediateSync(appContext)
                     }
-                    if (cmd == "bring_to_front" || cmd == "launch_app") {
+                    if ((cmd == "bring_to_front" || cmd == "launch_app") && com.olrac.signage.boot.RemoteLaunchGate.allow()) {
                         android.util.Log.i("HeartbeatReporter", "Received $cmd command from server; bringing app to front")
                         com.olrac.signage.boot.PlayerLauncher.launch(appContext, delayMs = 500L, reason = "heartbeat_command")
                     } else if (cmd == "reset" || cmd == "unpair") {

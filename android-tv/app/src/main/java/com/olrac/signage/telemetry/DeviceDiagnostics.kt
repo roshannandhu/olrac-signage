@@ -75,6 +75,17 @@ object DeviceDiagnostics {
         }
         probe("watchdog_last_connected_at") { prefs.getLong(WatchdogAccessibilityService.PREF_CONNECTED_AT, 0L).takeIf { it > 0 } }
         probe("watchdog_last_destroyed_at") { prefs.getLong(WatchdogAccessibilityService.PREF_DESTROYED_AT, 0L).takeIf { it > 0 } }
+        probe("watchdog_last_unbound_at") { prefs.getLong(WatchdogAccessibilityService.PREF_UNBOUND_AT, 0L).takeIf { it > 0 } }
+        probe("watchdog_connected_after_boot") {
+            if (prefs.contains(WatchdogAccessibilityService.PREF_CONNECTED_AFTER_BOOT)) prefs.getBoolean(WatchdogAccessibilityService.PREF_CONNECTED_AFTER_BOOT, false) else null
+        }
+        // Newest first, "package@HH:mm:ss" -- what was on screen around the switch turning off.
+        probe("watchdog_recent_packages") { prefs.getString(WatchdogAccessibilityService.PREF_RECENT_PACKAGES, null) }
+        probe("home_screen_packages") {
+            ctx.packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), PackageManager.MATCH_DEFAULT_ONLY)
+                .joinToString(",") { it.activityInfo.packageName }
+        }
+        probe("last_crash") { prefs.getString(CrashRecorder.PREF_LAST_CRASH, null) }
 
         // --- the Android 13+ lock ------------------------------------------------------
         // Recorded raw, including a refusal: whether this op is readable at all differs by

@@ -54,6 +54,7 @@ class PlaybackService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        com.olrac.signage.telemetry.CrashRecorder.install(this)
         createNotificationChannel()
         promoteToForeground()
         acquireWakeLock()

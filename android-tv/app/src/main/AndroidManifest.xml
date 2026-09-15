@@ -28,6 +28,16 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
+    <!-- The watchdog reclaims the screen when the TV returns to its home screen, so it has to
+         be able to tell which apps ARE the home screen. Android 11+ hides other packages
+         from an app unless it declares what it needs to see. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+    </queries>
+
     <!-- allowBackup=false: the device secret lives in SharedPreferences, and leaving
          backups on put it in every adb backup and cloud backup the panel made. A kiosk has
          nothing worth restoring anyway: identity is re-derived from the hardware on the

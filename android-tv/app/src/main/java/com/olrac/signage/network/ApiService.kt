@@ -224,6 +224,12 @@ data class ContentDto(
     val file_size_bytes: Long? = 0L
 )
 
+/** The TV's own state, for support to read remotely. See telemetry/DeviceDiagnostics. */
+data class DiagnosticsRequest(
+    val device_id: String,
+    val report: Map<String, Any?>
+)
+
 data class HeartbeatResponse(
     val status: String,
     val screen_status: String?,
@@ -269,6 +275,9 @@ interface ApiService {
     /** Trade the stored device secret for a short-lived bearer token. */
     @POST("api/screens/auth")
     suspend fun authDevice(@Body request: DeviceAuthRequest): Response<DeviceTokenResponse>
+
+    @POST("api/screens/diagnostics")
+    suspend fun reportDiagnostics(@Body request: DiagnosticsRequest): Response<Unit>
 
     @POST("api/screens/heartbeat")
     suspend fun heartbeat(@Body request: HeartbeatRequest): Response<HeartbeatResponse>

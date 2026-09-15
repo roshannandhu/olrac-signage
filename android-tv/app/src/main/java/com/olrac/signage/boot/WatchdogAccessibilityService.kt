@@ -39,11 +39,16 @@ class WatchdogAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         Log.d(TAG, "WatchdogAccessibilityService onServiceConnected")
+        // Remembered so a remote diagnostics report can tell "never ran" from "ran and died".
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .putLong(PREF_CONNECTED_AT, System.currentTimeMillis()).apply()
         launchOlracSignage("onServiceConnected")
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .putLong(PREF_DESTROYED_AT, System.currentTimeMillis()).apply()
         if (instance == this) instance = null
     }
 
@@ -100,6 +105,8 @@ class WatchdogAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "WatchdogA11y"
+        const val PREF_CONNECTED_AT = "watchdog_connected_at"
+        const val PREF_DESTROYED_AT = "watchdog_destroyed_at"
         private var instance: WatchdogAccessibilityService? = null
 
         fun bringToFront(context: Context, reason: String = "remote_command"): Boolean {

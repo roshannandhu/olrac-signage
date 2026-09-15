@@ -218,6 +218,13 @@ class PlaybackService : Service() {
             var consecutiveFailures = 0
             while (isActive) {
                 val outcome = synchronizer.sync()
+                // Cheap when nothing changed: collected locally and only posted on a change or
+                // every half hour. Isolated so a report can never disturb sync or heartbeat.
+                runCatching {
+                    com.olrac.signage.telemetry.DeviceDiagnostics.sendIfDue(
+                        this@PlaybackService, DeviceState(this@PlaybackService).deviceId
+                    )
+                }
                 try {
                     HeartbeatReporter.send(this@PlaybackService)
                     ProofOfPlayReporter.flush(this@PlaybackService)

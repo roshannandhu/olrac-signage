@@ -222,7 +222,7 @@ function ItemRow({ item, defaultTransition, defaultDurationMs, canEdit, saving, 
       className={cn(
         'border-0 bg-card py-0 ring-1 ring-hairline transition-all duration-300',
         isDragging ? 'z-20 opacity-80 shadow-2xl' : 'shadow-[0_1px_2px_rgba(15,23,42,.04)]',
-        item.id < 0 && 'animate-in fade-in slide-in-from-right-4 duration-300',
+        item.id < 0 && 'animate-in fade-in zoom-in-95 ring-2 ring-primary/40 bg-primary/5 duration-500',
         highlighted && 'ring-2 ring-primary bg-primary/5 shadow-lg shadow-primary/25 scale-[1.015]'
       )}
     >
@@ -622,7 +622,7 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
     ])
     setTimeout(() => {
       setFlyingItems((prev) => prev.filter((it) => it.id !== flyId))
-    }, 480)
+    }, 520)
 
     if (instant) {
       addBookedMutation.mutate(content)
@@ -665,7 +665,7 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
     ])
     setTimeout(() => {
       setFlyingItems((prev) => prev.filter((it) => it.id !== flyId))
-    }, 480)
+    }, 520)
 
     removeMutation.mutate(item.id)
   }
@@ -681,7 +681,7 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
         data-library-row
         id={`library-item-${content.id}`}
         className={cn(
-          'flex items-center gap-3 rounded-xl border border-hairline p-2.5 transition-colors duration-200 hover:bg-muted',
+          'flex items-center gap-3 rounded-xl border border-hairline p-2.5 transition-all duration-300 hover:bg-muted animate-in fade-in duration-300',
           placed && 'bg-muted/40'
         )}
       >
@@ -727,20 +727,13 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
         return (
           <div
             key={flying.id}
-            className={cn(
-              'pointer-events-none fixed z-[99999] flex items-center gap-3 rounded-xl border p-3 shadow-2xl backdrop-blur-md ring-2',
-              isReverse
-                ? 'border-amber-500/40 bg-card/95 ring-amber-500/60'
-                : 'border-primary/40 bg-card/95 ring-primary/60'
-            )}
+            className="pointer-events-none fixed z-[99999] will-change-transform"
             style={
               {
                 left: 0,
                 top: 0,
-                width: 280,
-                animation: isReverse
-                  ? 'flyArcReverse 480ms cubic-bezier(0.16, 1, 0.3, 1) forwards'
-                  : 'flyArc 480ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                width: 290,
+                animation: 'flyTranslate 520ms cubic-bezier(0.2, 0.9, 0.3, 1) forwards',
                 '--fly-start-x': `${flying.startX}px`,
                 '--fly-start-y': `${flying.startY}px`,
                 '--fly-end-x': `${flying.targetX}px`,
@@ -748,20 +741,34 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
               } as React.CSSProperties & Record<string, string | number>
             }
           >
-            <div className="size-10 shrink-0 overflow-hidden rounded-lg bg-black/10">
-              <MediaThumbnail item={flying.content} className="size-10 rounded-lg object-cover" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-foreground">{flying.content.name}</p>
-              {isReverse ? (
-                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
-                  <Sparkles className="size-2.5 animate-pulse" /> Returning to library…
-                </span>
-              ) : (
-                <span className="text-[10px] text-primary font-medium flex items-center gap-1">
-                  <Sparkles className="size-2.5 animate-spin" /> Adding to timeline…
-                </span>
+            <div
+              className={cn(
+                'flex items-center gap-3 rounded-2xl border p-3 backdrop-blur-xl shadow-2xl transition-colors will-change-transform',
+                isReverse
+                  ? 'border-amber-500/30 bg-card/90 ring-1 ring-amber-500/50 dark:bg-slate-900/90'
+                  : 'border-primary/30 bg-card/90 ring-1 ring-primary/50 dark:bg-slate-900/90'
               )}
+              style={{
+                animation: isReverse
+                  ? 'flyElevationReverse 520ms cubic-bezier(0.25, 1, 0.5, 1) forwards'
+                  : 'flyElevationForward 520ms cubic-bezier(0.25, 1, 0.5, 1) forwards',
+              }}
+            >
+              <div className="size-11 shrink-0 overflow-hidden rounded-xl bg-black/10 ring-1 ring-black/10 dark:ring-white/10 shadow-sm">
+                <MediaThumbnail item={flying.content} className="size-11 rounded-xl object-cover" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-foreground tracking-tight">{flying.content.name}</p>
+                {isReverse ? (
+                  <span className="mt-0.5 inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                    <Sparkles className="size-2.5 animate-pulse" /> Returning to library
+                  </span>
+                ) : (
+                  <span className="mt-0.5 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    <Sparkles className="size-2.5 animate-spin" /> Adding to timeline
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         )

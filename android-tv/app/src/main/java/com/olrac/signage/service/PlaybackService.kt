@@ -58,6 +58,9 @@ class PlaybackService : Service() {
         promoteToForeground()
         acquireWakeLock()
         startRealtimeClient()
+        // One line per service start, so a TV whose watchdog cannot run says why in its log
+        // instead of leaving it to be discovered from a greyed-out switch.
+        Log.i(TAG, "Watchdog state=${com.olrac.signage.boot.WatchdogStatus.state(this)}")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {

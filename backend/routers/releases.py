@@ -1,7 +1,10 @@
+import json
 import logging
-from typing import List
+from datetime import timedelta
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 
 from .. import models, rollout, schemas
@@ -102,3 +105,103 @@ def promote_release(
         scope.user.username,
     )
     return release
+
+
+class ScreenUpdateRequest(BaseModel):
+    # A build to pin this screen to. Omitted means "the latest released build", which also
+    # clears any earlier pin so the screen goes back to following the fleet.
+    version_code: Optional[int] = None
+
+
+class ScreenUpdateResult(BaseModel):
+    screen_id: int
+    name: Optional[str] = None
+    app_version: Optional[str] = None
+    target_version_code: Optional[int] = None
+    offered_version_code: Optional[int] = None
+    offered_version_name: Optional[str] = None
+    already_current: bool
+    online: bool
+
+
+@router.post("/screens/{screen_id}/update", response_model=ScreenUpdateResult)
+async def update_screen_now(
+    screen_id: int,
+    data: ScreenUpdateRequest | None = None,
+    scope: TenantScope = Depends(require_tenant_roles("super_admin")),
+):
+    """Make one TV look for its update now instead of on its own schedule.
+
+    Screens update themselves when a release is published, but only when they next hear
+    about it -- and one that failed, was offline, or was left with a dismissed prompt had no
+    way to be told again short of publishing another build. This is the operator's lever for
+    a single screen.
+
+    Three deliveries, so it lands whichever build and connection the screen has:
+      * the screen's sync marker moves, so its next sync returns the full body carrying the
+        offer instead of a 204 -- this alone works on every player ever shipped;
+      * a queued `check_update` clears the player's retry backoff and, from 1.0.13, is
+        picked up by the 15-second heartbeat and syncs immediately;
+      * a push over the screen's socket, when it holds one, syncs it at once.
+    """
+    db = scope.db
+    # Platform-wide on purpose: the operator is not acting inside any one tenant.
+    screen = (
+        db.query(models.Screen)
+        .filter(models.Screen.id == screen_id, models.Screen.deleted_at.is_(None))
+        .first()
+    )
+    if not screen or not screen.device_id:
+        raise HTTPException(status_code=404, detail="Screen not found")
+
+    version_code = data.version_code if data else None
+    if version_code is not None:
+        release = (
+            db.query(models.AppRelease)
+            .filter(models.AppRelease.version_code == version_code)
+            .first()
+        )
+        if not release:
+            raise HTTPException(status_code=422, detail=f"No release with version_code {version_code}")
+        if not release.sha256:
+            raise HTTPException(status_code=422, detail="That release has no sha256 and cannot be installed")
+    # Also resets the failure count, so a screen that had given up on a build (rolled back
+    # after repeated failures) is allowed to try again when a person asks it to.
+    rollout.repin(screen, version_code)
+    screen.assignment_updated_at = models.utcnow()
+    db.commit()
+    db.refresh(screen)
+
+    from ..services import current_app_version, queue_device_command
+
+    offered = current_app_version(
+        db, screen.target_version_code or (screen.group.target_version_code if screen.group else None)
+    )
+    await queue_device_command(screen.device_id, "check_update", 600)
+    try:
+        from .websockets import broadcast_in_memory
+
+        await broadcast_in_memory(
+            f"screen:{screen.device_id}",
+            json.dumps({"type": "sync_now", "device_id": screen.device_id}),
+        )
+    except Exception as exc:  # noqa: BLE001 - the queued command still delivers it
+        logger.warning("Could not push sync_now to screen %s: %s", screen.id, exc)
+
+    online = screen.last_seen is not None and (
+        models.utcnow() - screen.last_seen
+    ) <= timedelta(seconds=150)
+    logger.info(
+        "Update requested for screen %s (pin=%s, offering %s) by %s",
+        screen.id, screen.target_version_code, offered.version_code, scope.user.username,
+    )
+    return ScreenUpdateResult(
+        screen_id=screen.id,
+        name=screen.name,
+        app_version=screen.app_version,
+        target_version_code=screen.target_version_code,
+        offered_version_code=offered.version_code,
+        offered_version_name=offered.version_name,
+        already_current=bool(screen.app_version and screen.app_version == offered.version_name),
+        online=online,
+    )

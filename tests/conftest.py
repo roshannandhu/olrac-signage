@@ -121,6 +121,8 @@ ISOLATED_SCRIPTS = {
     "test_maintenance_pin.py",
     # A booked advert reaches the screen, inside a window that is open now.
     "test_assigned_ad_plays.py",
+    # An operator can make one TV look for its update now.
+    "test_screen_update_now.py",
     # Tenant purge: removing a workspace and hard-deleting 30 days later.
     "test_tenant_purge.py",
     # Every screen gets a dedicated playlist upon pairing/enrolling and safety provisioning.
@@ -201,6 +203,7 @@ NEEDS_POSTGRES = ISOLATED_SCRIPTS - {
     "test_ota_reaches_a_settled_fleet.py",
     "test_maintenance_pin.py",
     "test_assigned_ad_plays.py",
+    "test_screen_update_now.py",
     # All three build their own SQLite file and check plain Python over the ORM. Listed
     # here or a machine with no Postgres would skip them and report a green run that
     # proved nothing.

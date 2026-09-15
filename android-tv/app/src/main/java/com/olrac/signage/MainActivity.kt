@@ -300,12 +300,10 @@ class MainActivity : ComponentActivity() {
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         // Touch-only path to the maintenance PIN, for devices with no D-pad remote (touch
         // panels, phones) where the Up-Up-Down-Down-OK gesture is unreachable: seven quick
-        // taps in the top-left corner reveal the same PIN prompt. Only over the player, and
-        // the pin behind it is still the real control.
+        // taps in any corner reveal the same PIN prompt. Only over the player, and the pin
+        // behind it is still the real control.
         if (ev.action == MotionEvent.ACTION_DOWN && !showPinPrompt && !showServerSetup) {
-            val w = window.decorView.width
-            val h = window.decorView.height
-            val inCorner = w > 0 && h > 0 && ev.rawX < w * 0.12f && ev.rawY < h * 0.12f
+            val inCorner = CornerTapCounter.isCorner(ev.rawX, ev.rawY, window.decorView.width, window.decorView.height)
             if (inCorner) {
                 if (cornerTaps.record(System.currentTimeMillis())) {
                     showPinPrompt = true

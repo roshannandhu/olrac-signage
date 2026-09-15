@@ -307,6 +307,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        visible = true
+    }
+
+    override fun onStop() {
+        visible = false
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         // With BootReceiver's timestamp, tells a remote report whether a restart reopened the player.
@@ -939,6 +949,10 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val PREF_PLAYER_RESUMED_AT = "player_last_resumed_at"
         const val PREF_OPERATOR_EXIT_AT = "operator_exit_at"
+
+        /** Whether the player is on screen. Read by PlaybackService, which shares the process. */
+        @Volatile var visible = false
+            private set
         private const val PAIRING_RETRY_MS = 5_000L
 
         // Boot reconnect backoff. Starts quick because the common case is a TV that booted a

@@ -2,6 +2,7 @@ package com.olrac.signage.telemetry
 
 import android.app.ActivityManager
 import android.app.AlarmManager
+import android.app.AppOpsManager
 import android.app.NotificationManager
 import android.app.role.RoleManager
 import android.content.Context
@@ -30,6 +31,7 @@ object DeviceDiagnostics {
     private const val TAG = "DeviceDiagnostics"
     private const val RESEND_AFTER_MS = 30 * 60_000L
     private const val PREFS = "signage_prefs"
+    private const val PREF_OVERLAY_SEEN_AT = "overlay_last_seen_allowed_at"
 
     @Volatile private var lastSent: String? = null
     @Volatile private var lastSentAt = 0L
@@ -81,6 +83,26 @@ object DeviceDiagnostics {
         }
         // --- what the player can use to come to the front ----------------------------------
         probe("overlay_allowed") { Settings.canDrawOverlays(ctx) }
+        // Allowed, then off again after a restart, means the TV itself resets it at boot.
+        probe("overlay_last_seen_allowed_at") {
+            if (Settings.canDrawOverlays(ctx)) prefs.edit().putLong(PREF_OVERLAY_SEEN_AT, System.currentTimeMillis()).apply()
+            prefs.getLong(PREF_OVERLAY_SEEN_AT, 0L).takeIf { it > 0 }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // 0 allowed, 1 ignored, 2 errored, 3 default (not granted).
+            probe("overlay_op_mode") {
+                ctx.getSystemService(AppOpsManager::class.java)
+                    .unsafeCheckOpRawNoThrow(AppOpsManager.OPSTR_SYSTEM_ALERT_WINDOW, android.os.Process.myUid(), pkg)
+            }
+            probe("home_role_available") { ctx.getSystemService(RoleManager::class.java).isRoleAvailable(RoleManager.ROLE_HOME) }
+            probe("home_role_request_screen") {
+                val request = ctx.getSystemService(RoleManager::class.java).createRequestRoleIntent(RoleManager.ROLE_HOME)
+                ctx.packageManager.resolveActivity(request, 0)?.activityInfo?.packageName
+            }
+        }
+        probe("low_ram_device") { ctx.getSystemService(ActivityManager::class.java).isLowRamDevice }
+        probe("player_visible") { com.olrac.signage.MainActivity.visible }
+        probe("last_launch") { prefs.getString(com.olrac.signage.boot.PlayerLauncher.PREF_LAST_LAUNCH, null) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             probe("home_role_held") { ctx.getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_HOME) }
         }

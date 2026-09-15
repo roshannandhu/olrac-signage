@@ -20,8 +20,10 @@ object CrashRecorder {
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             runCatching {
-                val frames = error.stackTrace.take(6).joinToString(" < ") { "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" }
-                val summary = "${System.currentTimeMillis()} ${thread.name} ${error.javaClass.name}: ${error.message?.take(160)} @ $frames"
+                // The root cause, not the wrapper: "Unable to start service ..." hid what threw.
+                val root = generateSequence(error) { it.cause?.takeIf { cause -> cause !== it } }.last()
+                val frames = root.stackTrace.take(6).joinToString(" < ") { "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}" }
+                val summary = "${System.currentTimeMillis()} ${thread.name} ${root.javaClass.name}: ${root.message?.take(300)} @ $frames"
                 // commit, not apply: the process is about to die and apply would lose it.
                 appContext.getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
                     .edit().putString(PREF_LAST_CRASH, summary.take(700)).commit()

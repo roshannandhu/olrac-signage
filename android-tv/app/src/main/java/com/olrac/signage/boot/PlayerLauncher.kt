@@ -45,6 +45,9 @@ object PlayerLauncher {
     fun launch(context: Context, delayMs: Long = BOOT_SETTLE_MS, reason: String = "unspecified") {
         warnIfBackgroundStartsWillBeRefused(context, reason)
         val intent = playerIntent(context)
+        context.getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .putString(PREF_LAST_LAUNCH, "${System.currentTimeMillis()} reason=$reason overlay=${canStartFromBackground(context)}")
+            .apply()
 
         // 1. Direct startActivity. Allowed from the background on Android 10+ only for a device
         //    owner or an app granted "Display over other apps" -- which is why that permission,
@@ -214,4 +217,5 @@ object PlayerLauncher {
     }
 
     private const val REQUEST_BOOT_LAUNCH = 1001
+    const val PREF_LAST_LAUNCH = "last_launch"
 }

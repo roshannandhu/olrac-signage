@@ -32,7 +32,7 @@ class BootReceiver : BroadcastReceiver() {
         try {
             // Service still owns sync, telemetry and the wake lock; it is no longer the
             // mechanism that fronts the UI.
-            PlaybackService.start(context, launchPlayer = false)
+            PlaybackService.start(context, launchPlayer = false, afterBoot = true)
         } catch (exception: RuntimeException) {
             Log.e(TAG, "Unable to start playback service for ${intent.action}", exception)
         }

@@ -4,8 +4,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -51,6 +53,7 @@ class PlaybackService : Service() {
     private var commandPollJob: Job? = null
     private var connectivityWatcher: ConnectivityWatcher? = null
     private var realtimeClient: RealtimeClient? = null
+    private var bootFollowUp: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -59,6 +62,9 @@ class PlaybackService : Service() {
         promoteToForeground()
         acquireWakeLock()
         startRealtimeClient()
+        // A TV "restart" from the remote is often standby, not a reboot: no BOOT_COMPLETED
+        // arrives, only the screen coming back on. Treat that the same as a restart.
+        ContextCompat.registerReceiver(this, screenOnReceiver, IntentFilter(Intent.ACTION_SCREEN_ON), ContextCompat.RECEIVER_NOT_EXPORTED)
         // One line per service start: whether this TV is allowed to bring the player up by
         // itself after a restart ("Display over other apps", or device owner).
         Log.i(TAG, "Reopens after restart=${PlayerLauncher.canStartFromBackground(this)}")
@@ -73,7 +79,44 @@ class PlaybackService : Service() {
         if (intent?.getBooleanExtra(EXTRA_LAUNCH_PLAYER, false) == true) {
             launchPlayer()
         }
+        if (intent?.getBooleanExtra(EXTRA_AFTER_BOOT, false) == true) {
+            keepPlayerInFrontAfterStart()
+        }
         return START_STICKY
+    }
+
+    private val screenOnReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val exitedAt = getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
+                .getLong(MainActivity.PREF_OPERATOR_EXIT_AT, 0L)
+            if (System.currentTimeMillis() - exitedAt > OPERATOR_EXIT_GRACE_MS) keepPlayerInFrontAfterStart()
+        }
+    }
+
+    /**
+     * One launch at boot was not enough to end up ON the player.
+     *
+     * The home screen can come up after the boot broadcast -- Google TV's launcher finishes
+     * loading seconds later and lands on top of whatever opened first. So for two minutes the
+     * player is brought back whenever it is not on screen, and left alone once an operator
+     * exits deliberately. A player already in front is not touched.
+     */
+    private fun keepPlayerInFrontAfterStart() {
+        bootFollowUp?.cancel()
+        val startedAt = System.currentTimeMillis()
+        bootFollowUp = serviceScope.launch {
+            var waited = 0L
+            for (atSeconds in BOOT_FOLLOW_UP_SECONDS) {
+                delay((atSeconds - waited) * 1_000L)
+                waited = atSeconds
+                val exitedAt = getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
+                    .getLong(MainActivity.PREF_OPERATOR_EXIT_AT, 0L)
+                if (exitedAt >= startedAt) return@launch
+                if (!MainActivity.visible) {
+                    PlayerLauncher.launch(this@PlaybackService, PlayerLauncher.WARM_RESTART_MS, reason = "follow_up_${atSeconds}s")
+                }
+            }
+        }
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -87,6 +130,8 @@ class PlaybackService : Service() {
     }
 
     override fun onDestroy() {
+        runCatching { unregisterReceiver(screenOnReceiver) }
+        bootFollowUp?.cancel()
         realtimeClient?.stop()
         realtimeClient = null
         connectivityWatcher?.stop()
@@ -318,14 +363,19 @@ class PlaybackService : Service() {
         private const val CHANNEL_ID = "playback-protection"
         private const val NOTIFICATION_ID = 1001
         private const val EXTRA_LAUNCH_PLAYER = "launch_player"
+        private const val EXTRA_AFTER_BOOT = "after_boot"
+
+        /** Seconds after a boot or screen-on at which the player is put back if it is not in front. */
+        private val BOOT_FOLLOW_UP_SECONDS = listOf(5L, 15L, 30L, 60L, 120L)
         private const val ACTION_SYNC_NOW = "com.olrac.signage.action.SYNC_NOW"
 
         /** How often to ask for a queued remote command. See startCommandPollLoop. */
         private const val COMMAND_POLL_SECONDS = 15
 
-        fun start(context: Context, launchPlayer: Boolean) {
+        fun start(context: Context, launchPlayer: Boolean, afterBoot: Boolean = false) {
             val intent = Intent(context, PlaybackService::class.java)
                 .putExtra(EXTRA_LAUNCH_PLAYER, launchPlayer)
+                .putExtra(EXTRA_AFTER_BOOT, afterBoot)
             ContextCompat.startForegroundService(context, intent)
         }
 

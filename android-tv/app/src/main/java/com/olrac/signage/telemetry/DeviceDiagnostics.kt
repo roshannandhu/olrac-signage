@@ -102,6 +102,7 @@ object DeviceDiagnostics {
         }
         probe("low_ram_device") { ctx.getSystemService(ActivityManager::class.java).isLowRamDevice }
         probe("player_visible") { com.olrac.signage.MainActivity.visible }
+        probe("home_role_request_result") { prefs.getString(com.olrac.signage.MainActivity.PREF_HOME_ROLE_RESULT, null) }
         probe("last_launch") { prefs.getString(com.olrac.signage.boot.PlayerLauncher.PREF_LAST_LAUNCH, null) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             probe("home_role_held") { ctx.getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_HOME) }

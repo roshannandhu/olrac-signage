@@ -251,8 +251,9 @@ private fun StartAfterRestartControls() {
         val lowRam = remember { context.getSystemService(android.app.ActivityManager::class.java).isLowRamDevice }
         if (lowRam) {
             Text(
-                text = "On this TV use \"Choose OLRAC as TV launcher\" above and answer Yes. " +
-                    "\"Display over other apps\" does not work on this model.",
+                text = "This TV ignores \"Display over other apps\" from its settings. It can be " +
+                    "switched on once from a computer: adb shell appops set com.olrac.signage " +
+                    "SYSTEM_ALERT_WINDOW allow",
                 color = Color.LightGray,
                 textAlign = TextAlign.Center
             )

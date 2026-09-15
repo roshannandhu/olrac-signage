@@ -915,8 +915,12 @@ class MainActivity : ComponentActivity() {
      * the permission controller closes it without showing anything -- which is why "Choose OLRAC
      * as TV launcher" never did anything on the KONKA.
      */
-    private val homeRoleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+    private val homeRoleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        com.olrac.signage.boot.PlayerLauncher.releaseHold()
         defaultHome = isDefaultHomeLauncher()
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .putString(PREF_HOME_ROLE_RESULT, "${System.currentTimeMillis()} result=${result.resultCode} held=$defaultHome")
+            .apply()
         android.util.Log.i("MainActivity", "Home role request finished: held=$defaultHome")
     }
 
@@ -924,8 +928,10 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val roleManager = getSystemService(RoleManager::class.java)
             if (roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                com.olrac.signage.boot.PlayerLauncher.holdWhileSystemDialogOpen(this)
                 runCatching { homeRoleRequest.launch(roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)) }
                     .onSuccess { return }
+                com.olrac.signage.boot.PlayerLauncher.releaseHold()
             }
         }
         runCatching { startActivity(Intent(Settings.ACTION_HOME_SETTINGS)) }
@@ -942,6 +948,9 @@ class MainActivity : ComponentActivity() {
      */
     private fun askOnceToBecomeHome() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || defaultHome) return
+        // On a TV the launcher's higher-priority Home entry wins whoever holds the role, so a
+        // "Yes" there would change nothing. See PlayerLauncher.isEffectiveHome.
+        if (packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK)) return
         if (com.olrac.signage.boot.PlayerLauncher.canStartFromBackground(this)) return
         if (showPinPrompt || showServerSetup || operatorExited()) return
         val prefs = getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
@@ -951,15 +960,7 @@ class MainActivity : ComponentActivity() {
         requestHomeRole()
     }
 
-    private fun isDefaultHomeLauncher(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val roleManager = getSystemService(RoleManager::class.java)
-            return roleManager.isRoleAvailable(RoleManager.ROLE_HOME) &&
-                roleManager.isRoleHeld(RoleManager.ROLE_HOME)
-        }
-        val homeIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-        return packageManager.resolveActivity(homeIntent, 0)?.activityInfo?.packageName == packageName
-    }
+    private fun isDefaultHomeLauncher(): Boolean = com.olrac.signage.boot.PlayerLauncher.isEffectiveHome(this)
 
     private fun configurePlayerWindow() {
         window.addFlags(
@@ -983,7 +984,9 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val PREF_PLAYER_RESUMED_AT = "player_last_resumed_at"
         const val PREF_OPERATOR_EXIT_AT = "operator_exit_at"
-        private const val PREF_HOME_ROLE_ASKED_AT = "home_role_asked_at"
+        // v2: 1.0.27 recorded its ask even though a relaunch closed the dialog unseen.
+        private const val PREF_HOME_ROLE_ASKED_AT = "home_role_asked_v2_at"
+        const val PREF_HOME_ROLE_RESULT = "home_role_request_result"
 
         /** Whether the player is on screen. Read by PlaybackService, which shares the process. */
         @Volatile var visible = false

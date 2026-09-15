@@ -116,6 +116,23 @@
             android:name=".sync.InstallReceiver"
             android:exported="true" />
 
+        <!-- Restored in 1.0.30. Removed in 1.0.20, which is what broke auto-start-after-restart
+             on the KONKA: its accessibility entry was still enabled in the TV's settings DB, so
+             once the service class went away the entry pointed at nothing. Same class name back,
+             so a surviving entry re-activates it with no ADB. Enabling a fresh install still needs
+             one ADB write (the UI toggle is blocked on Android 13+); see SETUP notes. -->
+        <service
+            android:name=".boot.WatchdogAccessibilityService"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/watchdog_config" />
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

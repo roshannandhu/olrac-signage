@@ -113,6 +113,22 @@ object DeviceDiagnostics {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             probe("full_screen_intent_allowed") { ctx.getSystemService(NotificationManager::class.java).canUseFullScreenIntent() }
         }
+        // Does the TV still have the watchdog switched on? If this lists our service, restoring it
+        // (1.0.30) re-activates with no ADB -- the whole point of bringing it back. connected/unbound
+        // times tell "never ran" from "ran and the OEM killed it".
+        probe("enabled_accessibility_services") {
+            Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
+        }
+        probe("watchdog_enabled") {
+            (Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES) ?: "")
+                .contains("$pkg/$pkg.boot.WatchdogAccessibilityService")
+        }
+        probe("watchdog_connected_at") {
+            prefs.getLong(com.olrac.signage.boot.WatchdogAccessibilityService.PREF_CONNECTED_AT, 0L).takeIf { it > 0 }
+        }
+        probe("watchdog_unbound_at") {
+            prefs.getLong(com.olrac.signage.boot.WatchdogAccessibilityService.PREF_UNBOUND_AT, 0L).takeIf { it > 0 }
+        }
         probe("notifications_enabled") { NotificationManagerCompat.from(ctx).areNotificationsEnabled() }
         probe("battery_optimisation_ignored") { ctx.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(pkg) }
         probe("lock_task_mode") { ctx.getSystemService(ActivityManager::class.java).lockTaskModeState }

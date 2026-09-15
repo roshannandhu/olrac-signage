@@ -60,13 +60,46 @@ _S3_DEFAULTS = {
 _OVERRIDES: dict[str, str] = {}
 
 
+def _credential_shaped(name: str, value: str) -> bool:
+    """Whether a stored value could be a real access key or secret at all.
+
+    Every S3-compatible store issues key ids as 16+ alphanumerics (R2's are 32 hex) and
+    secrets as 20+ characters of base64. An email address or a login password is neither.
+    """
+    if name == "AWS_ACCESS_KEY_ID":
+        return value.isalnum() and 16 <= len(value) <= 128
+    if name == "AWS_SECRET_ACCESS_KEY":
+        return len(value) >= 20 and all(ch.isalnum() or ch in "/+=" for ch in value)
+    return True
+
+
 def apply_storage_overrides(values: dict[str, str] | None) -> None:
-    """Replace the settings the console has supplied. Blank entries are dropped."""
+    """Replace the settings the console has supplied. Blank entries are dropped.
+
+    So is a credential that cannot be one. Production once held the admin's login email as
+    the access key and a password-shaped string as the secret -- the shape a browser's
+    password manager leaves when it autofills a sign-in pair into two unfamiliar fields. An
+    override beats the environment, so that pair switched object storage ON with credentials
+    no store would accept: every media URL was signed with them, R2 answered "Credential
+    access key has length 15, should be 32", and every TV reported its adverts as
+    undownloadable while the files sat intact in the database mirror. Dropping it here lets
+    the environment and the mirror behind it take over again.
+    """
+    import logging
+
     _OVERRIDES.clear()
     for key, value in (values or {}).items():
         cleaned = (value or "").strip()
-        if cleaned:
-            _OVERRIDES[key] = cleaned
+        if not cleaned:
+            continue
+        if not _credential_shaped(key, cleaned):
+            logging.getLogger(__name__).warning(
+                "Ignoring stored %s: it is not shaped like a storage credential "
+                "(length %d). Re-enter it, or clear it to use the environment.",
+                key, len(cleaned),
+            )
+            continue
+        _OVERRIDES[key] = cleaned
 
 
 def storage_override_names() -> list[str]:

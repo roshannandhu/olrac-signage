@@ -132,6 +132,7 @@ ISOLATED_SCRIPTS = {
 # python_files is what actually collects them.
 PURE_MODULES = {
     "test_media_worker.py",
+    "test_storage_override_shape.py",
     "test_rotation.py",
     "test_rollout_policy.py",
     "test_media_storage.py",

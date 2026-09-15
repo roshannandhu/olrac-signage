@@ -86,6 +86,10 @@ object DeviceDiagnostics {
                 .joinToString(",") { it.activityInfo.packageName }
         }
         probe("last_crash") { prefs.getString(CrashRecorder.PREF_LAST_CRASH, null) }
+        probe("default_home_package") {
+            ctx.packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), PackageManager.MATCH_DEFAULT_ONLY)
+                ?.activityInfo?.packageName
+        }
 
         // --- the Android 13+ lock ------------------------------------------------------
         // Recorded raw, including a refusal: whether this op is readable at all differs by

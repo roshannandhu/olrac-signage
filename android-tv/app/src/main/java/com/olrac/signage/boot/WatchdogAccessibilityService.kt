@@ -117,20 +117,29 @@ class WatchdogAccessibilityService : AccessibilityService() {
      */
     private fun shouldReclaimScreen(pkg: String): Boolean {
         if (pkg == packageName) return false
-        if (pkg in launcherPackages()) return true
+        // Checked before anything else. On a KONKA 2K D5STV, TV Settings, the setup wizard and a
+        // Realtek system service all answer the HOME intent alongside the real launcher -- so
+        // "any home app" included Settings itself, and the watchdog would have pulled the
+        // player over the very screen it is switched on from.
+        if (NEVER_RECLAIM_FROM.any { pkg.contains(it) }) return false
+        if (pkg == defaultHomePackage()) return true
         val info = runCatching { packageManager.getApplicationInfo(pkg, 0) }.getOrNull() ?: return false
         return info.flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0
     }
 
-    private var launchers: Set<String>? = null
+    private var defaultHome: String? = null
 
-    /** Every app that answers the HOME intent, except this player (which declares HOME too). */
-    private fun launcherPackages(): Set<String> = launchers ?: runCatching {
-        packageManager.queryIntentActivities(
+    /**
+     * The launcher the TV actually returns to -- the DEFAULT home activity, not every app that
+     * declares HOME. Null when there is no single default (Android shows its chooser, which
+     * resolves to the "android" package), or when that default is this player.
+     */
+    private fun defaultHomePackage(): String? = defaultHome ?: runCatching {
+        packageManager.resolveActivity(
             Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
             PackageManager.MATCH_DEFAULT_ONLY
-        ).map { it.activityInfo.packageName }.filter { it != packageName }.toSet()
-    }.getOrDefault(emptySet()).also { launchers = it }
+        )?.activityInfo?.packageName?.takeIf { it != "android" && it != packageName }
+    }.getOrNull().also { defaultHome = it }
 
     /** The last few foreground packages, so a remote report shows what the watchdog saw. */
     private fun recordRecentPackage(pkg: String) {
@@ -155,6 +164,10 @@ class WatchdogAccessibilityService : AccessibilityService() {
         private const val BOOT_WINDOW_MS = 5 * 60_000L
         private const val RECLAIM_DEBOUNCE_MS = 2_000L
         private const val RECENT_PACKAGES_KEPT = 10
+        /** System UI an operator uses to configure the TV: never taken away from them. */
+        private val NEVER_RECLAIM_FROM = listOf(
+            "settings", "setup", "packageinstaller", "permissioncontroller", "systemui", "systemservice",
+        )
         const val PREF_CONNECTED_AT = "watchdog_connected_at"
         const val PREF_CONNECTED_AFTER_BOOT = "watchdog_connected_after_boot"
         const val PREF_UNBOUND_AT = "watchdog_unbound_at"

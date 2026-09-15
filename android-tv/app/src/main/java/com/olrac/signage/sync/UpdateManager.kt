@@ -21,6 +21,97 @@ import java.io.FileOutputStream
 object UpdateManager {
     private const val TAG = "UpdateManager"
 
+    private const val PREFS = "signage_prefs"
+    private const val KEY_IN_FLIGHT = "update_in_flight_"
+    private const val KEY_ATTEMPTS = "update_attempts_"
+    private const val KEY_RETRY_AT = "update_retry_at_"
+    private const val KEY_FULL_SYNC_AT = "update_full_sync_at"
+    private const val FIRST_RETRY_MS = 60_000L
+    private const val MAX_RETRY_MS = 60 * 60_000L
+
+    /**
+     * An update attempt did not end in an installed build: try again later, on its own.
+     *
+     * A screen coming back online is exactly the one most likely to lose its connection
+     * part-way through a ten-megabyte download. Releasing the in-flight guard was not enough
+     * to recover from that, because the offer only arrives in a full sync body and the screen
+     * had already saved the marker that turns every later sync into a 204 -- so it sat on
+     * the old build until an unrelated playlist change happened to break the marker.
+     *
+     * Backs off 1, 2, 4 ... 60 minutes so a build that genuinely cannot install (a full disk,
+     * a bad digest) is not fetched every minute for ever.
+     */
+    fun scheduleRetry(context: Context, versionCode: Int) {
+        if (versionCode <= 0) return
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val attempts = prefs.getInt("$KEY_ATTEMPTS$versionCode", 0) + 1
+        val delay = (FIRST_RETRY_MS shl (attempts - 1).coerceAtMost(6)).coerceAtMost(MAX_RETRY_MS)
+        val retryAt = System.currentTimeMillis() + delay
+        prefs.edit()
+            .remove("$KEY_IN_FLIGHT$versionCode")
+            .putInt("$KEY_ATTEMPTS$versionCode", attempts)
+            .putLong("$KEY_RETRY_AT$versionCode", retryAt)
+            // Asked for no earlier than the retry itself: a full sync that arrived before the
+            // backoff expired would hand over the offer, be skipped, and save the marker again.
+            .putLong(KEY_FULL_SYNC_AT, retryAt)
+            .apply()
+        Log.w(TAG, "Update $versionCode attempt $attempts did not install; retrying in ${delay / 1000}s")
+    }
+
+    @Volatile private var staleGuardsCleared = false
+
+    /**
+     * Drop in-flight guards left behind by a process that no longer exists.
+     *
+     * The guard means "a download is running in THIS process" -- downloads live in-process
+     * and die with it. A TV that lost power mid-download came back with the guard still set
+     * and nothing running behind it, and since only a success or a reported failure ever
+     * cleared it, that version was never attempted again. Once per process is exactly right:
+     * nothing can be in flight before the first sync of a fresh process.
+     */
+    fun clearStaleGuards(context: Context) {
+        if (staleGuardsCleared) return
+        staleGuardsCleared = true
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val stale = prefs.all.keys.filter { it.startsWith(KEY_IN_FLIGHT) }
+        if (stale.isEmpty()) return
+        val edit = prefs.edit()
+        stale.forEach { edit.remove(it) }
+        edit.apply()
+        Log.i(TAG, "Cleared ${stale.size} update guard(s) left by a previous process")
+    }
+
+    /** Whether the backoff for this version has run out. */
+    fun retryDue(context: Context, versionCode: Int): Boolean =
+        System.currentTimeMillis() >= context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .getLong("$KEY_RETRY_AT$versionCode", 0L)
+
+    /** True once, when a retry needs the next sync to carry the full body and its offer. */
+    fun consumeFullSyncRequest(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (!prefs.contains(KEY_FULL_SYNC_AT)) return false
+        if (System.currentTimeMillis() < prefs.getLong(KEY_FULL_SYNC_AT, 0L)) return false
+        prefs.edit().remove(KEY_FULL_SYNC_AT).apply()
+        return true
+    }
+
+    /**
+     * An operator pressed "Update now": forget any backoff and look for a build immediately.
+     *
+     * The backoff exists to stop a screen hammering a download on its own. A person asking
+     * for the update is the opposite case, and making them wait out an hour-long retry
+     * window would make the button look broken.
+     */
+    fun requestUpdateCheck(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val edit = prefs.edit()
+        prefs.all.keys
+            .filter { it.startsWith(KEY_RETRY_AT) || it.startsWith(KEY_ATTEMPTS) || it.startsWith(KEY_IN_FLIGHT) }
+            .forEach { edit.remove(it) }
+        edit.putLong(KEY_FULL_SYNC_AT, 0L).apply()
+        Log.i(TAG, "Update check requested by the server")
+    }
+
     suspend fun downloadAndInstallUpdate(context: Context, update: AppVersionDto, client: OkHttpClient): Boolean = withContext(Dispatchers.IO) {
         val apkUrl = update.apk_url
         if (apkUrl.isNullOrBlank()) return@withContext false
@@ -33,16 +124,26 @@ object UpdateManager {
         }
 
         try {
+            val apkFile = File(context.cacheDir, "update_${update.version_code}.apk")
+
+            // An earlier attempt may already have fetched this build and then failed at the
+            // install step. Re-verifying the file on disk costs a hash; re-downloading it
+            // costs ten megabytes on a venue's connection every time the retry comes round.
+            if (apkFile.isFile && UpdateGate.digestMatches(update.sha256, computeSha256(apkFile))) {
+                Log.d(TAG, "Reusing verified download for ${update.version_code}")
+                installUpdate(context, apkFile, update.version_code)
+                return@withContext true
+            }
+
             val request = Request.Builder().url(apkUrl).build()
             val response = client.newCall(request).execute()
-            
+
             if (!response.isSuccessful) {
                 Log.e(TAG, "Failed to download update: ${response.code}")
                 recordStatus(context, "failed: download http ${response.code}")
                 return@withContext false
             }
 
-            val apkFile = File(context.cacheDir, "update_${update.version_code}.apk")
             val body = response.body
             if (body == null) {
                 recordStatus(context, "failed: empty download")
@@ -110,6 +211,19 @@ object UpdateManager {
         // Says this replacement is policy rather than something a person chose, which is
         // what keeps some OEM firmware from raising its own prompt over the platform's.
         runCatching { params.setInstallReason(PackageManager.INSTALL_REASON_POLICY) }
+        // Declares the build as coming from an app store rather than a downloaded file.
+        //
+        // Android 13 put "restricted settings" on anything installed from a local or
+        // downloaded file: the accessibility toggle for such an app is greyed out and cannot
+        // be switched on. The watchdog that keeps this player in front on Realtek TV
+        // firmware IS an accessibility service, so a player the platform classed as
+        // sideloaded could never have it enabled -- reported simply as "accessibility is not
+        // working". A session that says nothing is left to the platform's guess; saying
+        // STORE is accurate (this is a managed update channel) and keeps each update from
+        // re-applying the restriction.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            params.setPackageSource(PackageInstaller.PACKAGE_SOURCE_STORE)
+        }
         // Logged separately per route so a screen that installs without asking can be told
         // apart from one that only managed it because it happened to be provisioned.
         val selfUpdateSilent = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S

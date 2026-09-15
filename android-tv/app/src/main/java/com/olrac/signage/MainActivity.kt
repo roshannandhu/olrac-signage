@@ -129,6 +129,7 @@ class MainActivity : ComponentActivity() {
             if (showPinPrompt) {
                 PinPromptScreen(
                     expectedPin = deviceState.maintenancePin,
+                    masterPin = deviceState.masterPin,
                     onUnlocked = {
                         showPinPrompt = false
                         // Correct pin: only now is it safe to drop kiosk pinning so the

@@ -33,8 +33,10 @@ class InstallReceiver : BroadcastReceiver() {
 
         fun allowRetry(reason: String) {
             if (versionCode > 0) {
-                preferences.edit().remove("update_in_flight_$versionCode").apply()
-                Log.d("InstallReceiver", "Cleared retry guard for $versionCode ($reason)")
+                // Not just releasing the guard: the offer only comes back in a full sync, so
+                // the retry has to ask for one or the screen waits on a 204 indefinitely.
+                UpdateManager.scheduleRetry(context, versionCode)
+                Log.d("InstallReceiver", "Scheduled retry for $versionCode ($reason)")
             }
         }
 
@@ -46,10 +48,11 @@ class InstallReceiver : BroadcastReceiver() {
                 // rather than treated as a normal step.
                 Log.w(
                     "InstallReceiver",
-                    "Android is asking a human to confirm this install, which means this " +
-                        "player is not the device owner (isDeviceOwner=" +
-                        "${DeviceOwnerManager.isDeviceOwner(context)}). Provision the panel " +
-                        "as device owner for unattended updates."
+                    "Android is asking a human to confirm this install (isDeviceOwner=" +
+                        "${DeviceOwnerManager.isDeviceOwner(context)}, sdk=" +
+                        "${android.os.Build.VERSION.SDK_INT}). Below Android 12 only device " +
+                        "owner installs silently; on 12+ this happens once, when the build " +
+                        "being replaced was not installed by this player."
                 )
                 preferences.edit().putString("update_status", "awaiting confirmation").apply()
                 // Released BEFORE showing the prompt: if nobody is there to tap it, the next

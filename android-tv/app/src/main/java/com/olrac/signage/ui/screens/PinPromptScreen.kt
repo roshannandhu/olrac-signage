@@ -27,6 +27,14 @@ import com.olrac.signage.data.MaintenanceGesture
 @Composable
 fun PinPromptScreen(
     expectedPin: String,
+    /**
+     * The platform operator's master code, accepted alongside [expectedPin] rather than
+     * instead of it. A support engineer standing at a panel they have never seen cannot be
+     * reading a different four digits off a dashboard for every screen -- least of all when
+     * the reason they are there is that the screen has no network and the dashboard shows
+     * nothing useful. Null when the operator has not set one.
+     */
+    masterPin: String? = null,
     onUnlocked: () -> Unit,
     onCancel: () -> Unit
 ) {
@@ -37,7 +45,7 @@ fun PinPromptScreen(
     var error by remember { mutableStateOf<String?>(null) }
 
     fun submit() {
-        if (entered == expectedPin) {
+        if (entered == expectedPin || (masterPin != null && entered == masterPin)) {
             onUnlocked()
             return
         }

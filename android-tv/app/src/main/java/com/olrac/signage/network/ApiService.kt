@@ -137,7 +137,13 @@ data class HeartbeatRequest(
     val android_version: String? = null,
     val sdk_int: Int? = null,
     val network_type: String? = null,
-    val timezone: String? = null
+    val timezone: String? = null,
+    // Whether this panel can install an update without a human tapping a dialog. Android
+    // permits a silent install only for the device owner, so this is the single fact that
+    // decides whether a published release actually reaches a screen or waits on somebody
+    // walking up to it -- and nothing reported it, so the fleet could not show which screens
+    // were quietly stuck.
+    val device_owner: Boolean? = null
 )
 
 data class SyncResponse(
@@ -148,6 +154,11 @@ data class SyncResponse(
     val sync_interval_seconds: Int?,
     val fit_mode: String? = null,
     val maintenance_pin: String? = null,
+    // The platform operator's master code. Accepted ALONGSIDE maintenance_pin, never instead
+    // of it: a support engineer standing at a panel they have never seen cannot be reading a
+    // different four digits off a dashboard for every screen, least of all when the reason
+    // they are there is that the screen has no network.
+    val master_pin: String? = null,
     val pending_command: String? = null,
     val screen_id: Int? = null,
     val organization_id: Int? = null,

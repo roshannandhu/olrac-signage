@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Environment
 import android.os.StatFs
 import com.olrac.signage.BuildConfig
+import com.olrac.signage.device.DeviceOwnerManager
 import com.olrac.signage.network.ApiClient
 import com.olrac.signage.network.HeartbeatRequest
 import java.util.Locale
@@ -33,6 +34,10 @@ object HeartbeatReporter {
             HeartbeatRequest(
                 device_id = deviceId,
                 device_version = BuildConfig.VERSION_NAME,
+                // Reported every beat rather than once at pairing: a panel can be provisioned
+                // as device owner long after it was first claimed, and the fleet has to
+                // notice without anyone re-pairing it.
+                device_owner = DeviceOwnerManager.isDeviceOwner(appContext),
                 storage_used = String.format(Locale.US, "%.1f GB / %.1f GB", usedGb, totalGb),
                 playback_state = snapshot.state,
                 current_item_id = snapshot.currentItemId,
@@ -78,6 +83,12 @@ object HeartbeatReporter {
                 edit.apply()
 
                 body.pending_command?.let { cmd ->
+                    if (cmd == "check_update") {
+                        // The heartbeat carries no update offer, so fetch the full sync that
+                        // does, now rather than at the next minute.
+                        com.olrac.signage.sync.UpdateManager.requestUpdateCheck(appContext)
+                        com.olrac.signage.service.PlaybackService.requestImmediateSync(appContext)
+                    }
                     if (cmd == "bring_to_front" || cmd == "launch_app") {
                         android.util.Log.i("HeartbeatReporter", "Received $cmd command from server; bringing app to front")
                         com.olrac.signage.boot.PlayerLauncher.launch(appContext, delayMs = 500L, reason = "heartbeat_command")

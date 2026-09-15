@@ -67,8 +67,16 @@ class PlaylistSynchronizer(context: Context) {
                 // An empty local playlist must always request a full snapshot. This
                 // prevents a matching version marker from trapping a repaired or
                 // newly provisioned database in an empty state.
+                //
+                // Also full after an update attempt went wrong. The update offer only
+                // travels in a full sync body, so a screen that downloaded half an APK and
+                // lost its connection -- the ordinary case for one that has just come back
+                // online -- was then told 204 on every later sync and never offered that
+                // release again until something unrelated changed its playlist.
+                UpdateManager.clearStaleGuards(appContext)
                 val since = preferences.getString(KEY_PLAYLIST_UPDATED_AT, null)
                     .takeIf { dao.hasItems() }
+                    .takeUnless { UpdateManager.consumeFullSyncRequest(appContext) }
                 val response = api.sync(
                     deviceId = deviceId,
                     since = since
@@ -162,6 +170,11 @@ class PlaylistSynchronizer(context: Context) {
                             intervalSeconds = interval,
                         )
                     }
+                    if (cmd == "check_update") {
+                        // Processed before app_version below, so the offer in this same
+                        // body is acted on immediately rather than waiting out a backoff.
+                        UpdateManager.requestUpdateCheck(appContext)
+                    }
                     if (cmd == "bring_to_front" || cmd == "launch_app") {
                         android.util.Log.i("PlaylistSynchronizer", "Received $cmd command from sync; bringing app to front")
                         com.olrac.signage.boot.PlayerLauncher.launch(appContext, delayMs = 500L, reason = "sync_command")
@@ -175,7 +188,9 @@ class PlaylistSynchronizer(context: Context) {
                 syncData.app_version?.let { version ->
                     if (version.version_code > BuildConfig.VERSION_CODE && !version.apk_url.isNullOrBlank()) {
                         val inFlightKey = "$KEY_UPDATE_IN_FLIGHT${version.version_code}"
-                        if (!preferences.getBoolean(inFlightKey, false)) {
+                        if (!preferences.getBoolean(inFlightKey, false) &&
+                            UpdateManager.retryDue(appContext, version.version_code)
+                        ) {
                             preferences.edit().putBoolean(inFlightKey, true).apply()
 
                             // Download off the sync path so playback and polling continue.
@@ -185,13 +200,12 @@ class PlaylistSynchronizer(context: Context) {
                                     appContext, version, client
                                 )
                                 if (!installed) {
-                                    // Clear the guard on failure, otherwise one dropped
-                                    // download permanently blocks this version and the TV
-                                    // can never be updated remotely again — which is the
-                                    // entire point of staged rollout. On success the flag
-                                    // stays set: the install replaces the process, and a
-                                    // higher version_code uses a different key anyway.
-                                    preferences.edit().remove(inFlightKey).apply()
+                                    // Release the guard AND ask for the offer again: one
+                                    // dropped download must not block this version for
+                                    // ever. On success the flag stays set -- the install
+                                    // replaces the process, and a higher version_code uses
+                                    // a different key anyway.
+                                    UpdateManager.scheduleRetry(appContext, version.version_code)
                                 }
                             }
                         }

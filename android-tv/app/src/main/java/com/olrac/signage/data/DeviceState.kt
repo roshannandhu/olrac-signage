@@ -149,6 +149,20 @@ class DeviceState(context: Context) {
     }
 
     /**
+     * The operator's master code, if one is set. Cached like the screen's own PIN and for the
+     * same reason: the maintenance screen exists to fix connectivity, so it has to open when
+     * the server cannot be reached.
+     */
+    val masterPin: String?
+        get() = preferences.getString(KEY_MASTER_PIN, null)?.takeIf { it.isNotBlank() }
+
+    fun setMasterPin(pin: String?) {
+        preferences.edit().apply {
+            if (pin.isNullOrBlank()) remove(KEY_MASTER_PIN) else putString(KEY_MASTER_PIN, pin)
+        }.commit()
+    }
+
+    /**
      * Store the screen's opening hours, so playback can observe them offline.
      *
      * Serialised as JSON rather than modelled, because SharedPreferences has no map type
@@ -259,6 +273,7 @@ class DeviceState(context: Context) {
         const val KEY_SCREEN_NAME = "screen_name"
         const val KEY_API_BASE_URL = "api_base_url"
         const val KEY_MAINTENANCE_PIN = "maintenance_pin"
+        const val KEY_MASTER_PIN = "master_pin"
         const val KEY_DEVICE_SECRET = "device_secret"
         const val KEY_OPERATING_MODE = "operating_mode"
         const val KEY_OPERATING_HOURS = "operating_hours"

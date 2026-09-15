@@ -364,3 +364,30 @@
   }
 }
 
+/* Timeline to content library reverse fluid arc flying transition ------------ */
+@keyframes flyArcReverse {
+  0% {
+    transform: translate3d(var(--fly-start-x), var(--fly-start-y), 0) scale(1) rotate(0deg);
+    opacity: 0.95;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 0 15px rgba(245, 158, 11, 0.35);
+  }
+  42% {
+    transform: translate3d(
+      calc(var(--fly-start-x) * 0.55 + var(--fly-end-x) * 0.45),
+      calc(min(var(--fly-start-y), var(--fly-end-y)) - 55px),
+      0
+    ) scale(1.05) rotate(1.5deg);
+    opacity: 1;
+    box-shadow: 0 20px 35px -5px rgba(0, 0, 0, 0.35), 0 0 25px rgba(245, 158, 11, 0.5);
+  }
+  85% {
+    transform: translate3d(var(--fly-end-x), var(--fly-end-y), 0) scale(0.98) rotate(0deg);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate3d(var(--fly-end-x), var(--fly-end-y), 0) scale(0.95);
+    opacity: 0;
+  }
+}
+
+

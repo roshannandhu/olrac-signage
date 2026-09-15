@@ -359,6 +359,7 @@ interface FlyingItem {
   startY: number
   targetX: number
   targetY: number
+  direction?: 'forward' | 'reverse'
 }
 
 export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
@@ -379,6 +380,7 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
   const [flyingItems, setFlyingItems] = useState<FlyingItem[]>([])
   const [highlightedItemId, setHighlightedItemId] = useState<number | null>(null)
   const timelineRef = useRef<HTMLElement | null>(null)
+  const libraryRef = useRef<HTMLElement | null>(null)
   const flyCounterRef = useRef(0)
 
   const serverItems = useMemo(() => [...(playlistQuery.data?.items || [])].sort((a, b) => a.order - b.order), [playlistQuery.data?.items])
@@ -557,16 +559,19 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
   // that starts later; the moment that window closes it reads as Not booked, with no job to
   // move it. The fetch time stands in for "now" so rendering stays pure, and it advances on
   // every refetch.
+  // Items already placed in the loop are filtered out so they disappear when added and return on removal.
   const fetchedAt = contentQuery.dataUpdatedAt
   const library = useMemo(() => {
     const term = search.toLowerCase()
     const matches = (contentQuery.data || []).filter(
-      (item) => item.name.toLowerCase().includes(term) || item.tags?.toLowerCase().includes(term),
+      (item) =>
+        !placedContentIds.has(item.id) &&
+        (item.name.toLowerCase().includes(term) || item.tags?.toLowerCase().includes(term)),
     )
     const isBooked = (item: ContentItem) =>
       Boolean(item.placement_id && item.placement_ends_at && new Date(item.placement_ends_at).getTime() > fetchedAt)
     return { booked: matches.filter(isBooked), notBooked: matches.filter((item) => !isBooked(item)) }
-  }, [contentQuery.data, search, fetchedAt])
+  }, [contentQuery.data, search, fetchedAt, placedContentIds])
 
   if (playlistQuery.isError || contentQuery.isError) return <ErrorState message="The playlist builder could not be loaded." onRetry={() => { playlistQuery.refetch(); contentQuery.refetch() }} />
   if (playlistQuery.isLoading) return <div className="space-y-6"><Skeleton className="h-24" /><div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]"><Skeleton className="h-[520px]" /><Skeleton className="h-[520px]" /></div></div>
@@ -611,7 +616,10 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
 
     flyCounterRef.current += 1
     const flyId = `${content.id}-${flyCounterRef.current}`
-    setFlyingItems((prev) => [...prev, { id: flyId, content, startX, startY, targetX, targetY }])
+    setFlyingItems((prev) => [
+      ...prev,
+      { id: flyId, content, startX, startY, targetX, targetY, direction: 'forward' },
+    ])
     setTimeout(() => {
       setFlyingItems((prev) => prev.filter((it) => it.id !== flyId))
     }, 480)
@@ -621,6 +629,45 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
     } else {
       setBookingFor(content)
     }
+  }
+
+  const handleRemoveItem = (item: PlaylistItem) => {
+    const rowEl = document.getElementById(`timeline-item-${item.id}`)
+    let startX = window.innerWidth * 0.25
+    let startY = 350
+    if (rowEl) {
+      const rect = rowEl.getBoundingClientRect()
+      startX = rect.left
+      startY = rect.top
+    }
+
+    let targetX = window.innerWidth * 0.75
+    let targetY = 300
+    if (libraryRef.current) {
+      const lRect = libraryRef.current.getBoundingClientRect()
+      targetX = lRect.left + 24
+      targetY = Math.min(window.innerHeight - 120, Math.max(120, lRect.top + 80))
+    }
+
+    flyCounterRef.current += 1
+    const flyId = `reverse-${item.content.id}-${flyCounterRef.current}`
+    setFlyingItems((prev) => [
+      ...prev,
+      {
+        id: flyId,
+        content: item.content,
+        startX,
+        startY,
+        targetX,
+        targetY,
+        direction: 'reverse',
+      },
+    ])
+    setTimeout(() => {
+      setFlyingItems((prev) => prev.filter((it) => it.id !== flyId))
+    }, 480)
+
+    removeMutation.mutate(item.id)
   }
 
   const libraryRow = (content: ContentItem, booked: boolean) => {
@@ -675,34 +722,50 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
   return (
     <div className="relative space-y-8">
       {/* Moving transition flying animation overlay */}
-      {flyingItems.map((flying) => (
-        <div
-          key={flying.id}
-          className="pointer-events-none fixed z-[99999] flex items-center gap-3 rounded-xl border border-primary/40 bg-card/95 p-3 shadow-2xl backdrop-blur-md ring-2 ring-primary/60"
-          style={
-            {
-              left: 0,
-              top: 0,
-              width: 280,
-              animation: 'flyArc 480ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
-              '--fly-start-x': `${flying.startX}px`,
-              '--fly-start-y': `${flying.startY}px`,
-              '--fly-end-x': `${flying.targetX}px`,
-              '--fly-end-y': `${flying.targetY}px`,
-            } as React.CSSProperties & Record<string, string | number>
-          }
-        >
-          <div className="size-10 shrink-0 overflow-hidden rounded-lg bg-black/10">
-            <MediaThumbnail item={flying.content} className="size-10 rounded-lg object-cover" />
+      {flyingItems.map((flying) => {
+        const isReverse = flying.direction === 'reverse'
+        return (
+          <div
+            key={flying.id}
+            className={cn(
+              'pointer-events-none fixed z-[99999] flex items-center gap-3 rounded-xl border p-3 shadow-2xl backdrop-blur-md ring-2',
+              isReverse
+                ? 'border-amber-500/40 bg-card/95 ring-amber-500/60'
+                : 'border-primary/40 bg-card/95 ring-primary/60'
+            )}
+            style={
+              {
+                left: 0,
+                top: 0,
+                width: 280,
+                animation: isReverse
+                  ? 'flyArcReverse 480ms cubic-bezier(0.16, 1, 0.3, 1) forwards'
+                  : 'flyArc 480ms cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                '--fly-start-x': `${flying.startX}px`,
+                '--fly-start-y': `${flying.startY}px`,
+                '--fly-end-x': `${flying.targetX}px`,
+                '--fly-end-y': `${flying.targetY}px`,
+              } as React.CSSProperties & Record<string, string | number>
+            }
+          >
+            <div className="size-10 shrink-0 overflow-hidden rounded-lg bg-black/10">
+              <MediaThumbnail item={flying.content} className="size-10 rounded-lg object-cover" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-foreground">{flying.content.name}</p>
+              {isReverse ? (
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                  <Sparkles className="size-2.5 animate-pulse" /> Returning to library…
+                </span>
+              ) : (
+                <span className="text-[10px] text-primary font-medium flex items-center gap-1">
+                  <Sparkles className="size-2.5 animate-spin" /> Adding to timeline…
+                </span>
+              )}
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-foreground">{flying.content.name}</p>
-            <span className="text-[10px] text-primary font-medium flex items-center gap-1">
-              <Sparkles className="size-2.5 animate-spin" /> Adding to timeline…
-            </span>
-          </div>
-        </div>
-      ))}
+        )
+      })}
 
       {showHeader && <PageHeader eyebrow="Playlist builder" title={playlist.name} description="Set the loop order, control each handoff, and schedule exactly when every item may play." actions={<div className="flex items-center gap-2"><Badge variant="outline">{items.length} items</Badge><Badge variant="outline">{loopDuration(totalDuration)} loop</Badge>{!canEdit && <Badge variant="warning">View only</Badge>}</div>} />}
 
@@ -724,7 +787,7 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
                       canEdit={canEdit && item.id > 0}
                       saving={savingItem === item.id}
                       highlighted={highlightedItemId === item.id}
-                      onRemove={() => removeMutation.mutate(item.id)}
+                      onRemove={() => handleRemoveItem(item)}
                       onSave={(data) => updateMutation.mutate({ itemId: item.id, data })}
                     />
                   ))}
@@ -734,7 +797,7 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
           )}
         </section>
 
-        <aside className="rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(15,23,42,.04)] ring-1 ring-hairline xl:sticky xl:top-6" aria-labelledby="library-title">
+        <aside ref={libraryRef} className="rounded-2xl bg-card p-4 shadow-[0_1px_2px_rgba(15,23,42,.04)] ring-1 ring-hairline xl:sticky xl:top-6" aria-labelledby="library-title">
           <div><h2 id="library-title" className="font-semibold text-foreground">Content library</h2><p className="mt-1 text-xs text-muted-foreground/70">{library.booked.length + library.notBooked.length} ads{screenId ? ' · booked ones add instantly' : ''}</p></div>
           <div className="relative mt-4"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground/70" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search assets…" className="pl-9" aria-label="Search library" /></div>
           <div className="mt-4 max-h-[660px] space-y-5 overflow-y-auto pr-1">
@@ -743,13 +806,21 @@ export function PlaylistBuilder({ playlistId, showHeader = true, screenId }: {
                 <div>
                   <p className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">Booked <span className="font-normal normal-case">{library.booked.length}</span></p>
                   <div className="space-y-2">{library.booked.map((content) => libraryRow(content, true))}</div>
-                  {!library.booked.length && <p className="rounded-xl border border-dashed border-hairline p-3 text-xs text-muted-foreground/70">No ad has a running booking.</p>}
+                  {!library.booked.length && (
+                    <p className="rounded-xl border border-dashed border-hairline p-3 text-xs text-muted-foreground/70">
+                      {placedContentIds.size > 0 ? 'All booked ads are in this loop.' : 'No ad has a running booking.'}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <p className="mb-1 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-muted-foreground">Not booked <span className="font-normal normal-case">{library.notBooked.length}</span></p>
                   <p className="mb-2 text-[11px] text-muted-foreground/70">Adding one asks for a plan or a custom booking.</p>
                   <div className="space-y-2">{library.notBooked.map((content) => libraryRow(content, false))}</div>
-                  {!library.notBooked.length && <p className="rounded-xl border border-dashed border-hairline p-3 text-xs text-muted-foreground/70">Every ad is booked.</p>}
+                  {!library.notBooked.length && (
+                    <p className="rounded-xl border border-dashed border-hairline p-3 text-xs text-muted-foreground/70">
+                      {placedContentIds.size > 0 ? 'No other ads in library.' : 'Every ad is booked.'}
+                    </p>
+                  )}
                 </div>
               </>
             )}

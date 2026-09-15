@@ -147,11 +147,9 @@ class MainActivity : ComponentActivity() {
                 )
             } else if (showServerSetup) {
                 ServerSetupScreen(
-                    serverUrl = ApiClient.effectiveBaseUrl(this),
-                    serverError = serverError,
                     defaultHome = defaultHome,
-                    onSave = ::saveServerUrl,
                     onChooseHome = ::requestHomeRole,
+                    onExit = ::exitToSystemLauncher,
                     onUnlink = {
                         showServerSetup = false
                         com.olrac.signage.boot.PlayerLauncher.handleUnpairedOrDeleted(this@MainActivity)
@@ -220,6 +218,37 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Leave the player for the device's own home screen, reachable only from the maintenance
+     * screen, i.e. after the PIN.
+     *
+     * Three things kept an operator in, and all three have to go: lock task (other apps cannot
+     * start), the persistent preferred HOME activity (every Home press reopened the player) and
+     * the disabled status bar. They come back through onResume the next time the player is in
+     * front -- opened again from the launcher, a remote "Open app on TV", or a restart.
+     *
+     * The task is left alone rather than finished: removing it fires PlaybackService's
+     * onTaskRemoved, which relaunches the player by design, and would undo the exit at once.
+     * The exit time is recorded so that relaunch also stands down if someone swipes it away.
+     */
+    private fun exitToSystemLauncher() {
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .putLong(PREF_OPERATOR_EXIT_AT, System.currentTimeMillis()).apply()
+        showServerSetup = false
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val candidates = packageManager.queryIntentActivities(home, 0).map {
+            com.olrac.signage.data.SystemLauncherPicker.Candidate(it.activityInfo.packageName, it.activityInfo.name)
+        }
+        val launcher = com.olrac.signage.data.SystemLauncherPicker.pick(candidates, packageName)
+        DeviceOwnerManager.releaseKioskPolicy(this, launcher?.let { android.content.ComponentName(it.packageName, it.className) })
+        try { stopLockTask() } catch (e: Exception) {}
+        val opened = launcher != null && runCatching {
+            startActivity(Intent(home).setClassName(launcher.packageName, launcher.className).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.isSuccess
+        if (!opened) moveTaskToBack(true)
+        android.util.Log.i("MainActivity", "Operator exit to ${launcher?.packageName ?: "background"} (opened=$opened)")
+    }
+
     /** Re-pin the kiosk once no maintenance surface is open. Safe to call when already
      *  pinned (a no-op). This is what closes the hole where the gesture alone, or a
      *  cancelled/failed pin, left the TV un-pinned until the next reboot. */
@@ -237,6 +266,9 @@ class MainActivity : ComponentActivity() {
         if (launchState is LaunchState.SignIn && !deviceState.isPaired) {
             launchState = LaunchState.SignIn(busy = false)
         }
+        // Back in front after an operator exit: kiosk returns with the player.
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit().remove(PREF_OPERATOR_EXIT_AT).apply()
+        DeviceOwnerManager.applyKioskPolicy(this)
         defaultHome = isDefaultHomeLauncher()
         hideSystemBars()
         // Backstop: re-pin whenever we are back on the player with no maintenance surface
@@ -849,6 +881,7 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         const val PREF_PLAYER_RESUMED_AT = "player_last_resumed_at"
+        const val PREF_OPERATOR_EXIT_AT = "operator_exit_at"
         private const val PAIRING_RETRY_MS = 5_000L
 
         // Boot reconnect backoff. Starts quick because the common case is a TV that booted a

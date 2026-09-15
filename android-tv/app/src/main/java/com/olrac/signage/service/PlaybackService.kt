@@ -77,7 +77,12 @@ class PlaybackService : Service() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        launchPlayer()
+        // Relaunching when the player's task is swiped away is what keeps a screen on its
+        // adverts -- except straight after an operator chose "Exit to home screen", when it
+        // would drag the player back over the launcher they just asked for.
+        val exitedAt = getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
+            .getLong(MainActivity.PREF_OPERATOR_EXIT_AT, 0L)
+        if (System.currentTimeMillis() - exitedAt > OPERATOR_EXIT_GRACE_MS) launchPlayer()
         super.onTaskRemoved(rootIntent)
     }
 
@@ -305,6 +310,7 @@ class PlaybackService : Service() {
 
     companion object {
         private const val TAG = "PlaybackService"
+        private const val OPERATOR_EXIT_GRACE_MS = 30 * 60_000L
         private const val CHANNEL_ID = "playback-protection"
         private const val NOTIFICATION_ID = 1001
         private const val EXTRA_LAUNCH_PLAYER = "launch_player"

@@ -30,31 +30,42 @@ import kotlinx.coroutines.delay
 
 @Composable
 fun ServerSetupScreen(
-    serverUrl: String,
-    serverError: String?,
     defaultHome: Boolean,
-    onSave: (String) -> Unit,
     onChooseHome: () -> Unit,
+    onExit: () -> Unit,
     onUnlink: () -> Unit,
     onClose: () -> Unit
 ) {
     SetupSurface {
-      // Scrolls because it no longer fits a TV at 48dp padding once the restart section is
-      // in, and an unscrollable column simply drops "Return to player" off the bottom edge.
-      // D-pad focus brings each control into view as it moves.
+      // Scrolls because the maintenance tools no longer fit a TV at 48dp padding, and an
+      // unscrollable column simply drops the last buttons off the bottom edge. D-pad focus
+      // brings each control into view as it moves.
       Column(
         modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
       ) {
         Text(text = "Player setup", color = Color.White)
+        // No server address here any more. A screen that is set up already talks to its
+        // server, and a field that repoints it is the one control on this page that can
+        // silently cut a working TV off from its workspace -- one typo and it plays nothing.
         Text(
-            text = "Configure this TV's control-plane address.",
+            text = "Maintenance for this screen.",
             color = Color.LightGray,
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(24.dp))
-        ServerControls(serverUrl, serverError, defaultHome, onSave, onChooseHome)
-        Spacer(modifier = Modifier.height(16.dp))
+        MaintenanceControls(defaultHome, onChooseHome)
+        Spacer(modifier = Modifier.height(24.dp))
+        // Leaves the player for the device's own home screen, with kiosk released so Home and
+        // the other apps actually work. Opening OLRAC again puts kiosk back.
+        Button(
+            onClick = onExit,
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155), contentColor = Color.White),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Exit to home screen")
+        }
+        Spacer(modifier = Modifier.height(10.dp))
         Button(
             onClick = onUnlink,
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444), contentColor = Color.White),
@@ -68,6 +79,40 @@ fun ServerSetupScreen(
         }
       }
     }
+}
+
+/** Launcher role, system settings and restart behaviour -- everything but the server address. */
+@Composable
+private fun MaintenanceControls(defaultHome: Boolean, onChooseHome: () -> Unit) {
+    val context = LocalContext.current
+    Text(
+        text = if (defaultHome) {
+            "Default TV launcher: enabled"
+        } else {
+            "Default TV launcher: not enabled — required for reliable reboot recovery"
+        },
+        color = if (defaultHome) AccentGreen else Color(0xFFFFC46B),
+        textAlign = TextAlign.Center
+    )
+    if (!defaultHome) {
+        Spacer(modifier = Modifier.height(10.dp))
+        Button(onClick = onChooseHome, colors = secondaryButtonColors()) {
+            Text("Choose OLRAC as TV launcher")
+        }
+    }
+    Spacer(modifier = Modifier.height(18.dp))
+    Button(
+        onClick = {
+            try {
+                context.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (e: Exception) {}
+        },
+        colors = secondaryButtonColors()
+    ) {
+        Text("Open Android System Settings")
+    }
+    Spacer(modifier = Modifier.height(18.dp))
+    StartAfterRestartControls()
 }
 
 @Composable
@@ -128,8 +173,6 @@ fun ServerControls(
         Text("Open Android System Settings")
     }
 
-    Spacer(modifier = Modifier.height(18.dp))
-    StartAfterRestartControls()
 }
 
 /**

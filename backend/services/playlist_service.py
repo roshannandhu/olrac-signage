@@ -222,9 +222,29 @@ class PlaylistService(BaseService):
         if not item:
             raise HTTPException(status_code=404, detail="Item not found")
 
+        # An item a booking placed is removed by ending that booking's run on this screen,
+        # not by deleting the row underneath it.
+        #
+        # AdPlacementTarget.playlist_item_id is ON DELETE SET NULL, and a target left with no
+        # item is exactly what reconcile_unplaced_bookings exists to repair: it re-places it
+        # within one supervisor tick. So the trash button on the screen page looked like it
+        # worked and the advert came straight back. unplace_advert is the route the repair
+        # code itself names for "stop this advert in one place" -- the target goes with the
+        # item, the booking, its dates and its billing stay, and the advert keeps every other
+        # screen it runs on. Adding it back while the booking runs is POST .../targets.
+        from .placement_service import unplace_advert
+
+        target = (
+            self.db.query(models.AdPlacementTarget)
+            .filter(models.AdPlacementTarget.playlist_item_id == item.id)
+            .first()
+        )
         playlist = item.playlist
-        self.repo.delete_item(item)
-        bump_playlist(playlist)
+        if target is not None:
+            unplace_advert(scope, target)
+        else:
+            self.repo.delete_item(item)
+            bump_playlist(playlist)
         self.commit()
         trigger_screen_sync(organization_id=scope.organization_id)
         return {"status": "ok"}

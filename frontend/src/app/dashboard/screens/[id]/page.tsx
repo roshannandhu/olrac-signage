@@ -66,7 +66,7 @@ function ScreenPlaylistSection({ screen, screenId, inherited }: { screen: Screen
           <Link href="/dashboard/groups" className="text-primary dark:text-brand underline underline-offset-2">Manage groups</Link>
         </div>
       )}
-      <PlaylistBuilder playlistId={screen.effective_playlist_id} showHeader={false} />
+      <PlaylistBuilder playlistId={screen.effective_playlist_id} showHeader={false} screenId={screen.id} />
     </div>
   )
 }

@@ -22,6 +22,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -36,12 +39,30 @@ fun ServerSetupScreen(
     onUnlink: () -> Unit,
     onClose: () -> Unit
 ) {
+    // Taps and remote presses are ignored for a moment after this screen appears. It opens in
+    // place of the PIN prompt, and a second tap on "Unlock" landed on whatever button now sat
+    // under the finger: on the Lenovo TB-8505F a double tap 0.3 s apart unlocked AND pressed
+    // "Exit to home screen", and the same tap could as easily have hit "Unlink Screen".
+    var armed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(INPUT_ARM_DELAY_MS)
+        armed = true
+    }
     SetupSurface {
       // Scrolls because the maintenance tools no longer fit a TV at 48dp padding, and an
       // unscrollable column simply drops the last buttons off the bottom edge. D-pad focus
       // brings each control into view as it moves.
       Column(
-        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+        modifier = Modifier
+            .fillMaxWidth()
+            // Consumed in the Initial pass, before any button sees the press.
+            .pointerInput(armed) {
+                if (!armed) awaitPointerEventScope {
+                    while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                }
+            }
+            .onPreviewKeyEvent { !armed }
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
       ) {
         Text(text = "Player setup", color = Color.White)
@@ -242,3 +263,6 @@ private fun StartAfterRestartControls() {
         Text(text = it, color = Color(0xFFEF4444), textAlign = TextAlign.Center)
     }
 }
+
+/** Long enough to swallow a double tap or a held OK, short enough to go unnoticed. */
+private const val INPUT_ARM_DELAY_MS = 700L

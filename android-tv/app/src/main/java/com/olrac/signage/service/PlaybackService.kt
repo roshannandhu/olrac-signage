@@ -71,16 +71,20 @@ class PlaybackService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (isUserUnlocked()) {
-            scheduleWorkers(this)
-            startPollingLoop()
-        }
+        // Boot recovery first, and never behind anything that can throw. WorkManager's store is
+        // credential-encrypted, so scheduleWorkers() throws until the device is fully unlocked --
+        // and this directBootAware service reaches here in the window after the user unlocks but
+        // before WorkManager's startup provider has run. That crash used to take the whole
+        // service down BEFORE the player was relaunched, so after a restart the TV sat on its
+        // home screen. So the relaunch runs first, and the workers are guarded; USER_UNLOCKED
+        // starts the service again and they schedule cleanly then.
+        if (intent?.getBooleanExtra(EXTRA_LAUNCH_PLAYER, false) == true) launchPlayer()
+        if (intent?.getBooleanExtra(EXTRA_AFTER_BOOT, false) == true) keepPlayerInFrontAfterStart()
         if (intent?.action == ACTION_SYNC_NOW) immediateSyncSignals.trySend(Unit)
-        if (intent?.getBooleanExtra(EXTRA_LAUNCH_PLAYER, false) == true) {
-            launchPlayer()
-        }
-        if (intent?.getBooleanExtra(EXTRA_AFTER_BOOT, false) == true) {
-            keepPlayerInFrontAfterStart()
+        if (isUserUnlocked()) {
+            runCatching { scheduleWorkers(this) }
+                .onFailure { Log.w(TAG, "Deferring worker scheduling until WorkManager is ready", it) }
+            startPollingLoop()
         }
         return START_STICKY
     }
@@ -264,8 +268,10 @@ class PlaybackService : Service() {
             immediateSyncSignals.trySend(Unit)
             // Push the queued proof of play the moment the network is back, rather than
             // waiting out the 15-minute periodic window. After an outage that queue is
-            // exactly what the operator is waiting to see.
-            ProofOfPlayWorker.enqueueNow(this)
+            // exactly what the operator is waiting to see. Guarded like scheduleWorkers:
+            // WorkManager can still be unavailable this early, and a throw here would crash
+            // the service on a network change.
+            runCatching { ProofOfPlayWorker.enqueueNow(this) }
         }.also(ConnectivityWatcher::start)
 
         pollingJob = serviceScope.launch {

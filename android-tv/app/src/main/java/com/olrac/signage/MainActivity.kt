@@ -57,7 +57,8 @@ import com.olrac.signage.data.DeviceState
 import com.olrac.signage.data.LaunchState
 import com.olrac.signage.data.LaunchStateResolver
 import com.olrac.signage.data.CornerTapCounter
-import com.olrac.signage.data.MaintenanceGesture
+import com.olrac.signage.data.KeyOutcome
+import com.olrac.signage.data.MaintenanceKeyDispatcher
 import com.olrac.signage.data.RegistrationSnapshot
 import com.olrac.signage.network.ApiClient
 import com.olrac.signage.network.RegisterRequest
@@ -95,10 +96,6 @@ class MainActivity : ComponentActivity() {
     private var pairingJob: Job? = null
     private var showPermissionGate by mutableStateOf(false)
     private var requirementStates by mutableStateOf<List<SetupRequirementState>>(emptyList())
-
-    /** Key code whose ACTION_UP still has to be swallowed after its ACTION_DOWN was
-     *  taken by the maintenance gesture. See [dispatchKeyEvent]. */
-    private var swallowUpFor: Int? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -324,7 +321,7 @@ class MainActivity : ComponentActivity() {
         if (hasFocus) hideSystemBars()
     }
 
-    private val maintenanceGesture = MaintenanceGesture()
+    private val maintenanceKeys = MaintenanceKeyDispatcher()
     private val cornerTaps = CornerTapCounter()
     private val homePressTimes = ArrayDeque<Long>()
 
@@ -408,33 +405,27 @@ class MainActivity : ComponentActivity() {
      * press twice and the sequence would never match.
      */
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        val keyCode = event.keyCode
-
-        if (event.action == KeyEvent.ACTION_UP && swallowUpFor == keyCode) {
-            // The release belonging to an OK whose press we took. Compose pairs a key down
-            // with its up, so letting this through would still click the button underneath.
-            swallowUpFor = null
-            return true
-        }
-
         // Not on the pin prompt or the setup screen: there these keys are navigation, and
-        // matching would swallow a press mid-form. Auto-repeat from a held key would
-        // otherwise flood the gesture buffer.
-        if (event.action == KeyEvent.ACTION_DOWN &&
-            !showPinPrompt && !showServerSetup &&
-            event.repeatCount == 0
-        ) {
-            if (maintenanceGesture.record(keyCode, System.currentTimeMillis())) {
-                swallowUpFor = keyCode
+        // matching would swallow a press mid-form.
+        val gestureEnabled = !showPinPrompt && !showServerSetup
+        val outcome = maintenanceKeys.onKeyEvent(
+            action = event.action,
+            keyCode = event.keyCode,
+            repeatCount = event.repeatCount,
+            gestureEnabled = gestureEnabled,
+            nowMs = System.currentTimeMillis()
+        )
+        return when (outcome) {
+            KeyOutcome.REVEAL_PIN -> {
                 // Reveal the PIN prompt only. The kiosk stays pinned until a CORRECT pin is
                 // entered (see onUnlocked). Dropping lock-task here let the gesture alone
                 // un-pin the TV, and cancelling then left it open until the next reboot.
                 showPinPrompt = true
-                return true
+                true
             }
+            KeyOutcome.CONSUME -> true
+            KeyOutcome.PASS_THROUGH -> super.dispatchKeyEvent(event)
         }
-
-        return super.dispatchKeyEvent(event)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {

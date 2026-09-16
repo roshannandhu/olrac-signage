@@ -1,0 +1,125 @@
+package com.olrac.signage.data
+
+import android.view.KeyEvent
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+/**
+ * The rules the Activity applies to every key before the view tree sees it. Running first is
+ * what makes the gesture reachable from a screen that has buttons on it, and also what would
+ * break every button on that screen if this took one key more than it needs.
+ */
+class MaintenanceKeyDispatcherTest {
+
+    private val up = KeyEvent.KEYCODE_DPAD_UP
+    private val down = KeyEvent.KEYCODE_DPAD_DOWN
+    private val ok = KeyEvent.KEYCODE_DPAD_CENTER
+
+    private fun press(
+        d: MaintenanceKeyDispatcher,
+        keyCode: Int,
+        nowMs: Long,
+        action: Int = KeyEvent.ACTION_DOWN,
+        repeatCount: Int = 0,
+        gestureEnabled: Boolean = true
+    ) = d.onKeyEvent(action, keyCode, repeatCount, gestureEnabled, nowMs)
+
+    @Test
+    fun `the completing press reveals the pin prompt`() {
+        val d = MaintenanceKeyDispatcher()
+        assertEquals(KeyOutcome.PASS_THROUGH, press(d, up, 0))
+        assertEquals(KeyOutcome.PASS_THROUGH, press(d, up, 1))
+        assertEquals(KeyOutcome.PASS_THROUGH, press(d, down, 2))
+        assertEquals(KeyOutcome.PASS_THROUGH, press(d, down, 3))
+        assertEquals(KeyOutcome.REVEAL_PIN, press(d, ok, 4))
+    }
+
+    @Test
+    fun `the arrows fall through so the d-pad still moves focus`() {
+        // If any of these were taken, the remote could not reach the second row.
+        val d = MaintenanceKeyDispatcher()
+        listOf(up to 0L, up to 1L, down to 2L, down to 3L).forEach { (key, at) ->
+            assertEquals(KeyOutcome.PASS_THROUGH, press(d, key, at))
+        }
+    }
+
+    @Test
+    fun `a plain OK falls through so buttons still work`() {
+        // The everyday case on the gate: someone presses OK to turn a switch on.
+        val d = MaintenanceKeyDispatcher()
+        repeat(4) { i ->
+            assertEquals(KeyOutcome.PASS_THROUGH, press(d, ok, i * 100L))
+        }
+    }
+
+    @Test
+    fun `the release of a taken press is taken too`() {
+        // Compose pairs a key down with its up. Letting the up through would click the
+        // button the down was taken from -- opening Settings behind the pin prompt.
+        val d = MaintenanceKeyDispatcher()
+        listOf(up to 0L, up to 1L, down to 2L, down to 3L).forEach { (k, at) -> press(d, k, at) }
+        assertEquals(KeyOutcome.REVEAL_PIN, press(d, ok, 4))
+        assertEquals(KeyOutcome.CONSUME, press(d, ok, 5, action = KeyEvent.ACTION_UP))
+        // ...and only that one release.
+        assertEquals(KeyOutcome.PASS_THROUGH, press(d, ok, 6, action = KeyEvent.ACTION_UP))
+    }
+
+    @Test
+    fun `releases of keys we did not take always fall through`() {
+        val d = MaintenanceKeyDispatcher()
+        assertEquals(KeyOutcome.PASS_THROUGH, press(d, ok, 0, action = KeyEvent.ACTION_UP))
+        assertEquals(KeyOutcome.PASS_THROUGH, press(d, up, 1, action = KeyEvent.ACTION_UP))
+    }
+
+    @Test
+    fun `a real down-up event stream still completes the gesture`() {
+        // What a device actually sends: every press is a down and then an up. The ups must
+        // not disturb the sequence the downs are building.
+        val d = MaintenanceKeyDispatcher()
+        var now = 0L
+        var last = KeyOutcome.PASS_THROUGH
+        for (key in listOf(up, up, down, down, ok)) {
+            last = press(d, key, now++)
+            press(d, key, now++, action = KeyEvent.ACTION_UP)
+        }
+        assertEquals(KeyOutcome.REVEAL_PIN, last)
+    }
+
+    @Test
+    fun `a held key does not flood the sequence`() {
+        val d = MaintenanceKeyDispatcher()
+        press(d, up, 0)
+        // Auto-repeat: these must not count as further presses.
+        repeat(5) { i -> assertEquals(KeyOutcome.PASS_THROUGH, press(d, up, 1L + i, repeatCount = i + 1)) }
+        press(d, up, 10)
+        press(d, down, 11)
+        press(d, down, 12)
+        assertEquals(KeyOutcome.REVEAL_PIN, press(d, ok, 13))
+    }
+
+    @Test
+    fun `nothing is taken on the pin prompt or the setup screen`() {
+        // There these keys are someone's navigation, and a swallowed press mid-form is a
+        // form that cannot be filled in.
+        val d = MaintenanceKeyDispatcher()
+        listOf(up, up, down, down, ok).forEachIndexed { i, key ->
+            assertEquals(
+                KeyOutcome.PASS_THROUGH,
+                press(d, key, i.toLong(), gestureEnabled = false)
+            )
+        }
+    }
+
+    @Test
+    fun `a slow sequence times out rather than matching`() {
+        val d = MaintenanceKeyDispatcher()
+        press(d, up, 0)
+        press(d, up, 1)
+        press(d, down, 2)
+        press(d, down, 3)
+        assertEquals(
+            KeyOutcome.PASS_THROUGH,
+            press(d, ok, MaintenanceGesture.WINDOW_MS + 100L)
+        )
+    }
+}

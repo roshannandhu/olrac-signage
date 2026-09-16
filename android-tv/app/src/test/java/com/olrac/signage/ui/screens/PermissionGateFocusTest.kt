@@ -12,6 +12,7 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.olrac.signage.boot.SetupRequirement
+import org.junit.Assert.assertEquals
 import com.olrac.signage.boot.SetupRequirementState
 import org.junit.Rule
 import org.junit.Test
@@ -115,5 +116,33 @@ class PermissionGateFocusTest {
         compose.onAllNodes(hasClickAction())[1].performKeyInput { pressKey(Key.DirectionUp) }
         compose.waitForIdle()
         compose.onAllNodes(hasClickAction())[0].assertIsFocused()
+    }
+
+    @OptIn(ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
+    @Test
+    fun `OK opens the page for the row the remote is on`() {
+        // The end of the journey: focus arrives, Down travels, and OK has to actually fire
+        // the row it is sitting on. This is the half that "the buttons do nothing" would
+        // mean if focus were fine all along.
+        var opened: SetupRequirement? = null
+        compose.setContent {
+            PermissionGateScreen(
+                states = listOf(
+                    SetupRequirementState(SetupRequirement.OVERLAY, false),
+                    SetupRequirementState(SetupRequirement.WATCHDOG, false)
+                ),
+                onTurnOn = { opened = it }
+            )
+        }
+
+        compose.onAllNodes(hasClickAction())[0].performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.waitForIdle()
+        assertEquals(SetupRequirement.OVERLAY, opened)
+
+        compose.onAllNodes(hasClickAction())[0].performKeyInput { pressKey(Key.DirectionDown) }
+        compose.waitForIdle()
+        compose.onAllNodes(hasClickAction())[1].performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.waitForIdle()
+        assertEquals(SetupRequirement.WATCHDOG, opened)
     }
 }

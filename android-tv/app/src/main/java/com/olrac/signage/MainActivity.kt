@@ -148,7 +148,7 @@ class MainActivity : ComponentActivity() {
                         showPinPrompt = false
                         // Nothing was unpinned (the gesture no longer does that), but re-arm
                         // defensively in case the lock was dropped by an earlier path.
-                        rearmLockTask()
+                        relockToPlayer()
                     }
                 )
             } else if (showServerSetup) {
@@ -162,8 +162,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onClose = {
                         showServerSetup = false
-                        DeviceOwnerManager.applyKioskPolicy(this@MainActivity)
-                        rearmLockTask()
+                        relockToPlayer()
                     }
                 )
             } else {
@@ -233,6 +232,21 @@ class MainActivity : ComponentActivity() {
      * controller) are added to the lock-task allowlist instead, so they can open inside it.
      * Returning to the player narrows the allowlist back; only Exit ends lock task.
      */
+    /**
+     * Back on the ads from a maintenance surface: re-lock at once.
+     *
+     * The maintenance window and any exit are ended here, not left to expire, so the watchdog
+     * protects the screen again and the very next attempt to leave needs the PIN. Without this,
+     * "Return to player" left the suppress set at PIN time running for its full 15 minutes, and
+     * an operator could reach the home screen the whole time without re-entering the PIN.
+     */
+    private fun relockToPlayer() {
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .remove(PREF_OPERATOR_EXIT_AT).remove(PREF_WATCHDOG_SUPPRESS_UNTIL).apply()
+        DeviceOwnerManager.applyKioskPolicy(this)
+        rearmLockTask()
+    }
+
     private fun enterMaintenance() {
         // The watchdog was written before this maintenance/exit flow existed, so left to run it
         // reclaims the screen from Settings and the home launcher -- dragging the operator back to

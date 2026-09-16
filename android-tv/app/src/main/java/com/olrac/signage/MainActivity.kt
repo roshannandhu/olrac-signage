@@ -71,6 +71,10 @@ import com.olrac.signage.ui.screens.*
 import com.olrac.signage.telemetry.ScreenshotManager
 import com.olrac.signage.network.RealtimeClient
 import com.olrac.signage.device.DeviceOwnerManager
+import com.olrac.signage.boot.SetupGate
+import com.olrac.signage.boot.SetupRequirement
+import com.olrac.signage.boot.SetupRequirementState
+import com.olrac.signage.boot.WatchdogStatus
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -89,6 +93,12 @@ class MainActivity : ComponentActivity() {
     private var showPinPrompt by mutableStateOf(false)
     private var defaultHome by mutableStateOf(false)
     private var pairingJob: Job? = null
+    private var showPermissionGate by mutableStateOf(false)
+    private var requirementStates by mutableStateOf<List<SetupRequirementState>>(emptyList())
+
+    /** Key code whose ACTION_UP still has to be swallowed after its ACTION_DOWN was
+     *  taken by the maintenance gesture. See [dispatchKeyEvent]. */
+    private var swallowUpFor: Int? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -126,6 +136,24 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            // Re-read the two switches once a second so a row turns green the moment the
+            // installer flips it, without them having to come back and forth. The loop ends
+            // for good once both are on -- the gate never asks again, and a TV that runs for
+            // weeks is not left with a 1 Hz timer for nothing.
+            LaunchedEffect(Unit) {
+                while (true) {
+                    val states = readRequirementStates()
+                    requirementStates = states
+                    val handledByOwner = DeviceOwnerManager.isDeviceOwner(this@MainActivity)
+                    if (handledByOwner || SetupGate.isSatisfied(states)) {
+                        showPermissionGate = false
+                        return@LaunchedEffect
+                    }
+                    showPermissionGate = true
+                    delay(1_000L)
+                }
+            }
+
             if (showPinPrompt) {
                 PinPromptScreen(
                     expectedPin = deviceState.maintenancePin,
@@ -159,6 +187,14 @@ class MainActivity : ComponentActivity() {
                         showServerSetup = false
                         rearmLockTask()
                     }
+                )
+            } else if (showPermissionGate) {
+                // Below the pin prompt and the setup screen on purpose: the maintenance
+                // gesture has to stay reachable from the gate, or a TV with both switches
+                // off could never be serviced.
+                PermissionGateScreen(
+                    states = requirementStates,
+                    onTurnOn = ::openRequirementSettings
                 )
             } else {
                 when (val state = launchState) {
@@ -216,6 +252,48 @@ class MainActivity : ComponentActivity() {
     private fun enterMaintenance() {
         if (DeviceOwnerManager.isDeviceOwner(this)) {
             try { stopLockTask() } catch (e: Exception) {}
+        }
+    }
+
+    /** Reads the two switches the gate watches. Kept to the same test the rest of the app
+     *  uses: below Q the overlay permission is granted at install time. */
+    private fun readRequirementStates(): List<SetupRequirementState> =
+        SetupGate.ORDER.map { requirement ->
+            val granted = when (requirement) {
+                SetupRequirement.OVERLAY ->
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || Settings.canDrawOverlays(this)
+                SetupRequirement.WATCHDOG -> WatchdogStatus.isEnabled(this)
+            }
+            SetupRequirementState(requirement, granted)
+        }
+
+    /**
+     * Opens the exact settings page for one switch. Each has fallbacks because TV builds
+     * differ on which of these pages they ship: a KONKA panel is not a Pixel, and an
+     * ActivityNotFoundException here would strand the installer on a screen whose only
+     * button does nothing.
+     */
+    private fun openRequirementSettings(requirement: SetupRequirement) {
+        val candidates = when (requirement) {
+            SetupRequirement.OVERLAY -> listOf(
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")),
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+            )
+            SetupRequirement.WATCHDOG -> listOf(
+                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+            )
+        }
+        // Kiosk pinning would block Settings from opening. onResume re-pins on the way back.
+        enterMaintenance()
+        for (intent in candidates) {
+            try {
+                startActivity(intent)
+                return
+            } catch (e: Exception) {
+                // Try the next page this build might have.
+            }
         }
     }
 
@@ -314,12 +392,40 @@ class MainActivity : ComponentActivity() {
         return super.dispatchTouchEvent(ev)
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // Only while the player is on screen: inside the setup surfaces these keys are
-        // navigation, and matching there would swallow a press mid-form.
-        // Auto-repeat from a held key would otherwise flood the gesture buffer.
-        if (!showPinPrompt && !showServerSetup && (event == null || event.repeatCount == 0)) {
+    /**
+     * The maintenance gesture, matched before the focused view can act on the key.
+     *
+     * [onKeyDown] only runs for keys nothing in the view tree consumed, and a focused Button
+     * consumes OK. Over the player that never mattered -- there is nothing focusable behind a
+     * video -- but on the setup gate the final OK of Up-Up-Down-Down-OK went to whichever
+     * button held focus and opened Settings instead of the pin prompt. That left a TV whose
+     * switches are both off with no way in at all, so the match has to happen here, ahead of
+     * the buttons.
+     *
+     * Only the press that COMPLETES the sequence is consumed. The four before it fall
+     * through untouched, so the arrow keys still move focus around the gate as normal, and
+     * the gesture is recorded here ONLY -- recording in onKeyDown as well would count every
+     * press twice and the sequence would never match.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val keyCode = event.keyCode
+
+        if (event.action == KeyEvent.ACTION_UP && swallowUpFor == keyCode) {
+            // The release belonging to an OK whose press we took. Compose pairs a key down
+            // with its up, so letting this through would still click the button underneath.
+            swallowUpFor = null
+            return true
+        }
+
+        // Not on the pin prompt or the setup screen: there these keys are navigation, and
+        // matching would swallow a press mid-form. Auto-repeat from a held key would
+        // otherwise flood the gesture buffer.
+        if (event.action == KeyEvent.ACTION_DOWN &&
+            !showPinPrompt && !showServerSetup &&
+            event.repeatCount == 0
+        ) {
             if (maintenanceGesture.record(keyCode, System.currentTimeMillis())) {
+                swallowUpFor = keyCode
                 // Reveal the PIN prompt only. The kiosk stays pinned until a CORRECT pin is
                 // entered (see onUnlocked). Dropping lock-task here let the gesture alone
                 // un-pin the TV, and cancelling then left it open until the next reboot.
@@ -328,6 +434,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
                 val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager

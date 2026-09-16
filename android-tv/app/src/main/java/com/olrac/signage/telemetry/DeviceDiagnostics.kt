@@ -126,6 +126,11 @@ object DeviceDiagnostics {
         probe("watchdog_connected_at") {
             prefs.getLong(com.olrac.signage.boot.WatchdogAccessibilityService.PREF_CONNECTED_AT, 0L).takeIf { it > 0 }
         }
+        // True while a PIN/maintenance or exit window has the watchdog standing down -- so a
+        // report that shows the player off-screen with the watchdog enabled is explained.
+        probe("watchdog_suppress_active") {
+            prefs.getLong(com.olrac.signage.MainActivity.PREF_WATCHDOG_SUPPRESS_UNTIL, 0L) > System.currentTimeMillis()
+        }
         probe("watchdog_unbound_at") {
             prefs.getLong(com.olrac.signage.boot.WatchdogAccessibilityService.PREF_UNBOUND_AT, 0L).takeIf { it > 0 }
         }

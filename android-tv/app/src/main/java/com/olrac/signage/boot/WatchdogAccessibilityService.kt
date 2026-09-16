@@ -77,18 +77,21 @@ class WatchdogAccessibilityService : AccessibilityService() {
 
     fun forceBringToFront(reason: String = "remote_command"): Boolean {
         return try {
-            val intent = Intent(this, MainActivity::class.java).apply {
-                addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK or
-                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
-                    Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
-                )
-            }
-            startActivity(intent)
-            Log.i(TAG, "forceBringToFront executed via AccessibilityService (reason=$reason)")
+            // A bare startActivity from here is silently dropped by Android 14 when the service
+            // has no standing to launch -- overlay off, a plain runtime window change -- so the
+            // watchdog "reclaimed" nothing and Home stayed on the home screen. PlayerLauncher's
+            // AlarmManager path is dispatched by the system process and is exempt from the
+            // background-activity-start limit, which is exactly how AbleSign's watchdog reclaims
+            // on this Realtek TV. Route through it so the reclaim works without overlay.
+            com.olrac.signage.boot.PlayerLauncher.launch(
+                applicationContext,
+                com.olrac.signage.boot.PlayerLauncher.WARM_RESTART_MS,
+                reason = "watchdog_$reason",
+            )
+            Log.i(TAG, "forceBringToFront via PlayerLauncher (reason=$reason)")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "forceBringToFront failed via AccessibilityService", e)
+            Log.e(TAG, "forceBringToFront failed (reason=$reason)", e)
             false
         }
     }

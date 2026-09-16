@@ -234,6 +234,12 @@ class MainActivity : ComponentActivity() {
      * Returning to the player narrows the allowlist back; only Exit ends lock task.
      */
     private fun enterMaintenance() {
+        // The watchdog was written before this maintenance/exit flow existed, so left to run it
+        // reclaims the screen from Settings and the home launcher -- dragging the operator back to
+        // the ads and blocking every maintenance action. Stand it down for a window whenever a
+        // correct PIN opens maintenance; onResume clears it once the player is deliberately back.
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .putLong(PREF_WATCHDOG_SUPPRESS_UNTIL, System.currentTimeMillis() + MAINTENANCE_SUPPRESS_MS).apply()
         DeviceOwnerManager.allowMaintenanceApps(this)
     }
 
@@ -252,7 +258,11 @@ class MainActivity : ComponentActivity() {
      */
     private fun exitToSystemLauncher() {
         getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
-            .putLong(PREF_OPERATOR_EXIT_AT, System.currentTimeMillis()).apply()
+            .putLong(PREF_OPERATOR_EXIT_AT, System.currentTimeMillis())
+            // Keep the watchdog off the home screen the operator just exited to, or it reclaims
+            // the player straight back over it.
+            .putLong(PREF_WATCHDOG_SUPPRESS_UNTIL, System.currentTimeMillis() + EXIT_SUPPRESS_MS)
+            .apply()
         showServerSetup = false
         val launcher = systemLauncher()
         // Home is redirected BEFORE lock task ends: ending it on a home task makes Android
@@ -334,7 +344,9 @@ class MainActivity : ComponentActivity() {
         // prompt or the maintenance screen is open -- re-applying there would shrink the lock-task
         // allowlist under Settings the operator just opened from it.
         if (!showPinPrompt && !showServerSetup) {
-            getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit().remove(PREF_OPERATOR_EXIT_AT).apply()
+            // Deliberately back on the player: end the exit AND let the watchdog protect again.
+            getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+                .remove(PREF_OPERATOR_EXIT_AT).remove(PREF_WATCHDOG_SUPPRESS_UNTIL).apply()
             DeviceOwnerManager.applyKioskPolicy(this)
         }
         defaultHome = isDefaultHomeLauncher()
@@ -984,6 +996,11 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val PREF_PLAYER_RESUMED_AT = "player_last_resumed_at"
         const val PREF_OPERATOR_EXIT_AT = "operator_exit_at"
+        // How long the watchdog stands down after a PIN opens maintenance / after an exit, so it
+        // stops reclaiming the screen from Settings and the home launcher while the operator works.
+        const val PREF_WATCHDOG_SUPPRESS_UNTIL = "watchdog_suppress_until"
+        private const val MAINTENANCE_SUPPRESS_MS = 15 * 60_000L
+        private const val EXIT_SUPPRESS_MS = 30 * 60_000L
         // v3: 1.0.28 gated the ask off for TVs; re-open it for the KONKA test.
         private const val PREF_HOME_ROLE_ASKED_AT = "home_role_asked_v3_at"
         const val PREF_HOME_ROLE_RESULT = "home_role_request_result"

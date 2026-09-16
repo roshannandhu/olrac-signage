@@ -98,6 +98,9 @@ class WatchdogAccessibilityService : AccessibilityService() {
         val currentPkg = event.packageName?.toString() ?: return
         recordRecentPackage(currentPkg)
         if (!shouldReclaimScreen(currentPkg)) return
+        // Stand down while the operator is in maintenance or has just exited, or the watchdog
+        // reclaims the player from Settings and the home launcher and they can reach neither.
+        if (watchdogSuppressed()) return
         if (!com.olrac.signage.data.DeviceState(applicationContext).isPaired) return
         // One reclaim per burst: opening an app fires several window-state events in a row.
         val now = SystemClock.elapsedRealtime()
@@ -151,6 +154,13 @@ class WatchdogAccessibilityService : AccessibilityService() {
         val next = (listOf("$pkg@$stamp") + recent).take(RECENT_PACKAGES_KEPT)
         prefs.edit().putString(PREF_RECENT_PACKAGES, next.joinToString(",")).apply()
     }
+
+    /** True while a PIN-opened maintenance session or a recent operator exit is standing the
+     *  watchdog down, so it does not fight the operator for the screen. */
+    private fun watchdogSuppressed(): Boolean =
+        System.currentTimeMillis() < prefs().getLong(
+            com.olrac.signage.MainActivity.PREF_WATCHDOG_SUPPRESS_UNTIL, 0L
+        )
 
     private fun prefs() = getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
 

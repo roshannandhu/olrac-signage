@@ -60,7 +60,11 @@ class WatchdogAccessibilityService : AccessibilityService() {
         } catch (e: Exception) {
             Log.e(TAG, "PlaybackService.start failed on connect", e)
         }
-        if (justBooted) forceBringToFront("boot")
+        // Just switched on from the setup screen: the operator is still standing in Accessibility
+        // settings, so take them straight back to the player rather than leaving them to find it.
+        val awaitingSetup = System.currentTimeMillis() <
+            prefs().getLong(com.olrac.signage.MainActivity.PREF_SETUP_AWAITING_UNTIL, 0L)
+        if (justBooted || awaitingSetup) forceBringToFront(if (justBooted) "boot" else "setup_enabled")
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -191,5 +195,14 @@ class WatchdogAccessibilityService : AccessibilityService() {
         fun bringToFront(context: Context, reason: String = "remote_command"): Boolean {
             return instance?.forceBringToFront(reason) ?: false
         }
+
+        /** Whether the operator has switched this service on in Accessibility settings. */
+        fun isEnabled(context: Context): Boolean = runCatching {
+            val wanted = "${context.packageName}/${WatchdogAccessibilityService::class.java.name}"
+            (android.provider.Settings.Secure.getString(
+                context.contentResolver,
+                android.provider.Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
+            ) ?: "").split(':').any { it.equals(wanted, ignoreCase = true) }
+        }.getOrDefault(false)
     }
 }

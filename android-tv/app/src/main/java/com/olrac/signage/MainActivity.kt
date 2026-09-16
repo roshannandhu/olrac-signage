@@ -91,6 +91,12 @@ class MainActivity : ComponentActivity() {
     private var showPinPrompt by mutableStateOf(false)
     private var defaultHome by mutableStateOf(false)
     private var pairingJob: Job? = null
+    // The two switches the player cannot grant itself; re-read every second while the setup
+    // screen is up, so it closes the moment the operator has switched them on.
+    private var overlayGranted by mutableStateOf(true)
+    private var watchdogOn by mutableStateOf(true)
+    private var setupError by mutableStateOf<String?>(null)
+    private var setupReturnJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -133,7 +139,26 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            if (showPinPrompt) {
+            // Re-read the two switches while the setup gate is on screen, so it lets go by itself.
+            val setupNeeded = needsPermissionSetup()
+            if (setupNeeded) {
+                LaunchedEffect(Unit) {
+                    while (true) {
+                        refreshPermissionState()
+                        kotlinx.coroutines.delay(1_000)
+                    }
+                }
+            }
+
+            if (setupNeeded && !showPinPrompt && !showServerSetup) {
+                SetupPermissionsScreen(
+                    overlayGranted = overlayGranted,
+                    watchdogEnabled = watchdogOn,
+                    onEnableOverlay = ::openOverlaySettings,
+                    onEnableWatchdog = ::openAccessibilitySettings,
+                    error = setupError,
+                )
+            } else if (showPinPrompt) {
                 PinPromptScreen(
                     expectedPin = deviceState.maintenancePin,
                     masterPin = deviceState.masterPin,
@@ -245,6 +270,98 @@ class MainActivity : ComponentActivity() {
             .remove(PREF_OPERATOR_EXIT_AT).remove(PREF_WATCHDOG_SUPPRESS_UNTIL).apply()
         DeviceOwnerManager.applyKioskPolicy(this)
         rearmLockTask()
+    }
+
+    /**
+     * Whether the two switches the player cannot grant itself are still missing.
+     *
+     * A device-owner install holds both powers already and is never asked. Everywhere else, the
+     * player refuses to go on until they are on -- without them it cannot reopen after a restart
+     * or take the screen back, which is the whole job.
+     */
+    private fun needsPermissionSetup(): Boolean {
+        if (DeviceOwnerManager.isDeviceOwner(this)) return false
+        return !overlayGranted || !watchdogOn
+    }
+
+    private fun refreshPermissionState() {
+        overlayGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
+        watchdogOn = com.olrac.signage.boot.WatchdogAccessibilityService.isEnabled(this)
+        if (overlayGranted && watchdogOn) {
+            // Done: stop waiting to be brought back, and let the watchdog protect again.
+            getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+                .remove(PREF_SETUP_AWAITING_UNTIL).apply()
+        }
+    }
+
+    /**
+     * Open a settings page for one of the two switches, and arrange to come back.
+     *
+     * The operator is about to leave the player for Settings, so a window is opened in which
+     * whoever notices the switch flip -- the poll below, or the watchdog the moment it connects --
+     * brings the player back, instead of leaving them on a settings page wondering.
+     */
+    private fun openSetupSettings(attempts: List<Intent>) {
+        setupError = null
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .putLong(PREF_SETUP_AWAITING_UNTIL, System.currentTimeMillis() + SETUP_RETURN_WINDOW_MS).apply()
+        // Lock task would refuse the settings activity outright on a device-owner panel.
+        DeviceOwnerManager.allowMaintenanceApps(this)
+        val opened = attempts.any { intent ->
+            runCatching { startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+        }
+        if (!opened) {
+            setupError = "This TV has no settings screen that can be opened from here."
+            return
+        }
+        watchForSetupReturn()
+    }
+
+    private fun openOverlaySettings() = openSetupSettings(
+        listOf(
+            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")),
+            Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),
+            Intent(Settings.ACTION_SETTINGS),
+        )
+    )
+
+    private fun openAccessibilitySettings() = openSetupSettings(
+        listOf(
+            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+            Intent(Settings.ACTION_SETTINGS),
+        )
+    )
+
+    /**
+     * Watch for the switch the operator just went to flip, and return to the player when it lands.
+     *
+     * Runs while this activity is merely paused (Settings is in front), which is why it can see
+     * the change at all. Once overlay is granted a plain start is allowed again; for the
+     * accessibility switch the service itself comes back on connect.
+     */
+    private fun watchForSetupReturn() {
+        setupReturnJob?.cancel()
+        setupReturnJob = lifecycleScope.launch {
+            val deadline = System.currentTimeMillis() + SETUP_RETURN_WINDOW_MS
+            var wasOverlay = overlayGranted
+            var wasWatchdog = watchdogOn
+            while (System.currentTimeMillis() < deadline) {
+                kotlinx.coroutines.delay(1_000)
+                val overlayNow = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this@MainActivity)
+                val watchdogNow = com.olrac.signage.boot.WatchdogAccessibilityService.isEnabled(this@MainActivity)
+                if ((overlayNow && !wasOverlay) || (watchdogNow && !wasWatchdog)) {
+                    android.util.Log.i("MainActivity", "Setup switch turned on; returning to the player")
+                    com.olrac.signage.boot.PlayerLauncher.launch(
+                        applicationContext,
+                        com.olrac.signage.boot.PlayerLauncher.WARM_RESTART_MS,
+                        reason = "setup_returned",
+                    )
+                    break
+                }
+                wasOverlay = overlayNow
+                wasWatchdog = watchdogNow
+            }
+        }
     }
 
     private fun enterMaintenance() {
@@ -364,6 +481,8 @@ class MainActivity : ComponentActivity() {
             DeviceOwnerManager.applyKioskPolicy(this)
         }
         defaultHome = isDefaultHomeLauncher()
+        // Back from a settings page: pick up a switch that was just turned on straight away.
+        refreshPermissionState()
         askOnceToBecomeHome()
         hideSystemBars()
         // Backstop: re-pin whenever we are back on the player with no maintenance surface
@@ -443,12 +562,20 @@ class MainActivity : ComponentActivity() {
         return super.dispatchTouchEvent(ev)
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // Only while the player is on screen: inside the setup surfaces these keys are
-        // navigation, and matching there would swallow a press mid-form.
-        // Auto-repeat from a held key would otherwise flood the gesture buffer.
-        if (!showPinPrompt && !showServerSetup && (event == null || event.repeatCount == 0)) {
-            if (maintenanceGesture.record(keyCode, System.currentTimeMillis())) {
+    /**
+     * The maintenance gesture, seen before the focused view gets the key.
+     *
+     * It used to live in onKeyDown, which the system calls only AFTER the focused view has had
+     * the key -- so on any screen with a button (the two-switch setup gate) the focused button
+     * swallowed the closing OK and opened itself instead of the PIN prompt, leaving no way in.
+     * Here the keys are only OBSERVED, never consumed, so remote navigation still works; the one
+     * press that is consumed is the one that completes the gesture.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0 &&
+            !showPinPrompt && !showServerSetup
+        ) {
+            if (maintenanceGesture.record(event.keyCode, System.currentTimeMillis())) {
                 // Reveal the PIN prompt only. The kiosk stays pinned until a CORRECT pin is
                 // entered (see onUnlocked). Dropping lock-task here let the gesture alone
                 // un-pin the TV, and cancelling then left it open until the next reboot.
@@ -456,7 +583,10 @@ class MainActivity : ComponentActivity() {
                 return true
             }
         }
+        return super.dispatchKeyEvent(event)
+    }
 
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
                 val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
@@ -1013,6 +1143,9 @@ class MainActivity : ComponentActivity() {
         // How long the watchdog stands down after a PIN opens maintenance / after an exit, so it
         // stops reclaiming the screen from Settings and the home launcher while the operator works.
         const val PREF_WATCHDOG_SUPPRESS_UNTIL = "watchdog_suppress_until"
+        /** While set, the operator is in Settings flipping a setup switch and wants bringing back. */
+        const val PREF_SETUP_AWAITING_UNTIL = "setup_awaiting_until"
+        private const val SETUP_RETURN_WINDOW_MS = 5 * 60_000L
         private const val MAINTENANCE_SUPPRESS_MS = 15 * 60_000L
         private const val EXIT_SUPPRESS_MS = 30 * 60_000L
         // v3: 1.0.28 gated the ask off for TVs; re-open it for the KONKA test.

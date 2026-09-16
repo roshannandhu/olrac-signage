@@ -25,8 +25,8 @@ android {
         applicationId = "com.olrac.signage"
         minSdk = 26
         targetSdk = 34
-        versionCode = 35
-        versionName = "1.0.34"
+        versionCode = 37
+        versionName = "1.0.36"
         
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

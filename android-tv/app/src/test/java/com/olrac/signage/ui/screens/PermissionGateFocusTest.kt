@@ -1,5 +1,6 @@
 package com.olrac.signage.ui.screens
 
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasClickAction
@@ -64,5 +65,32 @@ class PermissionGateFocusTest {
         compose.onAllNodes(hasClickAction()).fetchSemanticsNodes().let { nodes ->
             assert(nodes.size == 2) { "both rows must keep a reachable button, found ${nodes.size}" }
         }
+    }
+
+    @Test
+    fun `focus survives the once-a-second re-read`() {
+        // The gate re-reads both switches every second, so this screen recomposes with a new
+        // list while the installer is still holding the remote. If that handed focus back to
+        // nowhere -- or bounced it to the other row -- the remote would die, or move under
+        // them, precisely as they were about to press OK.
+        val states = mutableStateOf(
+            listOf(
+                SetupRequirementState(SetupRequirement.OVERLAY, false),
+                SetupRequirementState(SetupRequirement.WATCHDOG, false)
+            )
+        )
+        compose.setContent {
+            PermissionGateScreen(states = states.value, onTurnOn = {})
+        }
+        compose.onAllNodes(hasClickAction())[0].assertIsFocused()
+
+        // The tick that turns row 1 green while the remote is sitting on it.
+        states.value = listOf(
+            SetupRequirementState(SetupRequirement.OVERLAY, true),
+            SetupRequirementState(SetupRequirement.WATCHDOG, false)
+        )
+        compose.waitForIdle()
+
+        compose.onAllNodes(hasClickAction())[0].assertIsFocused()
     }
 }

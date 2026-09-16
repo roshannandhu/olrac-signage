@@ -13,7 +13,10 @@ enum class SetupRequirement {
     OVERLAY,
 
     /** The watchdog accessibility service: what puts the player back if something covers it. */
-    WATCHDOG
+    WATCHDOG,
+
+    /** REQUEST_INSTALL_PACKAGES: what lets the TV install player updates unattended. */
+    AUTO_UPDATE
 }
 
 data class SetupRequirementState(
@@ -24,7 +27,7 @@ data class SetupRequirementState(
 object SetupGate {
 
     /** The order the gate lists them in: the one that gets a TV playing at all comes first. */
-    val ORDER = listOf(SetupRequirement.OVERLAY, SetupRequirement.WATCHDOG)
+    val ORDER = listOf(SetupRequirement.OVERLAY, SetupRequirement.WATCHDOG, SetupRequirement.AUTO_UPDATE)
 
     /** The gate closes itself -- and never asks again -- only once every switch is on. */
     fun isSatisfied(states: List<SetupRequirementState>): Boolean =

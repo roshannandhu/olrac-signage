@@ -292,7 +292,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Reads the two switches the gate watches. */
+    /** Reads the switches the gate watches. */
     private fun readRequirementStates(): List<SetupRequirementState> =
         SetupGate.ORDER.map { requirement ->
             val granted = when (requirement) {
@@ -300,6 +300,8 @@ class MainActivity : ComponentActivity() {
                     Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
                 SetupRequirement.WATCHDOG ->
                     com.olrac.signage.boot.WatchdogAccessibilityService.isEnabled(this)
+                SetupRequirement.AUTO_UPDATE ->
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
             }
             SetupRequirementState(requirement, granted)
         }
@@ -323,12 +325,29 @@ class MainActivity : ComponentActivity() {
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
                 Intent(Settings.ACTION_SETTINGS),
             )
+            SetupRequirement.AUTO_UPDATE -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    listOf(
+                        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")),
+                        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES),
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
+                        Intent(Settings.ACTION_SECURITY_SETTINGS),
+                        Intent(Settings.ACTION_SETTINGS),
+                    )
+                } else {
+                    listOf(
+                        Intent(Settings.ACTION_SECURITY_SETTINGS),
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
+                        Intent(Settings.ACTION_SETTINGS),
+                    )
+                }
+            }
         }
         openSetupSettings(candidates)
     }
 
     /**
-     * Open a settings page for one of the two switches, and arrange to come back.
+     * Open a settings page for one of the switches, and arrange to come back.
      *
      * The operator is about to leave the player for Settings, so a window is opened in which
      * whoever notices the switch flip -- the poll below, or the watchdog the moment it connects --
@@ -363,11 +382,13 @@ class MainActivity : ComponentActivity() {
             val deadline = System.currentTimeMillis() + SETUP_RETURN_WINDOW_MS
             var wasOverlay = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this@MainActivity)
             var wasWatchdog = com.olrac.signage.boot.WatchdogAccessibilityService.isEnabled(this@MainActivity)
+            var wasAutoUpdate = Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
             while (System.currentTimeMillis() < deadline) {
                 kotlinx.coroutines.delay(1_000)
                 val overlayNow = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this@MainActivity)
                 val watchdogNow = com.olrac.signage.boot.WatchdogAccessibilityService.isEnabled(this@MainActivity)
-                if ((overlayNow && !wasOverlay) || (watchdogNow && !wasWatchdog)) {
+                val autoUpdateNow = Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
+                if ((overlayNow && !wasOverlay) || (watchdogNow && !wasWatchdog) || (autoUpdateNow && !wasAutoUpdate)) {
                     android.util.Log.i("MainActivity", "Setup switch turned on; returning to the player")
                     com.olrac.signage.boot.PlayerLauncher.launch(
                         applicationContext,
@@ -378,6 +399,7 @@ class MainActivity : ComponentActivity() {
                 }
                 wasOverlay = overlayNow
                 wasWatchdog = watchdogNow
+                wasAutoUpdate = autoUpdateNow
             }
         }
     }

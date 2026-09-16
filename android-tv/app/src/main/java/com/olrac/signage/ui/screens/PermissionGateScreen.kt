@@ -76,15 +76,21 @@ fun PermissionGateScreen(
     }
 
     SetupSurface {
+        val countWord = when (states.size) {
+            1 -> "One"
+            2 -> "Two"
+            3 -> "Three"
+            else -> states.size.toString()
+        }
         Text(
-            text = "Two switches to turn on",
+            text = "$countWord switches to turn on",
             color = Color.White,
             fontSize = 30.sp,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "This TV needs both before it can show your ads on its own. " +
+            text = "This TV needs all required switches on before it can show your ads on its own. " +
                 "Use the arrow keys and OK on the remote.",
             color = Color.LightGray,
             fontSize = 16.sp
@@ -108,7 +114,7 @@ fun PermissionGateScreen(
 
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "This screen closes by itself once both are on.",
+            text = "This screen closes by itself once all are on.",
             color = Color.Gray,
             fontSize = 14.sp
         )
@@ -181,6 +187,7 @@ private fun RequirementRow(
 private fun title(requirement: SetupRequirement): String = when (requirement) {
     SetupRequirement.OVERLAY -> "Display over other apps"
     SetupRequirement.WATCHDOG -> "Keep player on screen"
+    SetupRequirement.AUTO_UPDATE -> "Allow auto-updates"
 }
 
 private fun detail(requirement: SetupRequirement): String = when (requirement) {
@@ -188,6 +195,8 @@ private fun detail(requirement: SetupRequirement): String = when (requirement) {
         "Lets the player bring itself back to the front after the TV restarts."
     SetupRequirement.WATCHDOG ->
         "Puts the player back if a system message or another app covers it."
+    SetupRequirement.AUTO_UPDATE ->
+        "Lets the TV install player updates unattended without manual intervention."
 }
 
 /** Frames to keep asking for focus before giving up -- about half a second at 60fps. */

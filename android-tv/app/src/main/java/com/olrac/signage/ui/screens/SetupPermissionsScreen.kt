@@ -40,8 +40,10 @@ import androidx.compose.ui.unit.sp
 fun SetupPermissionsScreen(
     overlayGranted: Boolean,
     watchdogEnabled: Boolean,
+    autoUpdateGranted: Boolean = true,
     onEnableOverlay: () -> Unit,
     onEnableWatchdog: () -> Unit,
+    onEnableAutoUpdate: () -> Unit = {},
     error: String? = null,
 ) {
     Column(
@@ -61,7 +63,7 @@ fun SetupPermissionsScreen(
         )
         Spacer(modifier = Modifier.height(10.dp))
         Text(
-            text = "Two settings to switch on",
+            text = "Three settings to switch on",
             color = Color.White,
             fontSize = 26.sp,
             fontWeight = FontWeight.Bold,
@@ -69,8 +71,8 @@ fun SetupPermissionsScreen(
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "This screen needs both to play ads on its own and come back after a restart. " +
-                "Switch each one on, then this page closes by itself.",
+            text = "This screen needs all three to play ads on its own, come back after a restart, " +
+                "and receive background updates. Switch each one on, then this page closes by itself.",
             color = Color.LightGray,
             textAlign = TextAlign.Center,
         )
@@ -92,20 +94,29 @@ fun SetupPermissionsScreen(
             granted = watchdogEnabled,
             onEnable = onEnableWatchdog,
         )
+        Spacer(modifier = Modifier.height(14.dp))
+        PermissionRow(
+            step = "3",
+            title = "Allow auto-updates",
+            detail = "Allows the TV to install player app updates unattended.",
+            granted = autoUpdateGranted,
+            onEnable = onEnableAutoUpdate,
+        )
 
         error?.let {
             Spacer(modifier = Modifier.height(14.dp))
             Text(text = it, color = Color(0xFFEF4444), textAlign = TextAlign.Center)
         }
 
+        val allGranted = overlayGranted && watchdogEnabled && autoUpdateGranted
         Spacer(modifier = Modifier.height(24.dp))
         Text(
-            text = if (overlayGranted && watchdogEnabled) {
-                "Both on — starting the player…"
+            text = if (allGranted) {
+                "All on — starting the player…"
             } else {
-                "Waiting for both to be switched on…"
+                "Waiting for all settings to be switched on…"
             },
-            color = if (overlayGranted && watchdogEnabled) AccentGreen else Color(0xFFFFC46B),
+            color = if (allGranted) AccentGreen else Color(0xFFFFC46B),
             textAlign = TextAlign.Center,
         )
     }

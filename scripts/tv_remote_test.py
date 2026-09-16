@@ -34,7 +34,7 @@ import time
 import xml.etree.ElementTree as ET
 
 PACKAGE = "com.olrac.signage"
-GATE_MARKER = "Two switches to turn on"
+GATE_MARKER = "switches to turn on"
 PIN_MARKER = "Maintenance access"
 
 KEY_UP, KEY_DOWN, KEY_OK, KEY_BACK = "19", "20", "23", "4"

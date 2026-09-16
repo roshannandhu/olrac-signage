@@ -28,18 +28,19 @@ import org.robolectric.annotation.Config
  * These tests fail on a gate that opens with nothing focused.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [33])
+@Config(sdk = [33], qualifiers = "w1920dp-h1080dp")
 class PermissionGateFocusTest {
 
     @get:Rule
     val compose = createComposeRule()
 
-    private fun show(overlay: Boolean, watchdog: Boolean) {
+    private fun show(overlay: Boolean, watchdog: Boolean, autoUpdate: Boolean = false) {
         compose.setContent {
             PermissionGateScreen(
                 states = listOf(
                     SetupRequirementState(SetupRequirement.OVERLAY, overlay),
-                    SetupRequirementState(SetupRequirement.WATCHDOG, watchdog)
+                    SetupRequirementState(SetupRequirement.WATCHDOG, watchdog),
+                    SetupRequirementState(SetupRequirement.AUTO_UPDATE, autoUpdate)
                 ),
                 onTurnOn = {}
             )
@@ -48,18 +49,19 @@ class PermissionGateFocusTest {
 
     @Test
     fun `the remote has somewhere to be the moment the gate opens`() {
-        show(overlay = false, watchdog = false)
+        show(overlay = false, watchdog = false, autoUpdate = false)
         val buttons = compose.onAllNodes(hasClickAction())
         buttons[0].assertIsFocused()
     }
 
     @Test
     fun `focus starts on the switch that is still off`() {
-        // Overlay already on: the installer's job is the second row, so that is where the
+        // Overlay and watchdog already on: the installer's job is the third row, so that is where the
         // remote must land -- not on a row with nothing left to do.
-        show(overlay = true, watchdog = false)
+        show(overlay = true, watchdog = true, autoUpdate = false)
         compose.onAllNodes(hasClickAction() and hasText("Turn on"))[0].assertIsFocused()
         compose.onAllNodes(hasClickAction() and hasText("Change"))[0].assertIsNotFocused()
+        compose.onAllNodes(hasClickAction() and hasText("Change"))[1].assertIsNotFocused()
     }
 
     @Test
@@ -67,22 +69,23 @@ class PermissionGateFocusTest {
         // A disabled button is not focusable. If a row dropped its button on being granted,
         // switching it on while it held focus would leave the screen focusless -- the same
         // dead remote, now with the installer halfway through setup.
-        show(overlay = true, watchdog = true)
+        show(overlay = true, watchdog = true, autoUpdate = true)
         compose.onAllNodes(hasClickAction()).fetchSemanticsNodes().let { nodes ->
-            assert(nodes.size == 2) { "both rows must keep a reachable button, found ${nodes.size}" }
+            assert(nodes.size == 3) { "all rows must keep a reachable button, found ${nodes.size}" }
         }
     }
 
     @Test
     fun `focus survives the once-a-second re-read`() {
-        // The gate re-reads both switches every second, so this screen recomposes with a new
+        // The gate re-reads switches every second, so this screen recomposes with a new
         // list while the installer is still holding the remote. If that handed focus back to
         // nowhere -- or bounced it to the other row -- the remote would die, or move under
         // them, precisely as they were about to press OK.
         val states = mutableStateOf(
             listOf(
                 SetupRequirementState(SetupRequirement.OVERLAY, false),
-                SetupRequirementState(SetupRequirement.WATCHDOG, false)
+                SetupRequirementState(SetupRequirement.WATCHDOG, false),
+                SetupRequirementState(SetupRequirement.AUTO_UPDATE, false)
             )
         )
         compose.setContent {
@@ -93,7 +96,8 @@ class PermissionGateFocusTest {
         // The tick that turns row 1 green while the remote is sitting on it.
         states.value = listOf(
             SetupRequirementState(SetupRequirement.OVERLAY, true),
-            SetupRequirementState(SetupRequirement.WATCHDOG, false)
+            SetupRequirementState(SetupRequirement.WATCHDOG, false),
+            SetupRequirementState(SetupRequirement.AUTO_UPDATE, false)
         )
         compose.waitForIdle()
 
@@ -102,14 +106,22 @@ class PermissionGateFocusTest {
 
     @OptIn(ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
     @Test
-    fun `the d-pad moves the highlight between the two rows`() {
+    fun `the d-pad moves the highlight between the rows`() {
         // What "the remote does not work" actually means to whoever is holding it. Initial
-        // focus alone is not the feature: if Down does not travel from row one to row two,
-        // the second switch cannot be reached and the gate can never be finished.
-        show(overlay = false, watchdog = false)
+        // focus alone is not the feature: if Down does not travel from row one to the other rows,
+        // the remaining switches cannot be reached and the gate can never be finished.
+        show(overlay = false, watchdog = false, autoUpdate = false)
         compose.onAllNodes(hasClickAction())[0].assertIsFocused()
 
         compose.onAllNodes(hasClickAction())[0].performKeyInput { pressKey(Key.DirectionDown) }
+        compose.waitForIdle()
+        compose.onAllNodes(hasClickAction())[1].assertIsFocused()
+
+        compose.onAllNodes(hasClickAction())[1].performKeyInput { pressKey(Key.DirectionDown) }
+        compose.waitForIdle()
+        compose.onAllNodes(hasClickAction())[2].assertIsFocused()
+
+        compose.onAllNodes(hasClickAction())[2].performKeyInput { pressKey(Key.DirectionUp) }
         compose.waitForIdle()
         compose.onAllNodes(hasClickAction())[1].assertIsFocused()
 
@@ -129,7 +141,8 @@ class PermissionGateFocusTest {
             PermissionGateScreen(
                 states = listOf(
                     SetupRequirementState(SetupRequirement.OVERLAY, false),
-                    SetupRequirementState(SetupRequirement.WATCHDOG, false)
+                    SetupRequirementState(SetupRequirement.WATCHDOG, false),
+                    SetupRequirementState(SetupRequirement.AUTO_UPDATE, false)
                 ),
                 onTurnOn = { opened = it }
             )
@@ -144,5 +157,11 @@ class PermissionGateFocusTest {
         compose.onAllNodes(hasClickAction())[1].performKeyInput { pressKey(Key.DirectionCenter) }
         compose.waitForIdle()
         assertEquals(SetupRequirement.WATCHDOG, opened)
+
+        compose.onAllNodes(hasClickAction())[1].performKeyInput { pressKey(Key.DirectionDown) }
+        compose.waitForIdle()
+        compose.onAllNodes(hasClickAction())[2].performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.waitForIdle()
+        assertEquals(SetupRequirement.AUTO_UPDATE, opened)
     }
 }

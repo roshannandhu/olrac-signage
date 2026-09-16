@@ -1,6 +1,11 @@
 package com.olrac.signage.ui.screens
 
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasClickAction
@@ -91,6 +96,24 @@ class PermissionGateFocusTest {
         )
         compose.waitForIdle()
 
+        compose.onAllNodes(hasClickAction())[0].assertIsFocused()
+    }
+
+    @OptIn(ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
+    @Test
+    fun `the d-pad moves the highlight between the two rows`() {
+        // What "the remote does not work" actually means to whoever is holding it. Initial
+        // focus alone is not the feature: if Down does not travel from row one to row two,
+        // the second switch cannot be reached and the gate can never be finished.
+        show(overlay = false, watchdog = false)
+        compose.onAllNodes(hasClickAction())[0].assertIsFocused()
+
+        compose.onAllNodes(hasClickAction())[0].performKeyInput { pressKey(Key.DirectionDown) }
+        compose.waitForIdle()
+        compose.onAllNodes(hasClickAction())[1].assertIsFocused()
+
+        compose.onAllNodes(hasClickAction())[1].performKeyInput { pressKey(Key.DirectionUp) }
+        compose.waitForIdle()
         compose.onAllNodes(hasClickAction())[0].assertIsFocused()
     }
 }

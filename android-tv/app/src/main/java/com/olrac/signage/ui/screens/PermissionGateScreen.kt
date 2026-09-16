@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -57,11 +58,21 @@ fun PermissionGateScreen(
     // switches flip would yank focus out from under whoever is moving the remote.
     val initialFocus = remember { SetupGate.initialFocusIndex(states) }
     val focusRequester = remember { FocusRequester() }
+    var focusLanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        // Safe even if the row it addresses is gone: requestFocus on a detached requester
-        // throws, so it is guarded rather than trusted.
-        runCatching { focusRequester.requestFocus() }
+        // Asked for until a row reports it actually has focus, not asked for once and hoped.
+        //
+        // requestFocus throws if its node is not attached yet, and whether it is attached on
+        // the first pass is a timing detail that differs between devices. A single guarded
+        // call would swallow that failure and leave the screen with nothing focused -- the
+        // dead remote again, and silent, which is the hard version to diagnose from a TV on
+        // a wall. Retrying across the first frames costs nothing when it lands immediately.
+        repeat(FOCUS_ATTEMPTS) {
+            if (focusLanded) return@LaunchedEffect
+            runCatching { focusRequester.requestFocus() }
+            withFrameNanos { }
+        }
     }
 
     SetupSurface {
@@ -85,6 +96,7 @@ fun PermissionGateScreen(
                 position = index + 1,
                 state = state,
                 onTurnOn = { onTurnOn(state.requirement) },
+                onFocused = { if (index == initialFocus) focusLanded = true },
                 modifier = if (index == initialFocus) {
                     Modifier.focusRequester(focusRequester)
                 } else {
@@ -108,6 +120,7 @@ private fun RequirementRow(
     position: Int,
     state: SetupRequirementState,
     onTurnOn: () -> Unit,
+    onFocused: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -142,7 +155,10 @@ private fun RequirementRow(
 
         Button(
             onClick = onTurnOn,
-            modifier = modifier.onFocusChanged { focused = it.isFocused },
+            modifier = modifier.onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocused()
+            },
             colors = if (state.granted) {
                 secondaryButtonColors()
             } else {
@@ -173,3 +189,6 @@ private fun detail(requirement: SetupRequirement): String = when (requirement) {
     SetupRequirement.WATCHDOG ->
         "Puts the player back if a system message or another app covers it."
 }
+
+/** Frames to keep asking for focus before giving up -- about half a second at 60fps. */
+private const val FOCUS_ATTEMPTS = 30

@@ -1,11 +1,18 @@
 package com.olrac.signage.ui.screens
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.olrac.signage.boot.SetupRequirement
+import org.junit.Assert.assertEquals
 import com.olrac.signage.boot.SetupRequirementState
 import org.junit.Rule
 import org.junit.Test
@@ -64,5 +71,78 @@ class PermissionGateFocusTest {
         compose.onAllNodes(hasClickAction()).fetchSemanticsNodes().let { nodes ->
             assert(nodes.size == 2) { "both rows must keep a reachable button, found ${nodes.size}" }
         }
+    }
+
+    @Test
+    fun `focus survives the once-a-second re-read`() {
+        // The gate re-reads both switches every second, so this screen recomposes with a new
+        // list while the installer is still holding the remote. If that handed focus back to
+        // nowhere -- or bounced it to the other row -- the remote would die, or move under
+        // them, precisely as they were about to press OK.
+        val states = mutableStateOf(
+            listOf(
+                SetupRequirementState(SetupRequirement.OVERLAY, false),
+                SetupRequirementState(SetupRequirement.WATCHDOG, false)
+            )
+        )
+        compose.setContent {
+            PermissionGateScreen(states = states.value, onTurnOn = {})
+        }
+        compose.onAllNodes(hasClickAction())[0].assertIsFocused()
+
+        // The tick that turns row 1 green while the remote is sitting on it.
+        states.value = listOf(
+            SetupRequirementState(SetupRequirement.OVERLAY, true),
+            SetupRequirementState(SetupRequirement.WATCHDOG, false)
+        )
+        compose.waitForIdle()
+
+        compose.onAllNodes(hasClickAction())[0].assertIsFocused()
+    }
+
+    @OptIn(ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
+    @Test
+    fun `the d-pad moves the highlight between the two rows`() {
+        // What "the remote does not work" actually means to whoever is holding it. Initial
+        // focus alone is not the feature: if Down does not travel from row one to row two,
+        // the second switch cannot be reached and the gate can never be finished.
+        show(overlay = false, watchdog = false)
+        compose.onAllNodes(hasClickAction())[0].assertIsFocused()
+
+        compose.onAllNodes(hasClickAction())[0].performKeyInput { pressKey(Key.DirectionDown) }
+        compose.waitForIdle()
+        compose.onAllNodes(hasClickAction())[1].assertIsFocused()
+
+        compose.onAllNodes(hasClickAction())[1].performKeyInput { pressKey(Key.DirectionUp) }
+        compose.waitForIdle()
+        compose.onAllNodes(hasClickAction())[0].assertIsFocused()
+    }
+
+    @OptIn(ExperimentalTestApi::class, ExperimentalComposeUiApi::class)
+    @Test
+    fun `OK opens the page for the row the remote is on`() {
+        // The end of the journey: focus arrives, Down travels, and OK has to actually fire
+        // the row it is sitting on. This is the half that "the buttons do nothing" would
+        // mean if focus were fine all along.
+        var opened: SetupRequirement? = null
+        compose.setContent {
+            PermissionGateScreen(
+                states = listOf(
+                    SetupRequirementState(SetupRequirement.OVERLAY, false),
+                    SetupRequirementState(SetupRequirement.WATCHDOG, false)
+                ),
+                onTurnOn = { opened = it }
+            )
+        }
+
+        compose.onAllNodes(hasClickAction())[0].performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.waitForIdle()
+        assertEquals(SetupRequirement.OVERLAY, opened)
+
+        compose.onAllNodes(hasClickAction())[0].performKeyInput { pressKey(Key.DirectionDown) }
+        compose.waitForIdle()
+        compose.onAllNodes(hasClickAction())[1].performKeyInput { pressKey(Key.DirectionCenter) }
+        compose.waitForIdle()
+        assertEquals(SetupRequirement.WATCHDOG, opened)
     }
 }

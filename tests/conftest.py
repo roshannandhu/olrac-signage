@@ -115,6 +115,8 @@ ISOLATED_SCRIPTS = {
     "test_tenant_purge.py",
     # A reinstalled panel comes back as itself; only removal wipes it.
     "test_screen_reconnect.py",
+    # A factory-reset TV reconnects by model instead of duplicating.
+    "test_factory_reset_reconnect.py",
     # Publishing a player build reaches screens whose content never changes.
     "test_ota_reaches_a_settled_fleet.py",
     # Every kiosked screen has a way in; only the operator sets the fallback PIN.
@@ -206,6 +208,7 @@ NEEDS_POSTGRES = ISOLATED_SCRIPTS - {
     "test_admin_lifecycle_controls.py",
     "test_storage_accounting.py",
     "test_screen_reconnect.py",
+    "test_factory_reset_reconnect.py",
     "test_ota_reaches_a_settled_fleet.py",
     "test_maintenance_pin.py",
     "test_assigned_ad_plays.py",

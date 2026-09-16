@@ -383,6 +383,34 @@ async def pair_screen(
             .first()
         )
 
+    # A factory reset defeats installation_id: on a TV that hides its serial it is derived
+    # from ANDROID_ID, and a reset changes ANDROID_ID, so the same panel returns as a stranger.
+    # Fall back to the hardware model -- if this workspace has exactly one non-live screen of
+    # the same model, this is almost certainly that TV coming back, so reconnect it rather than
+    # leave a duplicate. Exactly one, and never a screen that is still online, so two identical
+    # TVs are never merged into each other; with two offline look-alikes we cannot tell which
+    # this is and leave it as a new screen. Full, unambiguous recovery needs the serial, which
+    # only a device-owner install can read.
+    if not existing_screen and db_screen.model:
+        same_model = (
+            scope.db.query(models.Screen)
+            .filter(
+                models.Screen.organization_id == scope.organization_id,
+                models.Screen.model == db_screen.model,
+                models.Screen.deleted_at.is_(None),
+                models.Screen.status.notin_(("online", "waiting_pairing")),
+                models.Screen.id != db_screen.id,
+            )
+            .all()
+        )
+        if len(same_model) == 1:
+            existing_screen = same_model[0]
+            logger.info(
+                "Reclaiming screen %s (%s) by model after a factory reset changed its identity "
+                "(installation_id %s -> %s)",
+                existing_screen.id, existing_screen.name, existing_screen.installation_id, db_screen.installation_id,
+            )
+
     if existing_screen:
         logger.info(
             "Reclaiming existing screen %s (%s) on pairing reinstalled hardware (installation_id: %s, new device_id: %s)",

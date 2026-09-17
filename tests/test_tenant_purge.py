@@ -253,6 +253,50 @@ def test_a_sweep_refuses_to_match_the_whole_bucket():
         raise AssertionError(f"delete_prefix({prefix!r}) was not refused")
 
 
+def test_admin_can_delete_a_removed_workspace_now():
+    """"Delete permanently" skips the 30 days, but only for a removed workspace whose name was typed."""
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+
+    from backend import media_storage
+    from backend.routers import admin
+    from backend.services import tenant_purge as purge_module
+
+    original_delete, original_sweep = media_storage.delete, purge_module.delete_prefix
+    media_storage.delete = _deleted_nothing
+    purge_module.delete_prefix = lambda prefix: {"deleted": 0, "failed": 0, "error": None}
+    scope = SimpleNamespace(user=SimpleNamespace(organization_id=None, username="root"))
+
+    db = database.SessionLocal()
+    try:
+        org = _workspace(db, name="Gone Today Co")
+        db.commit()
+        org_id = org.id
+
+        def refused(name, status):
+            try:
+                admin.delete_tenant_permanently(org_id, name, scope, db)
+            except HTTPException as exc:
+                assert exc.status_code == status, exc.detail
+            else:
+                raise AssertionError(f"deleted with name={name!r}")
+
+        refused("Gone Today Co", 409)  # not removed yet
+        org.deleted_at = models.utcnow() - timedelta(days=1)
+        db.commit()
+        refused("Gone Today", 400)  # wrong name
+        assert _survivors(db, org_id), "a refused delete removed rows"
+
+        report = admin.delete_tenant_permanently(org_id, "Gone Today Co", scope, db)
+        assert report["rows"]["organizations"] == 1
+        assert _survivors(db, org_id) == {}, "rows survived the permanent delete"
+        assert db.query(models.Organization).filter(models.Organization.id == org_id).count() == 0
+    finally:
+        media_storage.delete, purge_module.delete_prefix = original_delete, original_sweep
+        db.close()
+
+
 if __name__ == "__main__":
     try:
         for name, fn in sorted(globals().items()):

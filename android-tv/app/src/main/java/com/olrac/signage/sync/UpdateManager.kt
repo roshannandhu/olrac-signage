@@ -215,10 +215,9 @@ object UpdateManager {
         //
         // Android 13 put "restricted settings" on anything installed from a local or
         // downloaded file: the accessibility toggle for such an app is greyed out and cannot
-        // be switched on. The watchdog that keeps this player in front on Realtek TV
-        // firmware IS an accessibility service, so a player the platform classed as
-        // sideloaded could never have it enabled -- reported simply as "accessibility is not
-        // working". A session that says nothing is left to the platform's guess; saying
+        // be switched on. The player's old watchdog was an accessibility service and could
+        // never be enabled on such a TV (it has since been removed in favour of "Display over
+        // other apps"), and any future service would hit the same lock. A session that says nothing is left to the platform's guess; saying
         // STORE is accurate (this is a managed update channel) and keeps each update from
         // re-applying the restriction.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

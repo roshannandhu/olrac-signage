@@ -1,6 +1,6 @@
 import { useAuthStore } from './store'
 import type {
-  PlatformStorage, StorageSettings, Package, PackageWrite, FleetOverview, ScreenUpdateResult, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, Placement, PaymentMethod, PlanOption, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, PurchaseResponse, CustomPlanRequestInput, CustomPlanRequestItem, CustomPlanRequestUpdate, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
+  PlatformStorage, StorageSettings, Package, PackageWrite, FleetOverview, ScreenUpdateResult, TenantSummary, TenantScreen, TenantContent, TenantUser, AlertSummary, Branding, Client, TenantPlan, FleetAlert, Placement, PaymentMethod, PlanOption, MediaReport, FitMode, OperatingMode, RolloutState, SyncRole, AppRelease, BillingSummary, Campaign, CampaignExportFormat, CampaignInfo, CampaignPoint, CampaignStats, CheckoutSession, PurchaseResponse, CustomPlanRequestInput, CustomPlanRequestItem, CustomPlanRequestUpdate, ContentItem, EmergencyBroadcast, EnrollmentToken, ItemSchedule, Plan, Playlist, PlaylistItem, Screen, TenantRole, ScreenGroup, Screenshot, TransitionName, User } from './types'
 
 const PROD_API_URL = 'https://olrac-signage-32lh.onrender.com'
 const configuredUrl = (process.env.NEXT_PUBLIC_API_URL || PROD_API_URL).replace(/\/$/, '')
@@ -574,7 +574,7 @@ export const api = {
     schedule: Omit<ItemSchedule, 'id'> | null
     transition: TransitionName | null
     transition_ms: number | null
-  }>) => fetchWithAuth(`/playlists/${playlistId}/items/${itemId}`, {
+  }>) => fetchWithAuth<PlaylistItem>(`/playlists/${playlistId}/items/${itemId}`, {
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
   }),
   updatePlaylistTransitions: (playlistId: number, data: { transition: TransitionName; transition_ms: number; apply_to_all: boolean }) =>
@@ -714,6 +714,13 @@ export const adminApi = {
     fetchWithAuth<TenantSummary>(`/admin/tenants/${id}`, { method: 'DELETE' }),
   restoreTenant: (id: number) =>
     fetchWithAuth<TenantSummary>(`/admin/tenants/${id}/restore`, { method: 'POST' }),
+  // Skip the rest of the 30 days: rows and files go now. Only for a removed workspace, and the
+  // server checks the typed name as well.
+  deleteTenantPermanently: (id: number, confirmName: string) =>
+    fetchWithAuth<{ name: string; rows: Record<string, number> }>(
+      `/admin/tenants/${id}/permanent?confirm_name=${encodeURIComponent(confirmName)}`,
+      { method: 'DELETE' },
+    ),
 
   // What the bucket actually holds, and which workspace put it there. `refresh` forces a
   // re-count; the server caches it because LIST is billed per request.

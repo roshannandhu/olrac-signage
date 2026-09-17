@@ -42,16 +42,50 @@ object PlayerLauncher {
     /** Immediate delay when the app is already alive (supervisor restart, package replaced). */
     const val WARM_RESTART_MS = 1_000L
 
+    /** Until when relaunches are held (elapsedRealtime), while a system dialog the player opened is up. */
+    @Volatile private var holdUntil = 0L
+
+    /**
+     * The player opened a system dialog -- the "use OLRAC as your home app?" question -- and it
+     * must survive until answered.
+     *
+     * That dialog sits in the player's task, and the player is singleTask: bringing it to the
+     * front clears everything above it, the dialog included. Any relaunch did exactly that -- a
+     * boot follow-up, "Open app on TV", the supervisor, or an alarm or full-screen notification
+     * queued a moment earlier. Reproduced on the Android TV emulator: RequestRoleActivity opened,
+     * then closed 1 s later by a queued launch. So launches are held while it is open, and any
+     * already queued are withdrawn.
+     */
+    fun holdWhileSystemDialogOpen(context: Context, maxMs: Long = 120_000L) {
+        holdUntil = SystemClock.elapsedRealtime() + maxMs
+        runCatching {
+            (context.getSystemService(Context.ALARM_SERVICE) as AlarmManager)
+                .cancel(createLaunchPendingIntent(context, playerIntent(context)))
+        }
+        runCatching {
+            (context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .cancel(NOTIFICATION_ID_BRING_TO_FRONT)
+        }
+    }
+
+    fun releaseHold() {
+        holdUntil = 0L
+    }
+
     fun launch(context: Context, delayMs: Long = BOOT_SETTLE_MS, reason: String = "unspecified") {
+        if (SystemClock.elapsedRealtime() < holdUntil) {
+            Log.i(TAG, "Launch held while a system dialog is open (reason=$reason)")
+            return
+        }
         warnIfBackgroundStartsWillBeRefused(context, reason)
         val intent = playerIntent(context)
+        context.getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .putString(PREF_LAST_LAUNCH, "${System.currentTimeMillis()} reason=$reason overlay=${canStartFromBackground(context)}")
+            .apply()
 
-        // 1. Accessibility Service privileged launch (bypasses all Android 14 background activity restrictions)
-        if (WatchdogAccessibilityService.bringToFront(context, reason)) {
-            Log.i(TAG, "Successfully brought player to front via Accessibility Service (reason=$reason)")
-        }
-
-        // 2. Direct startActivity (works on Device Owner and stock devices)
+        // 1. Direct startActivity. Allowed from the background on Android 10+ only for a device
+        //    owner or an app granted "Display over other apps" -- which is why that permission,
+        //    not an accessibility service, is what makes a TV reopen the player after a restart.
         attemptDirectStart(context, intent, reason)
 
         // 3. High-priority Full-Screen Intent Notification (guaranteed foreground takeover on Android 10-14)
@@ -65,7 +99,22 @@ object PlayerLauncher {
      * Whether this panel can actually raise its own window.
      */
     fun canStartFromBackground(context: Context): Boolean =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || Settings.canDrawOverlays(context)
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || Settings.canDrawOverlays(context) || isEffectiveHome(context)
+
+    /**
+     * Whether Home actually opens this player -- not merely whether it holds the home role.
+     *
+     * On Android TV the two differ. The TV launcher declares its Home entry at priority 2 and
+     * Android always prefers the higher priority, so an app granted the role still loses: proven
+     * on the Android TV emulator, where the role went to OLRAC and both Home and the resolver
+     * still chose com.google.android.tvlauncher.
+     */
+    fun isEffectiveHome(context: Context): Boolean = runCatching {
+        context.packageManager.resolveActivity(
+            Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME),
+            android.content.pm.PackageManager.MATCH_DEFAULT_ONLY,
+        )?.activityInfo?.packageName == context.packageName
+    }.getOrDefault(false)
 
     private fun warnIfBackgroundStartsWillBeRefused(context: Context, reason: String) {
         if (canStartFromBackground(context)) return
@@ -217,4 +266,5 @@ object PlayerLauncher {
     }
 
     private const val REQUEST_BOOT_LAUNCH = 1001
+    const val PREF_LAST_LAUNCH = "last_launch"
 }

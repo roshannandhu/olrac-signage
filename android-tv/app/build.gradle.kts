@@ -25,8 +25,8 @@ android {
         applicationId = "com.olrac.signage"
         minSdk = 26
         targetSdk = 34
-        versionCode = 18
-        versionName = "1.0.17"
+        versionCode = 40
+        versionName = "1.0.39"
         
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -86,6 +86,9 @@ android {
     }
     testOptions {
         unitTests.isReturnDefaultValues = true
+        // Robolectric needs real resources to inflate the Compose host window that the
+        // setup gate's focus test drives.
+        unitTests.isIncludeAndroidResources = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.1"
@@ -142,6 +145,10 @@ dependencies {
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.11.1")
+    testImplementation(platform("androidx.compose:compose-bom:2023.08.00"))
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     testImplementation("io.mockk:mockk:1.13.10")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0")
 }

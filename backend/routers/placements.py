@@ -683,6 +683,14 @@ def add_target(
     _place(scope, placement, ref)
     scope.db.commit()
     scope.db.refresh(placement)
+
+    from .websockets import trigger_screen_sync
+    target_screen = scope.get(models.Screen, ref.screen_id) if ref.screen_id else None
+    trigger_screen_sync(
+        organization_id=scope.organization_id,
+        screen_device_id=target_screen.device_id if target_screen else None,
+        group_id=ref.group_id,
+    )
     return _serialize(scope, placement)
 
 
@@ -716,6 +724,9 @@ def replace_targets(
 
     scope.db.commit()
     scope.db.refresh(placement)
+
+    from .websockets import trigger_screen_sync
+    trigger_screen_sync(organization_id=scope.organization_id)
     return _serialize(scope, placement)
 
 
@@ -733,9 +744,19 @@ def remove_target(
     if not target:
         raise HTTPException(status_code=404, detail="This booking does not run in that place")
 
+    screen_device_id = target.screen.device_id if target.screen else None
+    group_id = target.group_id
+
     _unplace(scope, target)
     scope.db.commit()
     scope.db.refresh(placement)
+
+    from .websockets import trigger_screen_sync
+    trigger_screen_sync(
+        organization_id=scope.organization_id,
+        screen_device_id=screen_device_id,
+        group_id=group_id,
+    )
     return _serialize(scope, placement)
 
 

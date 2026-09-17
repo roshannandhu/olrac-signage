@@ -24,6 +24,21 @@ class CornerTapCounterTest {
     }
 
     @Test
+    fun everyCornerCountsAndTheMiddleDoesNot() {
+        // The tablet in portrait, 800 x 1280. The dashboard says "tap any corner".
+        val w = 800
+        val h = 1280
+        assertTrue("top-left", CornerTapCounter.isCorner(30f, 30f, w, h))
+        assertTrue("top-right", CornerTapCounter.isCorner(770f, 30f, w, h))
+        assertTrue("bottom-left", CornerTapCounter.isCorner(30f, 1250f, w, h))
+        assertTrue("bottom-right, which used to be ignored", CornerTapCounter.isCorner(770f, 1250f, w, h))
+        assertFalse("centre", CornerTapCounter.isCorner(400f, 640f, w, h))
+        assertFalse("middle of the top edge", CornerTapCounter.isCorner(400f, 30f, w, h))
+        assertFalse("middle of the left edge", CornerTapCounter.isCorner(30f, 640f, w, h))
+        assertFalse("no window yet", CornerTapCounter.isCorner(0f, 0f, 0, 0))
+    }
+
+    @Test
     fun unlockResetsTheRun() {
         val c = CornerTapCounter(windowMs = 3_000L)
         repeat(7) { i -> c.record(i * 100L) }   // first unlock

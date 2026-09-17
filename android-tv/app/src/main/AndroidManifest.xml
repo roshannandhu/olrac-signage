@@ -28,6 +28,15 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
+    <!-- Lets the diagnostics report list this TV's home-screen apps: Android 11+ hides other
+         packages from an app unless it declares what it needs to see. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+    </queries>
+
     <!-- allowBackup=false: the device secret lives in SharedPreferences, and leaving
          backups on put it in every adb backup and cloud backup the panel made. A kiosk has
          nothing worth restoring anyway: identity is re-derived from the hardware on the
@@ -52,7 +61,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
-            <intent-filter>
+            <intent-filter android:priority="1">
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.HOME" />
@@ -64,18 +73,6 @@
                 <data android:scheme="olrac" android:host="auth" />
             </intent-filter>
         </activity>
-
-        <service
-            android:name=".boot.WatchdogAccessibilityService"
-            android:exported="true"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/watchdog_config" />
-        </service>
 
         <service
             android:name=".service.PlaybackService"
@@ -118,6 +115,23 @@
         <receiver
             android:name=".sync.InstallReceiver"
             android:exported="true" />
+
+        <!-- Restored in 1.0.30. Removed in 1.0.20, which is what broke auto-start-after-restart
+             on the KONKA: its accessibility entry was still enabled in the TV's settings DB, so
+             once the service class went away the entry pointed at nothing. Same class name back,
+             so a surviving entry re-activates it with no ADB. Enabling a fresh install still needs
+             one ADB write (the UI toggle is blocked on Android 13+); see SETUP notes. -->
+        <service
+            android:name=".boot.WatchdogAccessibilityService"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/watchdog_config" />
+        </service>
 
         <provider
             android:name="androidx.core.content.FileProvider"

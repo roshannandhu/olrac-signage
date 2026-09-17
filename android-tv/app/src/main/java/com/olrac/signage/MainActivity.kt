@@ -1,6 +1,8 @@
 package com.olrac.signage
 
+import android.content.Context
 import android.app.role.RoleManager
+import androidx.activity.result.contract.ActivityResultContracts
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -57,7 +59,9 @@ import com.olrac.signage.data.DeviceState
 import com.olrac.signage.data.LaunchState
 import com.olrac.signage.data.LaunchStateResolver
 import com.olrac.signage.data.CornerTapCounter
+import com.olrac.signage.data.KeyOutcome
 import com.olrac.signage.data.MaintenanceGesture
+import com.olrac.signage.data.MaintenanceKeyDispatcher
 import com.olrac.signage.data.RegistrationSnapshot
 import com.olrac.signage.network.ApiClient
 import com.olrac.signage.network.RegisterRequest
@@ -71,6 +75,9 @@ import com.olrac.signage.ui.screens.*
 import com.olrac.signage.telemetry.ScreenshotManager
 import com.olrac.signage.network.RealtimeClient
 import com.olrac.signage.device.DeviceOwnerManager
+import com.olrac.signage.boot.SetupGate
+import com.olrac.signage.boot.SetupRequirement
+import com.olrac.signage.boot.SetupRequirementState
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -89,6 +96,9 @@ class MainActivity : ComponentActivity() {
     private var showPinPrompt by mutableStateOf(false)
     private var defaultHome by mutableStateOf(false)
     private var pairingJob: Job? = null
+    private var showPermissionGate by mutableStateOf(false)
+    private var requirementStates by mutableStateOf<List<SetupRequirementState>>(emptyList())
+    private var setupError by mutableStateOf<String?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -110,12 +120,17 @@ class MainActivity : ComponentActivity() {
             launchState = LaunchState.CheckingLocalState
         }
         
-        DeviceOwnerManager.applyKioskPolicy(this)
-        if (DeviceOwnerManager.isDeviceOwner(this)) {
-            try {
-                startLockTask()
-            } catch (e: Exception) {
-                // Ignore if it fails
+        if (isHomePressWhileExited()) {
+            // Recreated by a Home press while the operator is outside the player: no kiosk.
+            openSystemLauncher()
+        } else {
+            DeviceOwnerManager.applyKioskPolicy(this)
+            if (DeviceOwnerManager.isDeviceOwner(this)) {
+                try {
+                    startLockTask()
+                } catch (e: Exception) {
+                    // Ignore if it fails
+                }
             }
         }
 
@@ -123,6 +138,24 @@ class MainActivity : ComponentActivity() {
             LaunchedEffect(deviceId, serverRevision) {
                 if (intent?.getBooleanExtra("show_signin", false) != true) {
                     resolveAndRefreshPairing(deviceId)
+                }
+            }
+
+            // Re-read the two switches once a second so a row turns green the moment the
+            // installer flips it, without them having to come back and forth. The loop ends
+            // for good once both are on -- the gate never asks again, and a TV that runs for
+            // weeks is not left with a 1 Hz timer for nothing.
+            LaunchedEffect(Unit) {
+                while (true) {
+                    val states = readRequirementStates()
+                    requirementStates = states
+                    val handledByOwner = DeviceOwnerManager.isDeviceOwner(this@MainActivity)
+                    if (handledByOwner || SetupGate.isSatisfied(states)) {
+                        showPermissionGate = false
+                        return@LaunchedEffect
+                    }
+                    showPermissionGate = true
+                    delay(1_000L)
                 }
             }
 
@@ -141,24 +174,30 @@ class MainActivity : ComponentActivity() {
                         showPinPrompt = false
                         // Nothing was unpinned (the gesture no longer does that), but re-arm
                         // defensively in case the lock was dropped by an earlier path.
-                        rearmLockTask()
+                        relockToPlayer()
                     }
                 )
             } else if (showServerSetup) {
                 ServerSetupScreen(
-                    serverUrl = ApiClient.effectiveBaseUrl(this),
-                    serverError = serverError,
                     defaultHome = defaultHome,
-                    onSave = ::saveServerUrl,
                     onChooseHome = ::requestHomeRole,
+                    onExit = ::exitToSystemLauncher,
                     onUnlink = {
                         showServerSetup = false
                         com.olrac.signage.boot.PlayerLauncher.handleUnpairedOrDeleted(this@MainActivity)
                     },
                     onClose = {
                         showServerSetup = false
-                        rearmLockTask()
+                        relockToPlayer()
                     }
+                )
+            } else if (showPermissionGate) {
+                // Below the pin prompt and the setup screen on purpose: the maintenance
+                // gesture has to stay reachable from the gate, or a TV with both switches
+                // off could never be serviced.
+                PermissionGateScreen(
+                    states = requirementStates,
+                    onTurnOn = ::openRequirementSettings
                 )
             } else {
                 when (val state = launchState) {
@@ -211,13 +250,198 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Drop kiosk pinning so the setup screen's system dialogs (launcher-role chooser,
-     *  sign-in browser) can open. Called only AFTER a correct maintenance pin. */
-    private fun enterMaintenance() {
-        if (DeviceOwnerManager.isDeviceOwner(this)) {
-            try { stopLockTask() } catch (e: Exception) {}
+    /**
+     * Open the maintenance screen's system screens without leaving kiosk. Called only AFTER a
+     * correct maintenance pin.
+     *
+     * This used to stopLockTask(), and that is what threw operators straight back onto the
+     * player after typing the PIN. Whenever the player was running as the home task -- which it
+     * is after every restart or Home press, being the persistent HOME activity -- Android ends
+     * lock task on it by finishing the whole task ("clear-task-all"), then restarts HOME, which
+     * is the player again, freshly created and re-pinned. The maintenance screen was gone before
+     * it was drawn. Seen on the Lenovo TB-8505F at 12:40:45: Unlock tapped, task cleared 83ms
+     * later, a new MainActivity created and locked.
+     *
+     * Kiosk now stays on, and the apps the maintenance buttons open (Settings, the permission
+     * controller) are added to the lock-task allowlist instead, so they can open inside it.
+     * Returning to the player narrows the allowlist back; only Exit ends lock task.
+     */
+    /**
+     * Back on the ads from a maintenance surface: re-lock at once.
+     *
+     * The maintenance window and any exit are ended here, not left to expire, so the watchdog
+     * protects the screen again and the very next attempt to leave needs the PIN. Without this,
+     * "Return to player" left the suppress set at PIN time running for its full 15 minutes, and
+     * an operator could reach the home screen the whole time without re-entering the PIN.
+     */
+    private fun relockToPlayer() {
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .remove(PREF_OPERATOR_EXIT_AT).remove(PREF_WATCHDOG_SUPPRESS_UNTIL).apply()
+        DeviceOwnerManager.applyKioskPolicy(this)
+        rearmLockTask()
+    }
+
+    private fun refreshPermissionState() {
+        val states = readRequirementStates()
+        requirementStates = states
+        if (SetupGate.isSatisfied(states)) {
+            showPermissionGate = false
+            getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+                .remove(PREF_SETUP_AWAITING_UNTIL).apply()
         }
     }
+
+    /** Reads the switches the gate watches. */
+    private fun readRequirementStates(): List<SetupRequirementState> =
+        SetupGate.ORDER.map { requirement ->
+            val granted = when (requirement) {
+                SetupRequirement.OVERLAY ->
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)
+                SetupRequirement.WATCHDOG ->
+                    com.olrac.signage.boot.WatchdogAccessibilityService.isEnabled(this)
+                SetupRequirement.AUTO_UPDATE ->
+                    Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
+            }
+            SetupRequirementState(requirement, granted)
+        }
+
+    /**
+     * Opens the exact settings page for one switch. Each has fallbacks because TV builds
+     * differ on which of these pages they ship: a KONKA panel is not a Pixel, and an
+     * ActivityNotFoundException here would strand the installer on a screen whose only
+     * button does nothing.
+     */
+    private fun openRequirementSettings(requirement: SetupRequirement) {
+        val candidates = when (requirement) {
+            SetupRequirement.OVERLAY -> listOf(
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")),
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION),
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
+                Intent(Settings.ACTION_SETTINGS),
+            )
+            SetupRequirement.WATCHDOG -> listOf(
+                Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
+                Intent(Settings.ACTION_SETTINGS),
+            )
+            SetupRequirement.AUTO_UPDATE -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    listOf(
+                        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")),
+                        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES),
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
+                        Intent(Settings.ACTION_SECURITY_SETTINGS),
+                        Intent(Settings.ACTION_SETTINGS),
+                    )
+                } else {
+                    listOf(
+                        Intent(Settings.ACTION_SECURITY_SETTINGS),
+                        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")),
+                        Intent(Settings.ACTION_SETTINGS),
+                    )
+                }
+            }
+        }
+        openSetupSettings(candidates)
+    }
+
+    /**
+     * Open a settings page for one of the switches.
+     *
+     * Leaves the operator in Settings until they finish toggling and press Back on the remote.
+     * Kiosk pinning is suppressed so Settings can open, and Watchdog is stood down so it does
+     * not interrupt them while configuring.
+     */
+    private fun openSetupSettings(attempts: List<Intent>) {
+        setupError = null
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .putLong(PREF_SETUP_AWAITING_UNTIL, System.currentTimeMillis() + SETUP_RETURN_WINDOW_MS).apply()
+        // Kiosk pinning would block Settings from opening.
+        enterMaintenance()
+        val opened = attempts.any { intent ->
+            runCatching { startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }.isSuccess
+        }
+        if (!opened) {
+            setupError = "This TV has no settings screen that can be opened from here."
+            return
+        }
+    }
+
+    private fun enterMaintenance() {
+        // The watchdog was written before this maintenance/exit flow existed, so left to run it
+        // reclaims the screen from Settings and the home launcher -- dragging the operator back to
+        // the ads and blocking every maintenance action. Stand it down for a window whenever a
+        // correct PIN opens maintenance; onResume clears it once the player is deliberately back.
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .putLong(PREF_WATCHDOG_SUPPRESS_UNTIL, System.currentTimeMillis() + MAINTENANCE_SUPPRESS_MS).apply()
+        DeviceOwnerManager.allowMaintenanceApps(this)
+    }
+
+    /**
+     * Leave the player for the device's own home screen, reachable only from the maintenance
+     * screen, i.e. after the PIN.
+     *
+     * Three things kept an operator in, and all three have to go: lock task (other apps cannot
+     * start), the persistent preferred HOME activity (every Home press reopened the player) and
+     * the disabled status bar. They come back through onResume the next time the player is in
+     * front -- opened again from the launcher, a remote "Open app on TV", or a restart.
+     *
+     * The task is left alone rather than finished: removing it fires PlaybackService's
+     * onTaskRemoved, which relaunches the player by design, and would undo the exit at once.
+     * The exit time is recorded so that relaunch also stands down if someone swipes it away.
+     */
+    private fun exitToSystemLauncher() {
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .putLong(PREF_OPERATOR_EXIT_AT, System.currentTimeMillis())
+            // Keep the watchdog off the home screen the operator just exited to, or it reclaims
+            // the player straight back over it.
+            .putLong(PREF_WATCHDOG_SUPPRESS_UNTIL, System.currentTimeMillis() + EXIT_SUPPRESS_MS)
+            .apply()
+        showServerSetup = false
+        val launcher = systemLauncher()
+        // Home is redirected BEFORE lock task ends: ending it on a home task makes Android
+        // restart HOME, and that has to land on the device's launcher, not on this player.
+        DeviceOwnerManager.releaseKioskPolicy(this, launcher?.let { android.content.ComponentName(it.packageName, it.className) })
+        try { stopLockTask() } catch (e: Exception) {}
+        val opened = openSystemLauncher(launcher)
+        android.util.Log.i("MainActivity", "Operator exit to ${launcher?.packageName ?: "background"} (opened=$opened)")
+    }
+
+    private fun systemLauncher(): com.olrac.signage.data.SystemLauncherPicker.Candidate? {
+        val home = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val candidates = packageManager.queryIntentActivities(home, 0).map {
+            com.olrac.signage.data.SystemLauncherPicker.Candidate(it.activityInfo.packageName, it.activityInfo.name)
+        }
+        return com.olrac.signage.data.SystemLauncherPicker.pick(candidates, packageName)
+    }
+
+    private fun openSystemLauncher(launcher: com.olrac.signage.data.SystemLauncherPicker.Candidate? = systemLauncher()): Boolean {
+        val opened = launcher != null && runCatching {
+            startActivity(
+                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+                    .setClassName(launcher.packageName, launcher.className)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        }.isSuccess
+        if (!opened) moveTaskToBack(true)
+        return opened
+    }
+
+    /** Whether the operator has left the player and not deliberately come back to it yet. */
+    private fun operatorExited(): Boolean =
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).contains(PREF_OPERATOR_EXIT_AT)
+
+    /**
+     * A Home press that arrived here while the operator is outside the player.
+     *
+     * Redirecting Home to the device launcher is not enough on its own: on the test tablet Home
+     * still resolved to this player after an exit (it also holds the HOME role), so three presses
+     * pulled the player back and re-locked it. While exited, a HOME intent is passed straight on
+     * to the launcher. Coming back is a deliberate act -- the app icon, "Open app on TV" or a
+     * restart -- none of which arrives as HOME.
+     */
+    private fun isHomePressWhileExited(): Boolean =
+        operatorExited() && intent?.hasCategory(Intent.CATEGORY_HOME) == true
 
     /** Re-pin the kiosk once no maintenance surface is open. Safe to call when already
      *  pinned (a no-op). This is what closes the hole where the gesture alone, or a
@@ -228,12 +452,41 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        visible = true
+    }
+
+    override fun onStop() {
+        visible = false
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
+        // With BootReceiver's timestamp, tells a remote report whether a restart reopened the player.
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .putLong(PREF_PLAYER_RESUMED_AT, System.currentTimeMillis()).apply()
         if (launchState is LaunchState.SignIn && !deviceState.isPaired) {
             launchState = LaunchState.SignIn(busy = false)
         }
+        if (isHomePressWhileExited()) {
+            openSystemLauncher()
+            return
+        }
+        // Back in front after an operator exit: kiosk returns with the player. Not while the PIN
+        // prompt or the maintenance screen is open -- re-applying there would shrink the lock-task
+        // allowlist under Settings the operator just opened from it.
+        if (!showPinPrompt && !showServerSetup) {
+            // Deliberately back on the player: end the exit AND let the watchdog protect again.
+            getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+                .remove(PREF_OPERATOR_EXIT_AT).remove(PREF_WATCHDOG_SUPPRESS_UNTIL).apply()
+            DeviceOwnerManager.applyKioskPolicy(this)
+        }
         defaultHome = isDefaultHomeLauncher()
+        // Back from a settings page: pick up a switch that was just turned on straight away.
+        refreshPermissionState()
+        askOnceToBecomeHome()
         hideSystemBars()
         // Backstop: re-pin whenever we are back on the player with no maintenance surface
         // open -- covers a cancelled pin, a wrong pin, and returning from the system
@@ -246,7 +499,7 @@ class MainActivity : ComponentActivity() {
         if (hasFocus) hideSystemBars()
     }
 
-    private val maintenanceGesture = MaintenanceGesture()
+    private val maintenanceKeys = MaintenanceKeyDispatcher()
     private val cornerTaps = CornerTapCounter()
     private val homePressTimes = ArrayDeque<Long>()
 
@@ -278,7 +531,7 @@ class MainActivity : ComponentActivity() {
         // If the user presses the HOME button and this app is the default launcher, 
         // the OS routes the intent here instead of onKeyDown. 
         // We detect 3 presses within 3 seconds to trigger the PIN prompt.
-        if (intent?.hasCategory(Intent.CATEGORY_HOME) == true) {
+        if (intent?.hasCategory(Intent.CATEGORY_HOME) == true && !operatorExited()) {
             val now = System.currentTimeMillis()
             homePressTimes.addLast(now)
             while (homePressTimes.isNotEmpty() && now - homePressTimes.first() > 3000L) {
@@ -296,12 +549,10 @@ class MainActivity : ComponentActivity() {
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         // Touch-only path to the maintenance PIN, for devices with no D-pad remote (touch
         // panels, phones) where the Up-Up-Down-Down-OK gesture is unreachable: seven quick
-        // taps in the top-left corner reveal the same PIN prompt. Only over the player, and
-        // the pin behind it is still the real control.
+        // taps in any corner reveal the same PIN prompt. Only over the player, and the pin
+        // behind it is still the real control.
         if (ev.action == MotionEvent.ACTION_DOWN && !showPinPrompt && !showServerSetup) {
-            val w = window.decorView.width
-            val h = window.decorView.height
-            val inCorner = w > 0 && h > 0 && ev.rawX < w * 0.12f && ev.rawY < h * 0.12f
+            val inCorner = CornerTapCounter.isCorner(ev.rawX, ev.rawY, window.decorView.width, window.decorView.height)
             if (inCorner) {
                 if (cornerTaps.record(System.currentTimeMillis())) {
                     showPinPrompt = true
@@ -314,20 +565,46 @@ class MainActivity : ComponentActivity() {
         return super.dispatchTouchEvent(ev)
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        // Only while the player is on screen: inside the setup surfaces these keys are
-        // navigation, and matching there would swallow a press mid-form.
-        // Auto-repeat from a held key would otherwise flood the gesture buffer.
-        if (!showPinPrompt && !showServerSetup && (event == null || event.repeatCount == 0)) {
-            if (maintenanceGesture.record(keyCode, System.currentTimeMillis())) {
+    /**
+     * The maintenance gesture, matched before the focused view can act on the key.
+     *
+     * [onKeyDown] only runs for keys nothing in the view tree consumed, and a focused Button
+     * consumes OK. Over the player that never mattered -- there is nothing focusable behind a
+     * video -- but on the setup gate the final OK of Up-Up-Down-Down-OK went to whichever
+     * button held focus and opened Settings instead of the pin prompt. That left a TV whose
+     * switches are both off with no way in at all, so the match has to happen here, ahead of
+     * the buttons.
+     *
+     * Only the press that COMPLETES the sequence is consumed. The four before it fall
+     * through untouched, so the arrow keys still move focus around the gate as normal, and
+     * the gesture is recorded here ONLY -- recording in onKeyDown as well would count every
+     * press twice and the sequence would never match.
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // Not on the pin prompt or the setup screen: there these keys are navigation, and
+        // matching would swallow a press mid-form.
+        val gestureEnabled = !showPinPrompt && !showServerSetup
+        val outcome = maintenanceKeys.onKeyEvent(
+            action = event.action,
+            keyCode = event.keyCode,
+            repeatCount = event.repeatCount,
+            gestureEnabled = gestureEnabled,
+            nowMs = System.currentTimeMillis()
+        )
+        return when (outcome) {
+            KeyOutcome.REVEAL_PIN -> {
                 // Reveal the PIN prompt only. The kiosk stays pinned until a CORRECT pin is
                 // entered (see onUnlocked). Dropping lock-task here let the gesture alone
                 // un-pin the TV, and cancelling then left it open until the next reboot.
                 showPinPrompt = true
-                return true
+                true
             }
+            KeyOutcome.CONSUME -> true
+            KeyOutcome.PASS_THROUGH -> super.dispatchKeyEvent(event)
         }
+    }
 
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         when (keyCode) {
             KeyEvent.KEYCODE_VOLUME_DOWN -> {
                 val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
@@ -805,26 +1082,59 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * The system's "use OLRAC as your home app?" dialog.
+     *
+     * It must be opened for a result. Opened with startActivity it has no calling package, and
+     * the permission controller closes it without showing anything -- which is why "Choose OLRAC
+     * as TV launcher" never did anything on the KONKA.
+     */
+    private val homeRoleRequest = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        com.olrac.signage.boot.PlayerLauncher.releaseHold()
+        defaultHome = isDefaultHomeLauncher()
+        getSharedPreferences("signage_prefs", Context.MODE_PRIVATE).edit()
+            .putString(PREF_HOME_ROLE_RESULT, "${System.currentTimeMillis()} result=${result.resultCode} held=$defaultHome")
+            .apply()
+        android.util.Log.i("MainActivity", "Home role request finished: held=$defaultHome")
+    }
+
     private fun requestHomeRole() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val roleManager = getSystemService(RoleManager::class.java)
             if (roleManager.isRoleAvailable(RoleManager.ROLE_HOME)) {
-                startActivity(roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME))
-                return
+                com.olrac.signage.boot.PlayerLauncher.holdWhileSystemDialogOpen(this)
+                runCatching { homeRoleRequest.launch(roleManager.createRequestRoleIntent(RoleManager.ROLE_HOME)) }
+                    .onSuccess { return }
+                com.olrac.signage.boot.PlayerLauncher.releaseHold()
             }
         }
-        startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+        runCatching { startActivity(Intent(Settings.ACTION_HOME_SETTINGS)) }
     }
 
-    private fun isDefaultHomeLauncher(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val roleManager = getSystemService(RoleManager::class.java)
-            return roleManager.isRoleAvailable(RoleManager.ROLE_HOME) &&
-                roleManager.isRoleHeld(RoleManager.ROLE_HOME)
-        }
-        val homeIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-        return packageManager.resolveActivity(homeIntent, 0)?.activityInfo?.packageName == packageName
+    /**
+     * On a TV that cannot bring the player back after a restart, ask once to become its home app.
+     *
+     * Android 10+ lets an app open itself after boot only as device owner, with "Display over
+     * other apps", or as the home app. The KONKA is a low-RAM TV, where the overlay switch never
+     * takes effect, so the home app is the one way left -- and the system opens the home app
+     * first after every restart. One "Yes" on the system's own dialog; asked a single time, after
+     * that only from the maintenance screen.
+     */
+    private fun askOnceToBecomeHome() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || defaultHome) return
+        // Ask on TVs too. On the emulator the built-in launcher kept winning even after a grant,
+        // but that is per-firmware and the KONKA is the real test -- and this is the only route an
+        // operator can take with just the remote, no ADB. isEffectiveHome reports the real result.
+        if (com.olrac.signage.boot.PlayerLauncher.canStartFromBackground(this)) return
+        if (showPinPrompt || showServerSetup || operatorExited()) return
+        val prefs = getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
+        if (prefs.contains(PREF_HOME_ROLE_ASKED_AT)) return
+        if (!getSystemService(RoleManager::class.java).isRoleAvailable(RoleManager.ROLE_HOME)) return
+        prefs.edit().putLong(PREF_HOME_ROLE_ASKED_AT, System.currentTimeMillis()).apply()
+        requestHomeRole()
     }
+
+    private fun isDefaultHomeLauncher(): Boolean = com.olrac.signage.boot.PlayerLauncher.isEffectiveHome(this)
 
     private fun configurePlayerWindow() {
         window.addFlags(
@@ -846,6 +1156,23 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        const val PREF_PLAYER_RESUMED_AT = "player_last_resumed_at"
+        const val PREF_OPERATOR_EXIT_AT = "operator_exit_at"
+        // How long the watchdog stands down after a PIN opens maintenance / after an exit, so it
+        // stops reclaiming the screen from Settings and the home launcher while the operator works.
+        const val PREF_WATCHDOG_SUPPRESS_UNTIL = "watchdog_suppress_until"
+        /** While set, the operator is in Settings flipping a setup switch and wants bringing back. */
+        const val PREF_SETUP_AWAITING_UNTIL = "setup_awaiting_until"
+        private const val SETUP_RETURN_WINDOW_MS = 5 * 60_000L
+        private const val MAINTENANCE_SUPPRESS_MS = 15 * 60_000L
+        private const val EXIT_SUPPRESS_MS = 30 * 60_000L
+        // v3: 1.0.28 gated the ask off for TVs; re-open it for the KONKA test.
+        private const val PREF_HOME_ROLE_ASKED_AT = "home_role_asked_v3_at"
+        const val PREF_HOME_ROLE_RESULT = "home_role_request_result"
+
+        /** Whether the player is on screen. Read by PlaybackService, which shares the process. */
+        @Volatile var visible = false
+            private set
         private const val PAIRING_RETRY_MS = 5_000L
 
         // Boot reconnect backoff. Starts quick because the common case is a TV that booted a

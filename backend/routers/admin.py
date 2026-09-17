@@ -27,7 +27,8 @@ from sqlalchemy.orm import Session
 from .. import database, models, schemas
 from ..billing import plan_features, subscription_state
 from ..media_urls import resolve_media_url
-from ..services.tenant_purge import TENANT_PURGE_AFTER_DAYS, purge_due_at
+from ..services.storage_service import forget_cached_usage
+from ..services.tenant_purge import TENANT_PURGE_AFTER_DAYS, purge_due_at, purge_organization
 from ..tenancy import TenantScope, require_super_admin
 
 logger = logging.getLogger(__name__)
@@ -990,6 +991,42 @@ def restore_tenant(
     db.refresh(org)
     logger.info("Org %s (ID %s) restored by %s", org.name, org.id, scope.user.username)
     return _summarise(db, org)
+
+
+@router.delete("/tenants/{org_id}/permanent")
+def delete_tenant_permanently(
+    org_id: int,
+    confirm_name: str,
+    scope: TenantScope = Depends(require_super_admin),
+    db: Session = Depends(database.get_db),
+):
+    """Destroy a removed workspace now instead of waiting out its 30 days.
+
+    Only a workspace already removed: the removal is the first confirmation, and it is what
+    locked everyone out. The typed name is checked here too, not just in the browser.
+    """
+    org = _get_org(db, org_id)
+    if org.id == scope.user.organization_id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own organization.")
+    if org.deleted_at is None:
+        raise HTTPException(status_code=409, detail="Remove this workspace before deleting it permanently.")
+    if confirm_name.strip() != org.name:
+        raise HTTPException(status_code=400, detail="The name typed does not match this workspace.")
+
+    name = org.name
+    try:
+        report = purge_organization(db, org, immediately=True)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Permanent delete of org %s (ID %s) failed", name, org_id)
+        raise HTTPException(status_code=500, detail="Could not delete this workspace. Try again; restore is still possible if its rows remain.")
+    forget_cached_usage()
+    logger.warning(
+        "Org %s (ID %s) permanently deleted by %s: %s",
+        name, org_id, scope.user.username, report["rows"],
+    )
+    return report
 
 
 # --------------------------------------------------------------------------- packages

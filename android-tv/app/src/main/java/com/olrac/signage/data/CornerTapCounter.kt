@@ -31,5 +31,22 @@ class CornerTapCounter(private val windowMs: Long = WINDOW_MS) {
     companion object {
         const val WINDOW_MS = 3_000L
         const val TAPS = 7
+        /** How far in from each edge, as a fraction of the screen, still counts as a corner. */
+        const val CORNER_FRACTION = 0.12f
+
+        /**
+         * Whether a touch at (x, y) lands in ANY of the four corners of a w x h screen.
+         *
+         * Only the top-left used to count, while the dashboard told operators to "tap any corner
+         * 7 times". Tapping any other corner reset the run on every tap, so on a kiosked tablet
+         * -- where Back and Home are swallowed -- there was, as far as the operator could tell,
+         * no way out at all. Every corner counts now, and taps may move between corners.
+         */
+        fun isCorner(x: Float, y: Float, w: Int, h: Int): Boolean {
+            if (w <= 0 || h <= 0) return false
+            val nearLeftOrRight = x < w * CORNER_FRACTION || x > w * (1 - CORNER_FRACTION)
+            val nearTopOrBottom = y < h * CORNER_FRACTION || y > h * (1 - CORNER_FRACTION)
+            return nearLeftOrRight && nearTopOrBottom
+        }
     }
 }

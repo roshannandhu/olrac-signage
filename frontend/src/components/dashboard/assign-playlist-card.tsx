@@ -9,6 +9,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { api } from '@/lib/api'
+import type { Screen } from '@/lib/types'
 
 export type AssignTarget =
   | { kind: 'screen'; id: number; name: string }
@@ -41,13 +42,35 @@ export function AssignPlaylistCard({ target }: { target: AssignTarget }) {
 
   const assignExisting = useMutation({
     mutationFn: (playlistId: number) => assign(playlistId),
+    onMutate: async (playlistId: number) => {
+      if (target.kind === 'screen') {
+        await queryClient.cancelQueries({ queryKey: ['screens'] })
+        const prevScreens = queryClient.getQueryData<Screen[]>(['screens'])
+        if (prevScreens) {
+          queryClient.setQueryData<Screen[]>(
+            ['screens'],
+            prevScreens.map((s) =>
+              s.id === target.id
+                ? { ...s, playlist_id: playlistId, effective_playlist_id: playlistId }
+                : s
+            )
+          )
+        }
+        return { prevScreens }
+      }
+    },
+    onError: (error: Error, _vars, context) => {
+      if (context?.prevScreens) {
+        queryClient.setQueryData(['screens'], context.prevScreens)
+      }
+      toast.error(error.message)
+    },
     onSuccess: () => {
       refresh()
       toast.success(target.kind === 'screen'
         ? 'Playlist assigned. The screen picks it up on its next sync.'
         : 'Playlist assigned to every screen in this group.')
     },
-    onError: (error: Error) => toast.error(error.message),
   })
 
   const createAndAssign = useMutation({
@@ -56,12 +79,34 @@ export function AssignPlaylistCard({ target }: { target: AssignTarget }) {
       await assign(playlist.id)
       return playlist
     },
-    onSuccess: () => {
+    onMutate: async () => {
+      if (target.kind === 'screen') {
+        await queryClient.cancelQueries({ queryKey: ['screens'] })
+        const prevScreens = queryClient.getQueryData<Screen[]>(['screens'])
+        return { prevScreens }
+      }
+    },
+    onError: (error: Error, _vars, context) => {
+      if (context?.prevScreens) {
+        queryClient.setQueryData(['screens'], context.prevScreens)
+      }
+      toast.error(error.message)
+    },
+    onSuccess: (playlist) => {
+      if (target.kind === 'screen' && playlist?.id) {
+        queryClient.setQueryData<Screen[]>(['screens'], (old) => {
+          if (!old) return old
+          return old.map((s) =>
+            s.id === target.id
+              ? { ...s, playlist_id: playlist.id, effective_playlist_id: playlist.id }
+              : s
+          )
+        })
+      }
       refresh()
       toast.success('Playlist created and assigned.')
       setNewName('')
     },
-    onError: (error: Error) => toast.error(error.message),
   })
 
   const pending = assignExisting.isPending || createAndAssign.isPending

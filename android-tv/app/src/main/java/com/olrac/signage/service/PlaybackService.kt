@@ -4,8 +4,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -51,36 +53,89 @@ class PlaybackService : Service() {
     private var commandPollJob: Job? = null
     private var connectivityWatcher: ConnectivityWatcher? = null
     private var realtimeClient: RealtimeClient? = null
+    private var bootFollowUp: Job? = null
 
     override fun onCreate() {
         super.onCreate()
+        com.olrac.signage.telemetry.CrashRecorder.install(this)
         createNotificationChannel()
         promoteToForeground()
         acquireWakeLock()
         startRealtimeClient()
-        // One line per service start, so a TV whose watchdog cannot run says why in its log
-        // instead of leaving it to be discovered from a greyed-out switch.
-        Log.i(TAG, "Watchdog enabled=${com.olrac.signage.boot.WatchdogStatus.isEnabled(this)}")
+        // A TV "restart" from the remote is often standby, not a reboot: no BOOT_COMPLETED
+        // arrives, only the screen coming back on. Treat that the same as a restart.
+        ContextCompat.registerReceiver(this, screenOnReceiver, IntentFilter(Intent.ACTION_SCREEN_ON), ContextCompat.RECEIVER_NOT_EXPORTED)
+        // One line per service start: whether this TV is allowed to bring the player up by
+        // itself after a restart ("Display over other apps", or device owner).
+        Log.i(TAG, "Reopens after restart=${PlayerLauncher.canStartFromBackground(this)}")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (isUserUnlocked()) {
-            scheduleWorkers(this)
-            startPollingLoop()
-        }
+        // Boot recovery first, and never behind anything that can throw. WorkManager's store is
+        // credential-encrypted, so scheduleWorkers() throws until the device is fully unlocked --
+        // and this directBootAware service reaches here in the window after the user unlocks but
+        // before WorkManager's startup provider has run. That crash used to take the whole
+        // service down BEFORE the player was relaunched, so after a restart the TV sat on its
+        // home screen. So the relaunch runs first, and the workers are guarded; USER_UNLOCKED
+        // starts the service again and they schedule cleanly then.
+        if (intent?.getBooleanExtra(EXTRA_LAUNCH_PLAYER, false) == true) launchPlayer()
+        if (intent?.getBooleanExtra(EXTRA_AFTER_BOOT, false) == true) keepPlayerInFrontAfterStart()
         if (intent?.action == ACTION_SYNC_NOW) immediateSyncSignals.trySend(Unit)
-        if (intent?.getBooleanExtra(EXTRA_LAUNCH_PLAYER, false) == true) {
-            launchPlayer()
+        if (isUserUnlocked()) {
+            runCatching { scheduleWorkers(this) }
+                .onFailure { Log.w(TAG, "Deferring worker scheduling until WorkManager is ready", it) }
+            startPollingLoop()
         }
         return START_STICKY
     }
 
+    private val screenOnReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val exitedAt = getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
+                .getLong(MainActivity.PREF_OPERATOR_EXIT_AT, 0L)
+            if (System.currentTimeMillis() - exitedAt > OPERATOR_EXIT_GRACE_MS) keepPlayerInFrontAfterStart()
+        }
+    }
+
+    /**
+     * One launch at boot was not enough to end up ON the player.
+     *
+     * The home screen can come up after the boot broadcast -- Google TV's launcher finishes
+     * loading seconds later and lands on top of whatever opened first. So for two minutes the
+     * player is brought back whenever it is not on screen, and left alone once an operator
+     * exits deliberately. A player already in front is not touched.
+     */
+    private fun keepPlayerInFrontAfterStart() {
+        bootFollowUp?.cancel()
+        val startedAt = System.currentTimeMillis()
+        bootFollowUp = serviceScope.launch {
+            var waited = 0L
+            for (atSeconds in BOOT_FOLLOW_UP_SECONDS) {
+                delay((atSeconds - waited) * 1_000L)
+                waited = atSeconds
+                val exitedAt = getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
+                    .getLong(MainActivity.PREF_OPERATOR_EXIT_AT, 0L)
+                if (exitedAt >= startedAt) return@launch
+                if (!MainActivity.visible) {
+                    PlayerLauncher.launch(this@PlaybackService, PlayerLauncher.WARM_RESTART_MS, reason = "follow_up_${atSeconds}s")
+                }
+            }
+        }
+    }
+
     override fun onTaskRemoved(rootIntent: Intent?) {
-        launchPlayer()
+        // Relaunching when the player's task is swiped away is what keeps a screen on its
+        // adverts -- except straight after an operator chose "Exit to home screen", when it
+        // would drag the player back over the launcher they just asked for.
+        val exitedAt = getSharedPreferences("signage_prefs", Context.MODE_PRIVATE)
+            .getLong(MainActivity.PREF_OPERATOR_EXIT_AT, 0L)
+        if (System.currentTimeMillis() - exitedAt > OPERATOR_EXIT_GRACE_MS) launchPlayer()
         super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
+        runCatching { unregisterReceiver(screenOnReceiver) }
+        bootFollowUp?.cancel()
         realtimeClient?.stop()
         realtimeClient = null
         connectivityWatcher?.stop()
@@ -116,7 +171,11 @@ class PlaybackService : Service() {
 
             when {
                 type == "request_screenshot" || command == "request_screenshot" -> ScreenshotManager.requestScreenshot()
-                type == "launch_app" || type == "bring_to_front" || command == "launch_app" || command == "bring_to_front" -> launchPlayer()
+                (type == "launch_app" || type == "bring_to_front" || command == "launch_app" || command == "bring_to_front") -> {
+                    // Arrives on the screen AND org sockets for one press; act on it once.
+                    if (com.olrac.signage.boot.RemoteLaunchGate.allow()) launchPlayer()
+                    else Log.d(TAG, "Ignoring a repeat bring_to_front")
+                }
                 type in setOf("sync", "sync_now", "reload", "reload_playlist", "content_updated", "playlist_updated") ||
                     command in setOf("sync", "sync_now", "reload", "reload_playlist", "content_updated", "playlist_updated") -> {
                     android.util.Log.i("PlaybackService", "Received WS sync event (type=$type command=$command); triggering immediate sync")
@@ -209,8 +268,10 @@ class PlaybackService : Service() {
             immediateSyncSignals.trySend(Unit)
             // Push the queued proof of play the moment the network is back, rather than
             // waiting out the 15-minute periodic window. After an outage that queue is
-            // exactly what the operator is waiting to see.
-            ProofOfPlayWorker.enqueueNow(this)
+            // exactly what the operator is waiting to see. Guarded like scheduleWorkers:
+            // WorkManager can still be unavailable this early, and a throw here would crash
+            // the service on a network change.
+            runCatching { ProofOfPlayWorker.enqueueNow(this) }
         }.also(ConnectivityWatcher::start)
 
         pollingJob = serviceScope.launch {
@@ -304,17 +365,23 @@ class PlaybackService : Service() {
 
     companion object {
         private const val TAG = "PlaybackService"
+        private const val OPERATOR_EXIT_GRACE_MS = 30 * 60_000L
         private const val CHANNEL_ID = "playback-protection"
         private const val NOTIFICATION_ID = 1001
         private const val EXTRA_LAUNCH_PLAYER = "launch_player"
+        private const val EXTRA_AFTER_BOOT = "after_boot"
+
+        /** Seconds after a boot or screen-on at which the player is put back if it is not in front. */
+        private val BOOT_FOLLOW_UP_SECONDS = listOf(5L, 15L, 30L, 60L, 120L)
         private const val ACTION_SYNC_NOW = "com.olrac.signage.action.SYNC_NOW"
 
         /** How often to ask for a queued remote command. See startCommandPollLoop. */
         private const val COMMAND_POLL_SECONDS = 15
 
-        fun start(context: Context, launchPlayer: Boolean) {
+        fun start(context: Context, launchPlayer: Boolean, afterBoot: Boolean = false) {
             val intent = Intent(context, PlaybackService::class.java)
                 .putExtra(EXTRA_LAUNCH_PLAYER, launchPlayer)
+                .putExtra(EXTRA_AFTER_BOOT, afterBoot)
             ContextCompat.startForegroundService(context, intent)
         }
 

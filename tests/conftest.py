@@ -158,6 +158,9 @@ PURE_MODULES = {
     # Airtime formatting on the client report. Committed without being registered in
     # either place, so it had never run -- the exact state this guard exists to catch.
     "test_report_airtime.py",
+    # Screen-reading half of scripts/tv_remote_test.py: telling a focused button from
+    # nothing focused, which is the difference between a working remote and the bug.
+    "test_tv_remote_test_parsing.py",
     "test_no_embedded_credentials.py",
     # Serving media from a published bucket, with no credential anywhere.
     "test_public_media_bucket.py",

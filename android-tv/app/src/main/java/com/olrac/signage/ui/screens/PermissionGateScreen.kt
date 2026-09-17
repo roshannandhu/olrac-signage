@@ -91,7 +91,7 @@ fun PermissionGateScreen(
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = "This TV needs all required switches on before it can show your ads on its own. " +
-                "Use the arrow keys and OK on the remote.",
+                "Switch each one on in Settings, then press Back on your remote to return.",
             color = Color.LightGray,
             fontSize = 16.sp
         )

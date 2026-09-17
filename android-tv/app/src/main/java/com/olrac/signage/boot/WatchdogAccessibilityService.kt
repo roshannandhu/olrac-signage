@@ -60,11 +60,10 @@ class WatchdogAccessibilityService : AccessibilityService() {
         } catch (e: Exception) {
             Log.e(TAG, "PlaybackService.start failed on connect", e)
         }
-        // Just switched on from the setup screen: the operator is still standing in Accessibility
-        // settings, so take them straight back to the player rather than leaving them to find it.
-        val awaitingSetup = System.currentTimeMillis() <
-            prefs().getLong(com.olrac.signage.MainActivity.PREF_SETUP_AWAITING_UNTIL, 0L)
-        if (justBooted || awaitingSetup) forceBringToFront(if (justBooted) "boot" else "setup_enabled")
+        // Brought forward only after a fresh boot, which is the Realtek case it exists for.
+        // Turned on by hand from Settings, it never interrupts or yanks focus from Settings,
+        // so the system confirmation dialog can be confirmed and the toggle is never cancelled.
+        if (justBooted) forceBringToFront("boot")
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
@@ -183,7 +182,8 @@ class WatchdogAccessibilityService : AccessibilityService() {
         private const val RECENT_PACKAGES_KEPT = 10
         /** System UI an operator uses to configure the TV: never taken away from them. */
         private val NEVER_RECLAIM_FROM = listOf(
-            "settings", "setup", "packageinstaller", "permissioncontroller", "systemui", "systemservice",
+            "settings", "setting", "setup", "accessibility", "security",
+            "packageinstaller", "permissioncontroller", "systemui", "systemservice",
         )
         const val PREF_CONNECTED_AT = "watchdog_connected_at"
         const val PREF_CONNECTED_AFTER_BOOT = "watchdog_connected_after_boot"

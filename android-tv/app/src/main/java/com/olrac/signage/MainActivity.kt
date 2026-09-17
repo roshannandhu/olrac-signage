@@ -99,7 +99,6 @@ class MainActivity : ComponentActivity() {
     private var showPermissionGate by mutableStateOf(false)
     private var requirementStates by mutableStateOf<List<SetupRequirementState>>(emptyList())
     private var setupError by mutableStateOf<String?>(null)
-    private var setupReturnJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -347,11 +346,11 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Open a settings page for one of the switches, and arrange to come back.
+     * Open a settings page for one of the switches.
      *
-     * The operator is about to leave the player for Settings, so a window is opened in which
-     * whoever notices the switch flip -- the poll below, or the watchdog the moment it connects --
-     * brings the player back, instead of leaving them on a settings page wondering.
+     * Leaves the operator in Settings until they finish toggling and press Back on the remote.
+     * Kiosk pinning is suppressed so Settings can open, and Watchdog is stood down so it does
+     * not interrupt them while configuring.
      */
     private fun openSetupSettings(attempts: List<Intent>) {
         setupError = null
@@ -365,42 +364,6 @@ class MainActivity : ComponentActivity() {
         if (!opened) {
             setupError = "This TV has no settings screen that can be opened from here."
             return
-        }
-        watchForSetupReturn()
-    }
-
-    /**
-     * Watch for the switch the operator just went to flip, and return to the player when it lands.
-     *
-     * Runs while this activity is merely paused (Settings is in front), which is why it can see
-     * the change at all. Once overlay is granted a plain start is allowed again; for the
-     * accessibility switch the service itself comes back on connect.
-     */
-    private fun watchForSetupReturn() {
-        setupReturnJob?.cancel()
-        setupReturnJob = lifecycleScope.launch {
-            val deadline = System.currentTimeMillis() + SETUP_RETURN_WINDOW_MS
-            var wasOverlay = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this@MainActivity)
-            var wasWatchdog = com.olrac.signage.boot.WatchdogAccessibilityService.isEnabled(this@MainActivity)
-            var wasAutoUpdate = Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
-            while (System.currentTimeMillis() < deadline) {
-                kotlinx.coroutines.delay(1_000)
-                val overlayNow = Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this@MainActivity)
-                val watchdogNow = com.olrac.signage.boot.WatchdogAccessibilityService.isEnabled(this@MainActivity)
-                val autoUpdateNow = Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
-                if ((overlayNow && !wasOverlay) || (watchdogNow && !wasWatchdog) || (autoUpdateNow && !wasAutoUpdate)) {
-                    android.util.Log.i("MainActivity", "Setup switch turned on; returning to the player")
-                    com.olrac.signage.boot.PlayerLauncher.launch(
-                        applicationContext,
-                        com.olrac.signage.boot.PlayerLauncher.WARM_RESTART_MS,
-                        reason = "setup_returned",
-                    )
-                    break
-                }
-                wasOverlay = overlayNow
-                wasWatchdog = watchdogNow
-                wasAutoUpdate = autoUpdateNow
-            }
         }
     }
 
